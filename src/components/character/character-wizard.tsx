@@ -6,7 +6,7 @@ import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
 import { useWorldStore } from "@/stores/world-store";
 import { useKarmaStore } from "@/stores/karma-store";
-import type { CharacterClass, Race } from "@/types/character";
+import type { CharacterClass, Race, Gender, AbilityScores, BeginnerSurvey } from "@/types/character";
 import { RACES, CLASSES, HAIR_STYLES, HAIR_COLORS, SKIN_TONES, BODY_BUILDS, HEIGHT_OPTIONS } from "@/types/character";
 import { CLASS_DATA, FIGHTING_STYLES } from "@/lib/classes";
 import { generateRandomName } from "@/lib/descriptions";
@@ -20,7 +20,8 @@ import { StepSkills } from "./step-skills";
 import { StepReview } from "./step-review";
 import { StepSurvey } from "./step-survey";
 import { CharacterAvatar } from "./character-avatar";
-import { recommend } from "@/lib/survey-recommend";
+import { StepSuggestion } from "./step-suggestion";
+import { recommend, type SurveyRecommendation } from "@/lib/survey-recommend";
 
 const STEP_LABELS = [
   "Welcome",
@@ -67,6 +68,9 @@ export function CharacterWizard() {
 
   const [step, setStep] = useState(0);
   const [showSurvey, setShowSurvey] = useState(false);
+  const [showSuggestion, setShowSuggestion] = useState(false);
+  const [surveyData, setSurveyData] = useState<BeginnerSurvey | null>(null);
+  const [surveyRec, setSurveyRec] = useState<SurveyRecommendation | null>(null);
 
   // Local UI state for selections
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
@@ -77,6 +81,62 @@ export function CharacterWizard() {
   const [halfElfBonus2, setHalfElfBonus2] = useState("");
 
   const classData = CLASS_DATA[character.class as CharacterClass];
+
+  function handleAcceptProfile(profile: {
+    name: string;
+    race: Race;
+    class: CharacterClass;
+    gender: Gender;
+    abilityScores: AbilityScores;
+    backstory: string;
+  }) {
+    setName(profile.name);
+    setGender(profile.gender);
+    setRace(profile.race);
+    setClass(profile.class);
+    setAbilityScores(profile.abilityScores);
+
+    // Auto-pick skills, cantrips, spells, fighting style for the class
+    const cData = CLASS_DATA[profile.class];
+    const skills = pickRandomN(cData.skillChoices, cData.skillChoiceCount);
+    setSkillProficiencies(skills);
+
+    if (cData.cantripsKnown > 0) {
+      setCantrips(pickRandomN(cData.cantrips, cData.cantripsKnown));
+    }
+    if (cData.spellsKnown > 0) {
+      setSpells(pickRandomN(cData.spells, cData.spellsKnown));
+    }
+
+    const styles = FIGHTING_STYLES[profile.class] ?? [];
+    if (styles.length > 0) {
+      setFightingStyle(pickRandom(styles));
+    }
+
+    if (profile.race === "Half-Elf") {
+      const choices = ["strength", "dexterity", "constitution", "intelligence", "wisdom"];
+      const picked = pickRandomN(choices, 2);
+      setHalfElfBonuses([picked[0], picked[1]]);
+    }
+
+    // Random avatar
+    setAvatar({
+      hairStyle: pickRandom(HAIR_STYLES),
+      hairColor: pickRandom(HAIR_COLORS).value,
+      skinTone: pickRandom(SKIN_TONES).value,
+      bodyBuild: pickRandom(BODY_BUILDS),
+      height: pickRandom(HEIGHT_OPTIONS),
+    });
+
+    resetGame();
+    resetWorld();
+    resetKarma();
+
+    setTimeout(() => {
+      finalizeCharacter();
+      router.push("/game");
+    }, 0);
+  }
 
   const handleClassChange = useCallback(
     (cls: CharacterClass) => {
@@ -228,7 +288,7 @@ export function CharacterWizard() {
 
   const progress = Math.round((step / (STEP_LABELS.length - 1)) * 100);
 
-  const showAvatar = step >= 1 || showSurvey;
+  const showAvatar = step >= 1 || showSurvey || showSuggestion;
 
   return (
     <div className="flex justify-center gap-8 max-w-4xl mx-auto">
@@ -246,7 +306,7 @@ export function CharacterWizard() {
         )}
 
         {/* Steps */}
-        {step === 0 && !showSurvey && (
+        {step === 0 && !showSurvey && !showSuggestion && (
           <StepWelcome
             onNext={() => setStep(1)}
             onQuickStart={handleQuickStart}
@@ -258,12 +318,30 @@ export function CharacterWizard() {
             onComplete={(survey) => {
               setBeginnerSurvey(survey);
               const rec = recommend(survey);
+              setSurveyData(survey);
+              setSurveyRec(rec);
               setRace(rec.race);
               setClass(rec.characterClass);
               setShowSurvey(false);
-              setStep(1);
+              setShowSuggestion(true);
             }}
             onBack={() => setShowSurvey(false)}
+          />
+        )}
+        {step === 0 && showSuggestion && surveyData && surveyRec && (
+          <StepSuggestion
+            survey={surveyData}
+            fallbackRace={surveyRec.race}
+            fallbackClass={surveyRec.characterClass}
+            onAccept={(profile) => handleAcceptProfile(profile)}
+            onSkip={() => {
+              setShowSuggestion(false);
+              setStep(1);
+            }}
+            onBack={() => {
+              setShowSuggestion(false);
+              setShowSurvey(true);
+            }}
           />
         )}
         {step === 1 && (
