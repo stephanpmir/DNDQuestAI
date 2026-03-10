@@ -1,3 +1,2 @@
-[build]
-  command = "npm run build"
-  publish = ".next"
+# Let Netlify auto-detect Next.js — do NOT set build.command or build.publish
+# as that overrides the OpenNext adapter and breaks API route serverless functions.
