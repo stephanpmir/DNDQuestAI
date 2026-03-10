@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
 import { useWorldStore } from "@/stores/world-store";
+import { useKarmaStore } from "@/stores/karma-store";
 import { GENDERS, RACES, CLASSES } from "@/types/character";
 import { MAX_NAME_LENGTH } from "@/lib/constants";
 import { AbilityScorePicker } from "./ability-score-picker";
@@ -38,6 +39,7 @@ export function CharacterForm() {
   } = useCharacterStore();
   const resetGame = useGameStore((s) => s.reset);
   const resetWorld = useWorldStore((s) => s.reset);
+  const resetKarma = useKarmaStore((s) => s.reset);
 
   const isValid = character.name.trim().length >= 2;
 
@@ -46,6 +48,7 @@ export function CharacterForm() {
     if (!isValid) return;
     resetGame();
     resetWorld();
+    resetKarma();
     finalizeCharacter();
     router.push("/game");
   }

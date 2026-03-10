@@ -2,6 +2,7 @@
 
 import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
+import { useKarmaStore } from "@/stores/karma-store";
 import { useHighScoreStore, type HighScoreEntry } from "@/stores/highscore-store";
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ export function DeathScreen() {
   const router = useRouter();
   const { character, reset: resetCharacter } = useCharacterStore();
   const { turnCount, reset: resetGame } = useGameStore();
+  const resetKarma = useKarmaStore((s) => s.reset);
   const { addScore, getTopScores } = useHighScoreStore();
   const scoreRecorded = useRef(false);
 
@@ -39,6 +41,7 @@ export function DeathScreen() {
   const handleNewGame = () => {
     resetCharacter();
     resetGame();
+    resetKarma();
     router.push("/character");
   };
 

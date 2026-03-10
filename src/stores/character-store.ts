@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Character, Gender, Race, CharacterClass, AbilityScores } from "@/types/character";
 import { createDefaultCharacter, getXpToNextLevel } from "@/types/character";
+import { getDefaultEquipped, getItemInfo } from "@/lib/items";
 
 interface CharacterStore {
   character: Character;
@@ -13,6 +14,9 @@ interface CharacterStore {
   setAbilityScores: (scores: AbilityScores) => void;
   setCampaignTheme: (theme: string) => void;
   finalizeCharacter: () => void;
+  equipItem: (item: string) => void;
+  unequipItem: (item: string) => void;
+  identifyItem: (item: string) => void;
   updateFromGameState: (updates: {
     hpChange?: number;
     newItems?: string[];
@@ -122,6 +126,12 @@ export const useCharacterStore = create<CharacterStore>()(
           );
           const ac = computeStartingAC(s.character.class, s.character.abilityScores.dexterity, s.character.abilityScores.constitution);
           const inventory = getStartingEquipment(s.character.class);
+          const equipped = getDefaultEquipped(inventory);
+          // Starting items are auto-identified
+          const identifiedItems = inventory.filter((item) => {
+            const info = getItemInfo(item);
+            return info?.isMagical;
+          });
           return {
             isCreated: true,
             character: {
@@ -130,6 +140,8 @@ export const useCharacterStore = create<CharacterStore>()(
               maxHp: hp,
               ac,
               inventory,
+              equipped,
+              identifiedItems,
               xp: 0,
               xpToNextLevel: getXpToNextLevel(1),
               lastRestTurn: -1,
@@ -139,6 +151,34 @@ export const useCharacterStore = create<CharacterStore>()(
             },
           };
         }),
+
+      equipItem: (item) =>
+        set((s) => ({
+          character: {
+            ...s.character,
+            equipped: s.character.equipped.includes(item)
+              ? s.character.equipped
+              : [...s.character.equipped, item],
+          },
+        })),
+
+      unequipItem: (item) =>
+        set((s) => ({
+          character: {
+            ...s.character,
+            equipped: s.character.equipped.filter((i) => i !== item),
+          },
+        })),
+
+      identifyItem: (item) =>
+        set((s) => ({
+          character: {
+            ...s.character,
+            identifiedItems: s.character.identifiedItems.includes(item)
+              ? s.character.identifiedItems
+              : [...s.character.identifiedItems, item],
+          },
+        })),
 
       updateFromGameState: (updates) =>
         set((s) => {
@@ -167,6 +207,10 @@ export const useCharacterStore = create<CharacterStore>()(
           }
           if (updates.removeItems) {
             c.inventory = c.inventory.filter(
+              (item) => !updates.removeItems!.includes(item)
+            );
+            // Also remove from equipped
+            c.equipped = c.equipped.filter(
               (item) => !updates.removeItems!.includes(item)
             );
           }

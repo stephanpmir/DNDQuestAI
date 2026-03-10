@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import type { ChatMessage as ChatMessageType } from "@/types/game";
 import { DiceRollDisplay } from "./dice-roll-display";
 
@@ -42,8 +42,9 @@ export function ChatMessage({ message }: Props) {
 }
 
 /**
- * Typewriter effect — reveals text word-by-word at ~200 WPM
+ * Typewriter effect — reveals text letter-by-letter at ~400 WPM
  * using direct DOM manipulation to avoid React re-render batching.
+ * 400 WPM ≈ 2000 chars/min ≈ 30ms per character.
  */
 function TypewriterText({ text }: { text: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -51,87 +52,64 @@ function TypewriterText({ text }: { text: string }) {
   const textRef = useRef(text);
   const doneRef = useRef(false);
 
-  // Split into word tokens: each "word" includes trailing whitespace
-  const getTokens = useCallback((t: string): string[] => {
-    const tokens: string[] = [];
-    let current = "";
-    for (let i = 0; i < t.length; i++) {
-      const ch = t[i];
-      if (ch === " " || ch === "\t") {
-        current += ch;
-      } else if (ch === "\n") {
-        current += ch;
-        tokens.push(current);
-        current = "";
-      } else {
-        if (current.length > 0 && /\S/.test(current)) {
-          tokens.push(current);
-          current = ch;
-        } else {
-          current += ch;
-        }
-      }
-    }
-    if (current.length > 0) tokens.push(current);
-    return tokens;
-  }, []);
-
   useEffect(() => {
     const el = containerRef.current;
     const cursor = cursorRef.current;
     if (!el || !cursor) return;
 
-    // If text changed (shouldn't happen for a message, but safety)
     if (textRef.current !== text) {
       textRef.current = text;
       doneRef.current = false;
     }
 
-    // If already done (re-render without text change), show full text
     if (doneRef.current) {
       el.textContent = text;
       cursor.style.display = "none";
       return;
     }
 
-    // Split text into words (preserving spaces attached to words)
-    const words = text.match(/\S+\s*/g) || [];
-    if (words.length === 0) {
+    if (text.length === 0) {
       el.textContent = text;
       cursor.style.display = "none";
       doneRef.current = true;
       return;
     }
 
-    let wordIndex = 0;
+    let charIndex = 0;
     el.textContent = "";
     cursor.style.display = "";
 
-    // 200 WPM = 1 word every 300ms
+    // 400 WPM ≈ 30ms per character
     const timer = setInterval(() => {
-      if (wordIndex < words.length) {
-        el.textContent += words[wordIndex];
-        wordIndex++;
+      if (charIndex < text.length) {
+        el.textContent += text[charIndex];
+        charIndex++;
 
-        // Auto-scroll to keep cursor visible
-        const scrollParent = el.closest("[class*='overflow-y']");
-        if (scrollParent) {
-          scrollParent.scrollTop = scrollParent.scrollHeight;
+        // Auto-scroll every 20 chars to reduce layout thrash
+        if (charIndex % 20 === 0) {
+          const scrollParent = el.closest("[class*='overflow-y']");
+          if (scrollParent) {
+            scrollParent.scrollTop = scrollParent.scrollHeight;
+          }
         }
       } else {
         clearInterval(timer);
         cursor.style.display = "none";
         doneRef.current = true;
+        // Final scroll
+        const scrollParent = el.closest("[class*='overflow-y']");
+        if (scrollParent) {
+          scrollParent.scrollTop = scrollParent.scrollHeight;
+        }
       }
-    }, 300);
+    }, 30);
 
     return () => {
       clearInterval(timer);
-      // On cleanup, show full text so it's not cut off
       if (el) el.textContent = text;
       if (cursor) cursor.style.display = "none";
     };
-  }, [text, getTokens]);
+  }, [text]);
 
   return (
     <div className="whitespace-pre-wrap">

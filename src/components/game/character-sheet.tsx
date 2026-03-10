@@ -8,6 +8,7 @@ import { getAlignment, ALIGNMENT_LABELS } from "@/lib/karma";
 import type { CharacterClass } from "@/types/character";
 import { cn } from "@/lib/utils";
 import { KarmaHistory } from "./karma-history";
+import { getItemInfo, getItemIcon } from "@/lib/items";
 
 interface Props {
   onClose: () => void;
@@ -145,6 +146,10 @@ export function CharacterSheet({ onClose }: Props) {
   const { location, questLog } = useGameStore();
   const { karmaHistory } = useKarmaStore();
   const [showKarmaHistory, setShowKarmaHistory] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<string | null>(null);
+
+  const equippedItems = character.equipped ?? [];
+  const backpackItems = character.inventory.filter((item) => !equippedItems.includes(item));
 
   const alignment = getAlignment(character.karma);
   const alignmentLabel = ALIGNMENT_LABELS[alignment];
@@ -217,39 +222,39 @@ export function CharacterSheet({ onClose }: Props) {
         </div>
 
         {/* ═══ THREE-COLUMN LAYOUT (mirrors official sheet) ═══ */}
-        <div className="grid grid-cols-[180px_1fr_180px] gap-4 p-4">
+        <div className="grid grid-cols-[140px_1fr_180px] gap-4 p-4">
 
           {/* ── LEFT COLUMN ── */}
-          <div className="space-y-4">
+          <div className="space-y-2">
 
-            {/* Ability Scores — vertical stack like official sheet */}
+            {/* Ability Scores — compact vertical stack */}
             {(["STR", "DEX", "CON", "INT", "WIS", "CHA"] as const).map((ab) => {
               const val = abilityMap[ab];
               const m = abilityMod(val);
               return (
-                <div key={ab} className="text-center bg-muted/40 rounded-lg py-2 border border-border/40">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{ab}</div>
-                  <div className="text-2xl font-black leading-none mt-0.5">{fmtMod(m)}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5 bg-muted/60 rounded-full inline-block px-2">{val}</div>
+                <div key={ab} className="flex items-center justify-between bg-muted/40 rounded px-2.5 py-1.5 border border-border/40">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider w-8">{ab}</span>
+                  <span className="text-lg font-black leading-none">{fmtMod(m)}</span>
+                  <span className="text-[10px] text-muted-foreground bg-muted/60 rounded-full px-1.5">{val}</span>
                 </div>
               );
             })}
 
-            {/* Inspiration */}
-            <div className="text-center bg-muted/30 rounded py-1 border border-border/20">
-              <div className="text-[10px] text-muted-foreground uppercase">Inspiration</div>
-              <div className="text-xs">&#x25CB;</div>
-            </div>
-
-            {/* Proficiency Bonus */}
-            <div className="text-center bg-muted/40 rounded-lg py-2 border border-border/40">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Proficiency Bonus</div>
-              <div className="text-xl font-black">+{profBonus}</div>
+            {/* Proficiency Bonus & Inspiration row */}
+            <div className="grid grid-cols-2 gap-1.5">
+              <div className="text-center bg-muted/40 rounded py-1.5 border border-border/40">
+                <div className="text-[9px] text-muted-foreground uppercase">Prof</div>
+                <div className="text-sm font-black">+{profBonus}</div>
+              </div>
+              <div className="text-center bg-muted/30 rounded py-1.5 border border-border/20">
+                <div className="text-[9px] text-muted-foreground uppercase">Insp</div>
+                <div className="text-sm">&#x25CB;</div>
+              </div>
             </div>
 
             {/* Saving Throws */}
             <div className="bg-muted/30 rounded-lg p-2 border border-border/30">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 text-center">Saving Throws</div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 text-center">Saving Throws</div>
               {(["STR", "DEX", "CON", "INT", "WIS", "CHA"] as const).map((ab) => {
                 const val = abilityMap[ab];
                 const isProficient = classSaves.includes(ab);
@@ -257,7 +262,7 @@ export function CharacterSheet({ onClose }: Props) {
                 return (
                   <div key={ab} className="flex items-center gap-1.5 text-xs py-0.5">
                     <span className={cn(
-                      "w-2.5 h-2.5 rounded-full border flex-shrink-0",
+                      "w-2 h-2 rounded-full border flex-shrink-0",
                       isProficient ? "bg-primary border-primary" : "border-muted-foreground/40"
                     )} />
                     <span className="font-mono w-7 text-right font-semibold">{fmtMod(saveMod)}</span>
@@ -267,28 +272,10 @@ export function CharacterSheet({ onClose }: Props) {
               })}
             </div>
 
-            {/* Skills */}
-            <div className="bg-muted/30 rounded-lg p-2 border border-border/30">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 text-center">Skills</div>
-              {SKILLS.map(([skill, ability]) => {
-                const val = abilityMap[ability];
-                const skillMod = abilityMod(val);
-                return (
-                  <div key={skill} className="flex items-center gap-1.5 text-[11px] py-0.5">
-                    <span className="w-2.5 h-2.5 rounded-full border border-muted-foreground/40 flex-shrink-0" />
-                    <span className="font-mono w-6 text-right font-semibold">{fmtMod(skillMod)}</span>
-                    <span className="text-muted-foreground truncate">
-                      {skill} <span className="text-[9px]">({ability})</span>
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
             {/* Passive Perception */}
-            <div className="text-center bg-muted/40 rounded-lg py-2 border border-border/40">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Passive Perception</div>
-              <div className="text-xl font-black">{passivePerception}</div>
+            <div className="text-center bg-muted/40 rounded py-1.5 border border-border/40">
+              <div className="text-[9px] text-muted-foreground uppercase tracking-wider">Passive Perception</div>
+              <div className="text-sm font-black">{passivePerception}</div>
             </div>
           </div>
 
@@ -404,25 +391,99 @@ export function CharacterSheet({ onClose }: Props) {
               )}
             </div>
 
-            {/* Equipment */}
+            {/* Equipment — Worn */}
             <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Equipment</div>
-              <div className="flex gap-3 mb-2">
-                <div className="text-center flex-1 bg-muted/30 rounded py-1 border border-border/20">
-                  <div className="text-[9px] text-amber-400/70 uppercase">GP</div>
-                  <div className="text-sm font-black text-amber-400">{character.gold}</div>
-                </div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Worn Equipment</div>
+              {equippedItems.length > 0 ? (
+                <ul className="space-y-1">
+                  {equippedItems.map((item) => {
+                    const info = getItemInfo(item);
+                    const icon = getItemIcon(item);
+                    const isIdentified = !info?.isMagical || character.identifiedItems.includes(item);
+                    return (
+                      <li key={item}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedItem(selectedItem === item ? null : item)}
+                          className={cn(
+                            "w-full text-left flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border transition-colors",
+                            info?.isMagical
+                              ? "bg-purple-950/30 border-purple-700/30 hover:bg-purple-950/50"
+                              : "bg-muted/20 border-border/10 hover:bg-muted/40",
+                            selectedItem === item && "ring-1 ring-primary"
+                          )}
+                        >
+                          <span className="text-sm shrink-0">{icon}</span>
+                          <span className="truncate">{item}</span>
+                          {info?.isMagical && !isIdentified && (
+                            <span className="text-[9px] text-purple-400 shrink-0">???</span>
+                          )}
+                        </button>
+                        {selectedItem === item && (
+                          <div className="mt-1 mx-1 p-2 bg-muted/40 rounded text-[10px] text-muted-foreground border border-border/20">
+                            <div>{info?.description ?? "A mysterious item."}</div>
+                            {info?.isMagical && isIdentified && info.magicalProperties && (
+                              <div className="mt-1 text-purple-300 font-semibold">{info.magicalProperties}</div>
+                            )}
+                            {info?.isMagical && !isIdentified && (
+                              <div className="mt-1 text-purple-400 italic">Magical properties unknown. Requires identification.</div>
+                            )}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <div className="text-xs text-muted-foreground italic">Nothing equipped</div>
+              )}
+            </div>
+
+            {/* Backpack / Inventory */}
+            <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Backpack</div>
+                <div className="text-[10px] text-amber-400 font-bold">{character.gold} GP</div>
               </div>
-              {character.inventory.length > 0 ? (
-                <ul className="grid grid-cols-2 gap-1">
-                  {character.inventory.map((item) => (
-                    <li
-                      key={item}
-                      className="text-[11px] px-1.5 py-0.5 bg-muted/20 rounded border border-border/10 truncate"
-                    >
-                      {item}
-                    </li>
-                  ))}
+              {backpackItems.length > 0 ? (
+                <ul className="space-y-1">
+                  {backpackItems.map((item) => {
+                    const info = getItemInfo(item);
+                    const icon = getItemIcon(item);
+                    const isIdentified = !info?.isMagical || character.identifiedItems.includes(item);
+                    return (
+                      <li key={item}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedItem(selectedItem === item ? null : item)}
+                          className={cn(
+                            "w-full text-left flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border transition-colors",
+                            info?.isMagical
+                              ? "bg-purple-950/30 border-purple-700/30 hover:bg-purple-950/50"
+                              : "bg-muted/20 border-border/10 hover:bg-muted/40",
+                            selectedItem === item && "ring-1 ring-primary"
+                          )}
+                        >
+                          <span className="text-sm shrink-0">{icon}</span>
+                          <span className="truncate">{item}</span>
+                          {info?.isMagical && !isIdentified && (
+                            <span className="text-[9px] text-purple-400 shrink-0">???</span>
+                          )}
+                        </button>
+                        {selectedItem === item && (
+                          <div className="mt-1 mx-1 p-2 bg-muted/40 rounded text-[10px] text-muted-foreground border border-border/20">
+                            <div>{info?.description ?? "A mysterious item."}</div>
+                            {info?.isMagical && isIdentified && info.magicalProperties && (
+                              <div className="mt-1 text-purple-300 font-semibold">{info.magicalProperties}</div>
+                            )}
+                            {info?.isMagical && !isIdentified && (
+                              <div className="mt-1 text-purple-400 italic">Magical properties unknown. Requires identification.</div>
+                            )}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <div className="text-xs text-muted-foreground italic">Empty</div>
@@ -481,6 +542,24 @@ export function CharacterSheet({ onClose }: Props) {
                 <span className="text-green-400">&#x25CF;</span>
                 {location}
               </div>
+            </div>
+
+            {/* Skills */}
+            <div className="bg-muted/30 rounded-lg p-2 border border-border/30">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 text-center">Skills</div>
+              {SKILLS.map(([skill, ability]) => {
+                const val = abilityMap[ability];
+                const skillMod = abilityMod(val);
+                return (
+                  <div key={skill} className="flex items-center gap-1.5 text-[11px] py-0.5">
+                    <span className="w-2 h-2 rounded-full border border-muted-foreground/40 flex-shrink-0" />
+                    <span className="font-mono w-6 text-right font-semibold">{fmtMod(skillMod)}</span>
+                    <span className="text-muted-foreground truncate">
+                      {skill} <span className="text-[9px]">({ability})</span>
+                    </span>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Quest Log */}

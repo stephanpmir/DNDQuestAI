@@ -54,6 +54,10 @@ export interface Character {
   xpToNextLevel: number;
   abilityScores: AbilityScores;
   inventory: string[];
+  /** Items currently worn/equipped (subset of inventory) */
+  equipped: string[];
+  /** Magical items the player has identified */
+  identifiedItems: string[];
   gold: number;
   /** Turn number of last rest (-1 = never rested) */
   lastRestTurn: number;
@@ -105,6 +109,8 @@ export function createDefaultCharacter(): Character {
       charisma: 10,
     },
     inventory: [],
+    equipped: [],
+    identifiedItems: [],
     gold: 15,
     lastRestTurn: -1,
     deathSaves: { successes: 0, failures: 0 },
