@@ -9,15 +9,10 @@ interface Props {
 
 /**
  * Minimal inline dice roll display — single centered line with color coding.
+ * Shows the reason for the check so the player understands what's happening.
  */
 export function DiceRollDisplay({ roll }: Props) {
   const isSuccess = roll.success;
-
-  const typeLabel =
-    roll.type === "attack" ? "Attack"
-    : roll.type === "save" ? "Save"
-    : roll.type === "damage" ? "Damage"
-    : roll.ability ? roll.ability.charAt(0).toUpperCase() + roll.ability.slice(1) : "Check";
 
   const resultLabel =
     roll.type === "attack"
@@ -29,17 +24,25 @@ export function DiceRollDisplay({ roll }: Props) {
   const isCrit = roll.rolled === 20;
   const isFumble = roll.rolled === 1;
 
+  // Use reason if available, otherwise fall back to type label
+  const displayReason = roll.reason
+    ?? (roll.type === "attack" ? "Attack roll"
+      : roll.type === "save" ? "Saving throw"
+      : roll.type === "damage" ? "Damage"
+      : roll.ability ? `${roll.ability.charAt(0).toUpperCase() + roll.ability.slice(1)} check`
+      : "Check");
+
   return (
     <div className="flex justify-center my-2">
       <div
         className={cn(
-          "inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-mono border",
+          "inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 px-4 py-1.5 rounded-full text-xs font-mono border",
           isSuccess
             ? "bg-emerald-950/60 border-emerald-600/40 text-emerald-300"
             : "bg-red-950/60 border-red-600/40 text-red-300"
         )}
       >
-        <span className="font-semibold uppercase tracking-wider opacity-70">{typeLabel}</span>
+        <span className="font-semibold tracking-wide opacity-80">{displayReason}</span>
         <span className="text-muted-foreground">|</span>
         <span>
           {roll.rolled}
@@ -47,9 +50,7 @@ export function DiceRollDisplay({ roll }: Props) {
           {roll.modifier} = <span className="font-bold">{roll.total}</span>
         </span>
         {roll.dc != null && (
-          <>
-            <span className="text-muted-foreground/50">vs DC {roll.dc}</span>
-          </>
+          <span className="text-muted-foreground/50">vs DC {roll.dc}</span>
         )}
         <span className="text-muted-foreground">|</span>
         <span className={cn(

@@ -140,6 +140,55 @@ function explorationXpReward(characterLevel: number): number {
   return Math.max(3, Math.floor(combatXpReward(characterLevel) / 10));
 }
 
+/** Travel encounter types scaled by level */
+function getRandomTravelEncounter(level: number): { type: "combat" | "social" | "environmental" | "discovery"; description: string } {
+  const lowLevelEncounters = [
+    { type: "combat" as const, description: "bandits blocking the road" },
+    { type: "combat" as const, description: "wolves stalking from the treeline" },
+    { type: "combat" as const, description: "a goblin ambush" },
+    { type: "social" as const, description: "a traveling merchant with wares" },
+    { type: "social" as const, description: "a lost traveler seeking directions" },
+    { type: "social" as const, description: "a patrol of town guards" },
+    { type: "environmental" as const, description: "a fallen tree blocking the path" },
+    { type: "environmental" as const, description: "a sudden rainstorm" },
+    { type: "environmental" as const, description: "a rickety bridge over a ravine" },
+    { type: "discovery" as const, description: "an abandoned campsite with supplies" },
+    { type: "discovery" as const, description: "a strange shrine by the roadside" },
+    { type: "discovery" as const, description: "tracks leading off the trail" },
+  ];
+
+  const midLevelEncounters = [
+    { type: "combat" as const, description: "an ogre demanding a toll" },
+    { type: "combat" as const, description: "a wyvern circling overhead" },
+    { type: "combat" as const, description: "undead rising from a roadside graveyard" },
+    { type: "social" as const, description: "a wounded knight seeking aid" },
+    { type: "social" as const, description: "a caravan under attack" },
+    { type: "social" as const, description: "a hermit with a cryptic warning" },
+    { type: "environmental" as const, description: "a magical fog rolling in" },
+    { type: "environmental" as const, description: "an earthquake shaking the ground" },
+    { type: "discovery" as const, description: "ruins of an ancient watchtower" },
+    { type: "discovery" as const, description: "a hidden cave entrance" },
+  ];
+
+  const highLevelEncounters = [
+    { type: "combat" as const, description: "a young dragon claiming this territory" },
+    { type: "combat" as const, description: "a demon summoned by a shattered ward" },
+    { type: "combat" as const, description: "a death knight on a dark steed" },
+    { type: "social" as const, description: "a planar traveler from another realm" },
+    { type: "social" as const, description: "an ancient spirit bound to a crossroads" },
+    { type: "environmental" as const, description: "a rift between planes tearing open" },
+    { type: "environmental" as const, description: "a magical storm of wild magic" },
+    { type: "discovery" as const, description: "an ancient sealed portal humming with energy" },
+    { type: "discovery" as const, description: "the remains of a legendary hero" },
+  ];
+
+  const pool = level <= 4 ? lowLevelEncounters
+    : level <= 10 ? midLevelEncounters
+    : highLevelEncounters;
+
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 /**
  * The Rules Engine. Given a player action and game state, it produces
  * deterministic outcomes. The LLM only narrates what happened.
@@ -179,6 +228,7 @@ export function resolveAction(
         modifier: 0,
         total: rolled,
         success: rolled >= 10,
+        reason: "Death saving throw — clinging to life",
       };
       outcome.roll = result;
 
@@ -198,7 +248,7 @@ export function resolveAction(
     case "self_harm": {
       // CON save DC 12 to resist, take 1d6+2 on failure, half on success
       const conSave = abilityCheck(character.abilityScores.constitution, 12, "constitution");
-      outcome.roll = { ...conSave, type: "save" };
+      outcome.roll = { ...conSave, type: "save", reason: "CON save — resisting self-inflicted harm" };
       const dmg = damageRoll(1, 6, 2);
       if (conSave.success) {
         outcome.hpChange = -Math.max(1, Math.floor(dmg.total / 2));
@@ -219,7 +269,7 @@ export function resolveAction(
 
       const enemy = scaledEnemy(character.level);
       const hit = attackRoll(atkScore, enemy.ac, prof);
-      outcome.roll = hit;
+      outcome.roll = { ...hit, reason: action === "cast_spell" ? "Spell attack roll" : "Attack roll — striking the enemy" };
 
       if (hit.success) {
         // Roll damage — critical hit on natural 20 doubles dice
@@ -250,7 +300,8 @@ export function resolveAction(
       const dc = levelScaledDC(12, character.level);
       const prof = proficiencyBonus(character.level);
       const result = abilityCheck(character.abilityScores[ability], dc, ability, prof);
-      outcome.roll = result;
+      const skillName = ability.charAt(0).toUpperCase() + ability.slice(1);
+      outcome.roll = { ...result, reason: `${skillName} check — testing your skill` };
       if (result.success) {
         outcome.xpGained = skillCheckXpReward(character.level);
       }
@@ -258,13 +309,64 @@ export function resolveAction(
     }
 
     case "explore": {
-      // Perception check to find interesting things
-      const dc = levelScaledDC(10, character.level);
-      const prof = proficiencyBonus(character.level);
-      const perc = abilityCheck(character.abilityScores.wisdom, dc, "wisdom", prof);
-      outcome.roll = perc;
-      if (perc.success) {
-        outcome.xpGained = explorationXpReward(character.level);
+      // If traveling to a destination, check for random encounter along the way
+      if (outcome.locationChange) {
+        const encounterRoll = d20();
+        // 30% chance of encounter (roll 1-6 on d20)
+        if (encounterRoll <= 6) {
+          const encounterType = getRandomTravelEncounter(character.level);
+          outcome.travelEncounter = encounterType;
+
+          if (encounterType.type === "combat") {
+            // Combat encounter on the road
+            const atkAbility = "strength" as const;
+            const atkScore = character.abilityScores[atkAbility];
+            const prof = proficiencyBonus(character.level);
+            const enemy = scaledEnemy(character.level);
+            const hit = attackRoll(atkScore, enemy.ac, prof);
+            outcome.roll = { ...hit, reason: `Travel encounter — ${encounterType.description}` };
+            if (hit.success) {
+              const dmg = damageRoll(1, 8, modifier(atkScore));
+              outcome.damageDealt = Math.max(1, dmg.total);
+              outcome.xpGained = combatXpReward(character.level);
+            } else {
+              const enemyRoll = d20();
+              const enemyTotal = enemyRoll + enemy.attackBonus;
+              if (enemyTotal >= character.ac) {
+                const enemyDmg = damageRoll(enemy.damageDice.count, enemy.damageDice.sides, enemy.damageBonus);
+                outcome.hpChange = -Math.max(1, enemyDmg.total);
+                outcome.damageTaken = Math.max(1, enemyDmg.total);
+              }
+            }
+          } else {
+            // Non-combat encounter — perception/wisdom check
+            const dc = levelScaledDC(10, character.level);
+            const prof = proficiencyBonus(character.level);
+            const check = abilityCheck(character.abilityScores.wisdom, dc, "wisdom", prof);
+            outcome.roll = { ...check, reason: `Travel encounter — ${encounterType.description}` };
+            if (check.success) {
+              outcome.xpGained = explorationXpReward(character.level);
+            }
+          }
+        } else {
+          // Safe travel — just a perception check for the new area
+          const dc = levelScaledDC(10, character.level);
+          const prof = proficiencyBonus(character.level);
+          const perc = abilityCheck(character.abilityScores.wisdom, dc, "wisdom", prof);
+          outcome.roll = { ...perc, reason: "Perception check — surveying the new area" };
+          if (perc.success) {
+            outcome.xpGained = explorationXpReward(character.level);
+          }
+        }
+      } else {
+        // Not traveling, just looking around
+        const dc = levelScaledDC(10, character.level);
+        const prof = proficiencyBonus(character.level);
+        const perc = abilityCheck(character.abilityScores.wisdom, dc, "wisdom", prof);
+        outcome.roll = { ...perc, reason: "Perception check — searching the area" };
+        if (perc.success) {
+          outcome.xpGained = explorationXpReward(character.level);
+        }
       }
       break;
     }
@@ -352,7 +454,7 @@ export function resolveAction(
         "charisma",
         prof
       );
-      outcome.roll = socialResult;
+      outcome.roll = { ...socialResult, reason: "Charisma check — social interaction" };
       if (socialResult.success) {
         outcome.xpGained = skillCheckXpReward(character.level);
       }

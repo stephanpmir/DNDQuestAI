@@ -1,29 +1,187 @@
 "use client";
 
+import { useState } from "react";
 import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
 import { useKarmaStore } from "@/stores/karma-store";
 import { getAlignment, ALIGNMENT_LABELS } from "@/lib/karma";
+import type { CharacterClass } from "@/types/character";
 import { cn } from "@/lib/utils";
+import { KarmaHistory } from "./karma-history";
 
 interface Props {
   onClose: () => void;
+}
+
+// ── D&D 5e saving throw proficiencies by class ──────────────────
+
+const SAVE_PROFICIENCIES: Record<CharacterClass, string[]> = {
+  Barbarian: ["STR", "CON"],
+  Bard: ["DEX", "CHA"],
+  Cleric: ["WIS", "CHA"],
+  Druid: ["INT", "WIS"],
+  Fighter: ["STR", "CON"],
+  Monk: ["STR", "DEX"],
+  Paladin: ["WIS", "CHA"],
+  Ranger: ["STR", "DEX"],
+  Rogue: ["DEX", "INT"],
+  Sorcerer: ["CON", "CHA"],
+  Warlock: ["WIS", "CHA"],
+  Wizard: ["INT", "WIS"],
+};
+
+// ── D&D 5e skills and their governing ability ───────────────────
+
+const SKILLS: [string, string][] = [
+  ["Acrobatics", "DEX"],
+  ["Animal Handling", "WIS"],
+  ["Arcana", "INT"],
+  ["Athletics", "STR"],
+  ["Deception", "CHA"],
+  ["History", "INT"],
+  ["Insight", "WIS"],
+  ["Intimidation", "CHA"],
+  ["Investigation", "INT"],
+  ["Medicine", "WIS"],
+  ["Nature", "INT"],
+  ["Perception", "WIS"],
+  ["Performance", "CHA"],
+  ["Persuasion", "CHA"],
+  ["Religion", "INT"],
+  ["Sleight of Hand", "DEX"],
+  ["Stealth", "DEX"],
+  ["Survival", "WIS"],
+];
+
+// ── Hit dice by class ───────────────────────────────────────────
+
+const HIT_DICE: Record<CharacterClass, string> = {
+  Barbarian: "d12",
+  Fighter: "d10",
+  Paladin: "d10",
+  Ranger: "d10",
+  Bard: "d8",
+  Cleric: "d8",
+  Druid: "d8",
+  Monk: "d8",
+  Rogue: "d8",
+  Warlock: "d8",
+  Sorcerer: "d6",
+  Wizard: "d6",
+};
+
+// ── Racial speed ────────────────────────────────────────────────
+
+const RACIAL_SPEED: Record<string, number> = {
+  Human: 30, Elf: 30, Dwarf: 25, Halfling: 25, Gnome: 25,
+  "Half-Elf": 30, "Half-Orc": 30, Tiefling: 30, Dragonborn: 30,
+};
+
+// ── Racial traits ───────────────────────────────────────────────
+
+const RACIAL_TRAITS: Record<string, string[]> = {
+  Human: ["Extra Language"],
+  Elf: ["Darkvision (60 ft)", "Fey Ancestry", "Trance"],
+  Dwarf: ["Darkvision (60 ft)", "Dwarven Resilience", "Stonecunning"],
+  Halfling: ["Lucky", "Brave", "Halfling Nimbleness"],
+  Gnome: ["Darkvision (60 ft)", "Gnome Cunning"],
+  "Half-Elf": ["Darkvision (60 ft)", "Fey Ancestry", "Skill Versatility"],
+  "Half-Orc": ["Darkvision (60 ft)", "Relentless Endurance", "Savage Attacks"],
+  Tiefling: ["Darkvision (60 ft)", "Hellish Resistance", "Infernal Legacy"],
+  Dragonborn: ["Breath Weapon", "Damage Resistance"],
+};
+
+// ── Weapon categorization for attacks table ─────────────────────
+
+const WEAPON_DATA: Record<string, { damage: string; type: string }> = {
+  greataxe: { damage: "1d12", type: "slashing" },
+  handaxe: { damage: "1d6", type: "slashing" },
+  battleaxe: { damage: "1d8", type: "slashing" },
+  rapier: { damage: "1d8", type: "piercing" },
+  longsword: { damage: "1d8", type: "slashing" },
+  shortsword: { damage: "1d6", type: "piercing" },
+  greatsword: { damage: "2d6", type: "slashing" },
+  mace: { damage: "1d6", type: "bludgeoning" },
+  scimitar: { damage: "1d6", type: "slashing" },
+  dagger: { damage: "1d4", type: "piercing" },
+  quarterstaff: { damage: "1d6", type: "bludgeoning" },
+  longbow: { damage: "1d8", type: "piercing" },
+  shortbow: { damage: "1d6", type: "piercing" },
+  spear: { damage: "1d6", type: "piercing" },
+  javelin: { damage: "1d6", type: "piercing" },
+  crossbow: { damage: "1d8", type: "piercing" },
+  trident: { damage: "1d6", type: "piercing" },
+  warhammer: { damage: "1d8", type: "bludgeoning" },
+  flail: { damage: "1d8", type: "bludgeoning" },
+  morningstar: { damage: "1d8", type: "piercing" },
+  maul: { damage: "2d6", type: "bludgeoning" },
+  halberd: { damage: "1d10", type: "slashing" },
+  pike: { damage: "1d10", type: "piercing" },
+  glaive: { damage: "1d10", type: "slashing" },
+  lance: { damage: "1d12", type: "piercing" },
+  whip: { damage: "1d4", type: "slashing" },
+};
+
+function getWeaponInfo(itemName: string): { damage: string; type: string } | null {
+  const lower = itemName.toLowerCase();
+  for (const [weapon, info] of Object.entries(WEAPON_DATA)) {
+    if (lower.includes(weapon)) return info;
+  }
+  return null;
+}
+
+// ── Finesse / ranged weapons use DEX ────────────────────────────
+
+const FINESSE_WEAPONS = ["rapier", "shortsword", "dagger", "scimitar", "whip"];
+const RANGED_WEAPONS = ["longbow", "shortbow", "crossbow"];
+
+function useDexForAttack(itemName: string): boolean {
+  const lower = itemName.toLowerCase();
+  return FINESSE_WEAPONS.some((w) => lower.includes(w)) || RANGED_WEAPONS.some((w) => lower.includes(w));
 }
 
 export function CharacterSheet({ onClose }: Props) {
   const { character } = useCharacterStore();
   const { location, questLog } = useGameStore();
   const { karmaHistory } = useKarmaStore();
+  const [showKarmaHistory, setShowKarmaHistory] = useState(false);
 
   const alignment = getAlignment(character.karma);
   const alignmentLabel = ALIGNMENT_LABELS[alignment];
 
-  const mod = (score: number) => {
-    const m = Math.floor((score - 10) / 2);
-    return m >= 0 ? `+${m}` : `${m}`;
-  };
+  const abilityMod = (score: number) => Math.floor((score - 10) / 2);
+  const fmtMod = (m: number) => (m >= 0 ? `+${m}` : `${m}`);
 
   const profBonus = Math.floor((character.level - 1) / 4) + 2;
+  const speed = RACIAL_SPEED[character.race] ?? 30;
+  const hitDie = HIT_DICE[character.class] ?? "d8";
+  const initiative = abilityMod(character.abilityScores.dexterity);
+  const passivePerception = 10 + abilityMod(character.abilityScores.wisdom);
+  const racialTraits = RACIAL_TRAITS[character.race] ?? [];
+
+  const abilityMap: Record<string, number> = {
+    STR: character.abilityScores.strength,
+    DEX: character.abilityScores.dexterity,
+    CON: character.abilityScores.constitution,
+    INT: character.abilityScores.intelligence,
+    WIS: character.abilityScores.wisdom,
+    CHA: character.abilityScores.charisma,
+  };
+
+  const classSaves = SAVE_PROFICIENCIES[character.class] ?? [];
+
+  // Find weapons in inventory for attacks table
+  const weapons = character.inventory
+    .map((item) => {
+      const info = getWeaponInfo(item);
+      if (!info) return null;
+      const usesDex = useDexForAttack(item);
+      const atkAbility = usesDex ? character.abilityScores.dexterity : character.abilityScores.strength;
+      const atkMod = abilityMod(atkAbility) + profBonus;
+      const dmgMod = abilityMod(atkAbility);
+      return { name: item, atkBonus: fmtMod(atkMod), damage: `${info.damage}${dmgMod >= 0 ? "+" : ""}${dmgMod}`, type: info.type };
+    })
+    .filter(Boolean) as { name: string; atkBonus: string; damage: string; type: string }[];
 
   return (
     <div
@@ -31,174 +189,334 @@ export function CharacterSheet({ onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="relative w-[90vw] max-w-2xl h-[85vh] bg-card border border-border rounded-xl shadow-2xl overflow-y-auto p-6"
+        className="relative w-[92vw] max-w-3xl h-[88vh] bg-card border border-border rounded-xl shadow-2xl overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close button */}
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-3 right-4 text-muted-foreground hover:text-foreground text-2xl leading-none"
+          className="absolute top-3 right-4 text-muted-foreground hover:text-foreground text-2xl leading-none z-10"
         >
           &times;
         </button>
 
-        {/* Header */}
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-black tracking-tight">{character.name}</h2>
-          <p className="text-sm text-muted-foreground">
-            Level {character.level} {character.gender} {character.race} {character.class}
-          </p>
-        </div>
-
-        {/* Core stats row */}
-        <div className="grid grid-cols-5 gap-3 mb-6">
-          <StatBox label="HP" value={`${character.hp}/${character.maxHp}`} color="text-red-400" />
-          <StatBox label="AC" value={String(character.ac)} />
-          <StatBox label="Prof Bonus" value={`+${profBonus}`} />
-          <StatBox label="Gold" value={String(character.gold)} color="text-amber-400" />
-          <StatBox label="XP" value={character.xpToNextLevel === Infinity ? "MAX" : `${character.xp}/${character.xpToNextLevel}`} color="text-blue-400" />
-        </div>
-
-        {/* Ability Scores */}
-        <div className="mb-6">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Ability Scores</h3>
-          <div className="grid grid-cols-6 gap-2">
-            {([
-              ["STR", character.abilityScores.strength],
-              ["DEX", character.abilityScores.dexterity],
-              ["CON", character.abilityScores.constitution],
-              ["INT", character.abilityScores.intelligence],
-              ["WIS", character.abilityScores.wisdom],
-              ["CHA", character.abilityScores.charisma],
-            ] as const).map(([label, val]) => (
-              <div key={label} className="text-center bg-muted/40 rounded-lg py-3 border border-border/30">
-                <div className="text-[10px] text-muted-foreground uppercase">{label}</div>
-                <div className="text-2xl font-black">{val}</div>
-                <div className="text-xs text-muted-foreground">{mod(val)}</div>
-              </div>
-            ))}
+        {/* ═══ HEADER BAR (mirrors top of official sheet) ═══ */}
+        <div className="px-6 pt-5 pb-3 border-b border-border/50 bg-gradient-to-b from-muted/60 to-transparent">
+          <div className="grid grid-cols-[1fr_auto] gap-4">
+            <div>
+              <h2 className="text-2xl font-black tracking-tight">{character.name}</h2>
+            </div>
+            <div className="text-right text-xs text-muted-foreground space-y-0.5">
+              <div><span className="font-semibold text-foreground">{character.class} {character.level}</span></div>
+              <div>{character.race} ({character.gender})</div>
+              <div>{alignmentLabel}</div>
+              <div>XP: {character.xp}{character.xpToNextLevel !== Infinity ? ` / ${character.xpToNextLevel}` : " (MAX)"}</div>
+            </div>
           </div>
         </div>
 
-        {/* Saving Throws */}
-        <div className="mb-6">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Saving Throws</h3>
-          <div className="grid grid-cols-6 gap-2">
-            {([
-              ["STR", character.abilityScores.strength],
-              ["DEX", character.abilityScores.dexterity],
-              ["CON", character.abilityScores.constitution],
-              ["INT", character.abilityScores.intelligence],
-              ["WIS", character.abilityScores.wisdom],
-              ["CHA", character.abilityScores.charisma],
-            ] as const).map(([label, val]) => {
-              const saveMod = Math.floor((val - 10) / 2);
+        {/* ═══ THREE-COLUMN LAYOUT (mirrors official sheet) ═══ */}
+        <div className="grid grid-cols-[180px_1fr_180px] gap-4 p-4">
+
+          {/* ── LEFT COLUMN ── */}
+          <div className="space-y-4">
+
+            {/* Ability Scores — vertical stack like official sheet */}
+            {(["STR", "DEX", "CON", "INT", "WIS", "CHA"] as const).map((ab) => {
+              const val = abilityMap[ab];
+              const m = abilityMod(val);
               return (
-                <div key={label} className="text-center bg-muted/20 rounded py-1.5 border border-border/20">
-                  <div className="text-[10px] text-muted-foreground">{label}</div>
-                  <div className="text-sm font-bold">{saveMod >= 0 ? "+" : ""}{saveMod}</div>
+                <div key={ab} className="text-center bg-muted/40 rounded-lg py-2 border border-border/40">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{ab}</div>
+                  <div className="text-2xl font-black leading-none mt-0.5">{fmtMod(m)}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5 bg-muted/60 rounded-full inline-block px-2">{val}</div>
                 </div>
               );
             })}
-          </div>
-        </div>
 
-        {/* Karma / Alignment */}
-        <div className="mb-6">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Karma & Alignment</h3>
-          <div className="flex items-center gap-4 bg-muted/30 rounded-lg p-3 border border-border/20">
-            <div>
-              <span className={cn(
-                "text-xl font-black",
+            {/* Inspiration */}
+            <div className="text-center bg-muted/30 rounded py-1 border border-border/20">
+              <div className="text-[10px] text-muted-foreground uppercase">Inspiration</div>
+              <div className="text-xs">&#x25CB;</div>
+            </div>
+
+            {/* Proficiency Bonus */}
+            <div className="text-center bg-muted/40 rounded-lg py-2 border border-border/40">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Proficiency Bonus</div>
+              <div className="text-xl font-black">+{profBonus}</div>
+            </div>
+
+            {/* Saving Throws */}
+            <div className="bg-muted/30 rounded-lg p-2 border border-border/30">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 text-center">Saving Throws</div>
+              {(["STR", "DEX", "CON", "INT", "WIS", "CHA"] as const).map((ab) => {
+                const val = abilityMap[ab];
+                const isProficient = classSaves.includes(ab);
+                const saveMod = abilityMod(val) + (isProficient ? profBonus : 0);
+                return (
+                  <div key={ab} className="flex items-center gap-1.5 text-xs py-0.5">
+                    <span className={cn(
+                      "w-2.5 h-2.5 rounded-full border flex-shrink-0",
+                      isProficient ? "bg-primary border-primary" : "border-muted-foreground/40"
+                    )} />
+                    <span className="font-mono w-7 text-right font-semibold">{fmtMod(saveMod)}</span>
+                    <span className="text-muted-foreground">{ab}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Skills */}
+            <div className="bg-muted/30 rounded-lg p-2 border border-border/30">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 text-center">Skills</div>
+              {SKILLS.map(([skill, ability]) => {
+                const val = abilityMap[ability];
+                const skillMod = abilityMod(val);
+                return (
+                  <div key={skill} className="flex items-center gap-1.5 text-[11px] py-0.5">
+                    <span className="w-2.5 h-2.5 rounded-full border border-muted-foreground/40 flex-shrink-0" />
+                    <span className="font-mono w-6 text-right font-semibold">{fmtMod(skillMod)}</span>
+                    <span className="text-muted-foreground truncate">
+                      {skill} <span className="text-[9px]">({ability})</span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Passive Perception */}
+            <div className="text-center bg-muted/40 rounded-lg py-2 border border-border/40">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Passive Perception</div>
+              <div className="text-xl font-black">{passivePerception}</div>
+            </div>
+          </div>
+
+          {/* ── CENTER COLUMN ── */}
+          <div className="space-y-4">
+
+            {/* AC / Initiative / Speed row */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="text-center bg-muted/40 rounded-lg py-3 border-2 border-border/50">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Armor Class</div>
+                <div className="text-3xl font-black">{character.ac}</div>
+              </div>
+              <div className="text-center bg-muted/40 rounded-lg py-3 border border-border/30">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Initiative</div>
+                <div className="text-3xl font-black">{fmtMod(initiative)}</div>
+              </div>
+              <div className="text-center bg-muted/40 rounded-lg py-3 border border-border/30">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Speed</div>
+                <div className="text-3xl font-black">{speed}</div>
+                <div className="text-[10px] text-muted-foreground">ft</div>
+              </div>
+            </div>
+
+            {/* Hit Points */}
+            <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Hit Points</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-[10px] text-muted-foreground">Maximum</div>
+                  <div className="text-2xl font-black text-red-400">{character.maxHp}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-muted-foreground">Current</div>
+                  <div className={cn(
+                    "text-2xl font-black",
+                    character.hp > character.maxHp * 0.5 ? "text-emerald-400" :
+                    character.hp > character.maxHp * 0.25 ? "text-orange-400" :
+                    "text-red-400"
+                  )}>
+                    {character.hp}
+                  </div>
+                </div>
+              </div>
+              {/* HP Bar */}
+              <div className="w-full bg-red-950/80 rounded-full h-2.5 overflow-hidden border border-red-900/50 mt-2">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-500",
+                    character.hp > character.maxHp * 0.6 ? "bg-red-500" :
+                    character.hp > character.maxHp * 0.25 ? "bg-orange-500" : "bg-red-700"
+                  )}
+                  style={{ width: `${Math.round((character.hp / character.maxHp) * 100)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Hit Dice & Death Saves row */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Hit Dice</div>
+                <div className="text-lg font-black">{character.level}{hitDie}</div>
+                <div className="text-[10px] text-muted-foreground">Total: {character.level}</div>
+              </div>
+              <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Death Saves</div>
+                <div className="flex gap-3">
+                  <div>
+                    <span className="text-[10px] text-emerald-400">S </span>
+                    {[0, 1, 2].map((i) => (
+                      <span key={i} className={cn(
+                        "inline-block w-3 h-3 rounded-full border mr-0.5",
+                        i < character.deathSaves.successes ? "bg-emerald-500 border-emerald-400" : "border-muted-foreground/40"
+                      )} />
+                    ))}
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-red-400">F </span>
+                    {[0, 1, 2].map((i) => (
+                      <span key={i} className={cn(
+                        "inline-block w-3 h-3 rounded-full border mr-0.5",
+                        i < character.deathSaves.failures ? "bg-red-500 border-red-400" : "border-muted-foreground/40"
+                      )} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Attacks & Spellcasting */}
+            <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Attacks & Spellcasting</div>
+              {weapons.length > 0 ? (
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-[10px] text-muted-foreground uppercase">
+                      <th className="text-left font-medium pb-1">Name</th>
+                      <th className="text-center font-medium pb-1">Atk Bonus</th>
+                      <th className="text-right font-medium pb-1">Damage/Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {weapons.slice(0, 5).map((w) => (
+                      <tr key={w.name} className="border-t border-border/20">
+                        <td className="py-1 truncate max-w-[120px]">{w.name}</td>
+                        <td className="py-1 text-center font-mono font-semibold">{w.atkBonus}</td>
+                        <td className="py-1 text-right font-mono">{w.damage} {w.type}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="text-xs text-muted-foreground italic">No weapons equipped</div>
+              )}
+            </div>
+
+            {/* Equipment */}
+            <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Equipment</div>
+              <div className="flex gap-3 mb-2">
+                <div className="text-center flex-1 bg-muted/30 rounded py-1 border border-border/20">
+                  <div className="text-[9px] text-amber-400/70 uppercase">GP</div>
+                  <div className="text-sm font-black text-amber-400">{character.gold}</div>
+                </div>
+              </div>
+              {character.inventory.length > 0 ? (
+                <ul className="grid grid-cols-2 gap-1">
+                  {character.inventory.map((item) => (
+                    <li
+                      key={item}
+                      className="text-[11px] px-1.5 py-0.5 bg-muted/20 rounded border border-border/10 truncate"
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-xs text-muted-foreground italic">Empty</div>
+              )}
+            </div>
+          </div>
+
+          {/* ── RIGHT COLUMN ── */}
+          <div className="space-y-4">
+
+            {/* Alignment / Karma — clickable to show history */}
+            <button
+              type="button"
+              onClick={() => setShowKarmaHistory(true)}
+              className="w-full text-left bg-muted/30 rounded-lg p-3 border border-border/30 hover:bg-muted/50 transition-colors cursor-pointer"
+            >
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Alignment</div>
+              <div className={cn(
+                "text-sm font-bold",
                 character.karma > 25 ? "text-emerald-400" :
                 character.karma < -25 ? "text-red-400" :
                 "text-gray-400"
               )}>
-                {character.karma > 0 ? "+" : ""}{character.karma}
-              </span>
+                {alignmentLabel}
+              </div>
+              <div className="text-[10px] text-muted-foreground mt-1">
+                Karma: {character.karma > 0 ? "+" : ""}{character.karma}
+              </div>
+              {karmaHistory.length > 0 && (
+                <div className="text-[10px] text-muted-foreground underline">
+                  {karmaHistory.length} moral action{karmaHistory.length > 1 ? "s" : ""} — view history
+                </div>
+              )}
+            </button>
+
+            {/* Racial Traits & Features */}
+            <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Features & Traits</div>
+              <div className="text-[10px] text-muted-foreground uppercase mb-1">{character.race} Traits</div>
+              <ul className="space-y-0.5 mb-3">
+                {racialTraits.map((trait) => (
+                  <li key={trait} className="text-[11px]">{trait}</li>
+                ))}
+              </ul>
+              <div className="text-[10px] text-muted-foreground uppercase mb-1">{character.class} Features</div>
+              <ul className="space-y-0.5">
+                <li className="text-[11px]">Hit Die: {hitDie}</li>
+                <li className="text-[11px]">Save Prof: {classSaves.join(", ")}</li>
+              </ul>
             </div>
-            <div>
-              <div className="font-bold text-sm">{alignmentLabel}</div>
-              <div className="text-xs text-muted-foreground">
-                {karmaHistory.length > 0
-                  ? `${karmaHistory.length} moral action${karmaHistory.length > 1 ? "s" : ""} recorded`
-                  : "No moral actions yet"}
+
+            {/* Location */}
+            <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Current Location</div>
+              <div className="text-xs font-medium flex items-center gap-1.5">
+                <span className="text-green-400">&#x25CF;</span>
+                {location}
               </div>
             </div>
+
+            {/* Quest Log */}
+            {questLog.length > 0 && (
+              <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Quest Log</div>
+                <ul className="space-y-1">
+                  {questLog.map((q) => (
+                    <li key={q} className="text-[11px] text-amber-300/80">
+                      &#x2694; {q}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Unconscious warning */}
+            {character.isUnconscious && (
+              <div className="bg-red-950/60 rounded-lg p-3 border border-red-700/50 animate-pulse">
+                <div className="text-[10px] text-red-400 uppercase tracking-wider font-bold text-center">
+                  Unconscious
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Death Saves (if unconscious) */}
-        {character.isUnconscious && (
-          <div className="mb-6">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-red-400 mb-2">Death Saves</h3>
-            <div className="flex gap-6 bg-red-950/40 rounded-lg p-3 border border-red-700/30">
-              <div>
-                <span className="text-xs text-muted-foreground">Successes: </span>
-                <span className="font-bold text-emerald-400">{character.deathSaves.successes}/3</span>
-              </div>
-              <div>
-                <span className="text-xs text-muted-foreground">Failures: </span>
-                <span className="font-bold text-red-400">{character.deathSaves.failures}/3</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Location */}
-        <div className="mb-6">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Current Location</h3>
-          <div className="text-sm flex items-center gap-1.5">
-            <span className="text-green-400">&#x25CF;</span>
-            {location}
-          </div>
-        </div>
-
-        {/* Inventory */}
-        <div className="mb-6">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
-            Inventory ({character.inventory.length} items)
-          </h3>
-          {character.inventory.length > 0 ? (
-            <ul className="grid grid-cols-2 gap-1">
-              {character.inventory.map((item) => (
-                <li
-                  key={item}
-                  className="text-xs px-2 py-1 bg-muted/30 rounded border border-border/20 truncate"
-                >
-                  {item}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-xs text-muted-foreground italic">Empty</p>
-          )}
-        </div>
-
-        {/* Quest Log */}
-        {questLog.length > 0 && (
-          <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Quest Log</h3>
-            <ul className="space-y-1">
-              {questLog.map((q) => (
-                <li key={q} className="text-xs text-amber-300/80">
-                  &#x2694; {q}
-                </li>
-              ))}
-            </ul>
-          </div>
+        {/* Karma History sub-modal */}
+        {showKarmaHistory && (
+          <KarmaHistory
+            karma={character.karma}
+            history={karmaHistory}
+            onClose={() => setShowKarmaHistory(false)}
+          />
         )}
       </div>
-    </div>
-  );
-}
-
-function StatBox({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="text-center bg-muted/40 rounded-lg py-2 border border-border/30">
-      <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</div>
-      <div className={cn("text-sm font-black leading-tight", color)}>{value}</div>
     </div>
   );
 }

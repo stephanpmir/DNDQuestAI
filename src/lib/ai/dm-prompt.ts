@@ -169,6 +169,9 @@ export function buildEngineContextMessage(
   if (o.divineEffect) {
     outcomeParts.push(`DIVINE INTERVENTION: ${o.divineEffect.description} (${o.divineEffect.type} from ${o.divineEffect.source === "good_god" ? "the gods of light" : "dark powers"}, roll modifier ${o.divineEffect.rollModifier > 0 ? "+" : ""}${o.divineEffect.rollModifier})`);
   }
+  if (o.travelEncounter) {
+    outcomeParts.push(`TRAVEL ENCOUNTER: While traveling, the character encounters ${o.travelEncounter.description}. This is a ${o.travelEncounter.type} encounter. Narrate the journey first — describe the terrain, weather, and distance — then introduce this encounter naturally along the way.`);
+  }
 
   if (outcomeParts.length > 0) {
     parts.push(`## Engine Outcome (incorporate these EXACTLY)\n${outcomeParts.join("\n")}`);

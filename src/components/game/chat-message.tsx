@@ -9,11 +9,11 @@ interface Props {
   message: ChatMessageType;
 }
 
-/** Calculate reading time for text at ~200 words per minute */
+/** Calculate delay between paragraphs — fast enough for quick readers (~400 WPM) */
 function readingDelayMs(text: string): number {
   const wordCount = text.trim().split(/\s+/).length;
-  // 200 WPM = ~300ms per word, minimum 600ms per paragraph
-  return Math.max(600, (wordCount / 200) * 60_000);
+  // ~400 WPM pace, minimum 400ms, max 2000ms per paragraph
+  return Math.min(2000, Math.max(400, (wordCount / 400) * 60_000));
 }
 
 export function ChatMessage({ message }: Props) {
@@ -94,7 +94,7 @@ function FadeInParagraphs({ text }: { text: string }) {
         <p
           key={i}
           className={cn(
-            "transition-opacity duration-700 ease-in",
+            "transition-opacity duration-500 ease-in",
             i < visibleCount ? "opacity-100" : "opacity-0 h-0 overflow-hidden"
           )}
         >

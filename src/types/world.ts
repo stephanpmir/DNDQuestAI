@@ -23,6 +23,8 @@ export interface RollResult {
   modifier: number;
   total: number;
   success: boolean;
+  /** Why this check is happening — shown to the player */
+  reason?: string;
 }
 
 export interface NPC {
@@ -89,6 +91,11 @@ export interface EngineOutcome {
     type: "blessing" | "punishment" | "temptation";
     description: string;
     rollModifier: number;
+  };
+  /** Travel encounter triggered during journey to a destination */
+  travelEncounter?: {
+    type: "combat" | "social" | "environmental" | "discovery";
+    description: string;
   };
 }
 
