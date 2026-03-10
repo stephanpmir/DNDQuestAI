@@ -130,26 +130,6 @@ function computeAC(cls: CharacterClass, dexScore: number, conScore: number, wisS
   return baseAC + shieldBonus;
 }
 
-/** Calculate starting AC based on class armor (used at creation) */
-function computeStartingAC(cls: CharacterClass, dexScore: number, conScore: number = 10): number {
-  const dexMod = computeModifier(dexScore);
-  const conMod = computeModifier(conScore);
-  switch (cls) {
-    case "Barbarian": return 10 + dexMod + conMod; // Unarmored defense
-    case "Monk": return 10 + dexMod; // Unarmored defense (+ WIS later)
-    case "Sorcerer":
-    case "Wizard": return 10 + dexMod;
-    case "Bard":
-    case "Ranger":
-    case "Rogue":
-    case "Warlock": return 11 + dexMod; // Leather
-    case "Druid": return 11 + dexMod; // Leather (druids won't wear metal)
-    case "Cleric": return 14 + Math.min(dexMod, 2); // Scale mail
-    case "Fighter":
-    case "Paladin": return 16; // Chain mail
-    default: return 10 + dexMod;
-  }
-}
 
 function computeStartingHp(cls: CharacterClass, conScore: number): number {
   const base = HIT_DICE[cls] ?? 8;
@@ -261,9 +241,10 @@ export const useCharacterStore = create<CharacterStore>()(
           }
 
           const hp = computeStartingHp(c.class, abilityScores.constitution);
-          const ac = computeStartingAC(c.class, abilityScores.dexterity, abilityScores.constitution);
           const inventory = getStartingEquipment(c.class);
           const equipped = getDefaultEquipped(inventory);
+          // Use full computeAC with equipped items so shield bonus is included
+          const ac = computeAC(c.class, abilityScores.dexterity, abilityScores.constitution, abilityScores.wisdom, equipped, c.fightingStyle);
           const identifiedItems = inventory.filter((item) => {
             const info = getItemInfo(item);
             return info?.isMagical;

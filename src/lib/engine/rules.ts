@@ -32,6 +32,7 @@ type ActionType =
   | "breath_weapon"
   | "rage"
   | "bardic_inspiration"
+  | "channel_divinity"
   | "identify_item"
   | "self_harm"
   | "death_save"
@@ -43,6 +44,7 @@ const ACTION_PATTERNS: [RegExp, ActionType][] = [
   [/\b(breath weapon|breathe fire|breathe ice|breathe lightning|breathe acid|breathe poison|use breath|dragon breath)\b/i, "breath_weapon"],
   [/\b(rage|enter rage|go into rage|activate rage|start raging)\b/i, "rage"],
   [/\b(bardic inspiration|inspire|play an inspiring|sing an inspiring|encourage with music)\b/i, "bardic_inspiration"],
+  [/\b(channel divinity|turn undead|preserve life|destroy undead|radiance of the dawn)\b/i, "channel_divinity"],
   [/\b(identify|appraise|examine closely|inspect item|study item)\b/i, "identify_item"],
   [/\b(attack|strike|hit|fight|slash|stab|shoot|swing)\b/i, "attack"],
   [/\b(cast|spell|magic|fireball|heal|cure)\b/i, "cast_spell"],
@@ -1017,6 +1019,52 @@ export function resolveAction(
         reason: `Bardic Inspiration — a d${inspireDie} of musical encouragement`,
       };
       outcome.xpGained = skillCheckXpReward(character.level);
+      break;
+    }
+
+    case "channel_divinity": {
+      // Cleric class feature: Turn Undead or Preserve Life (Life Domain)
+      if (character.class !== "Cleric") {
+        outcome.actionDenied = {
+          reason: `Channel Divinity is a Cleric class feature. As a ${character.class}, you don't have this ability.`,
+          attempted: "use Channel Divinity",
+        };
+        break;
+      }
+      const lower = playerInput.toLowerCase();
+      if (/preserve life/i.test(lower)) {
+        // Life Domain: Preserve Life — heal up to 5 × Cleric level HP
+        const healPool = 5 * character.level;
+        const healed = Math.min(healPool, character.maxHp - character.hp);
+        outcome.hpChange = healed;
+        outcome.roll = {
+          type: "check",
+          ability: "wisdom",
+          rolled: healPool,
+          modifier: 0,
+          total: healPool,
+          dc: 0,
+          success: true,
+          reason: `Channel Divinity: Preserve Life — ${healPool} HP healing pool`,
+        };
+      } else {
+        // Turn Undead: WIS-based effect, deals radiant damage (simulated)
+        const prof = proficiencyBonus(character.level);
+        const wisMod = modifier(character.abilityScores.wisdom);
+        // Destroy Undead at level 5+ deals damage; Turn Undead forces undead to flee
+        const turnDice = character.level >= 17 ? 6 : character.level >= 11 ? 4 : character.level >= 5 ? 3 : 2;
+        const turnDmg = damageRoll(turnDice, 8, wisMod);
+        outcome.damageDealt = Math.max(1, turnDmg.total);
+        outcome.roll = {
+          type: "damage",
+          rolled: turnDmg.rolled,
+          modifier: wisMod,
+          total: turnDmg.total,
+          success: true,
+          reason: `Channel Divinity: Turn Undead — DC ${8 + prof + wisMod} WIS save or be turned`,
+        };
+      }
+      outcome.xpGained = combatXpReward(character.level);
       break;
     }
 
