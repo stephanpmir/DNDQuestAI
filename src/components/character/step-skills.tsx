@@ -1,6 +1,6 @@
 "use client";
 
-import type { CharacterClass } from "@/types/character";
+import type { CharacterClass, Race } from "@/types/character";
 import { CLASS_DATA, FIGHTING_STYLES } from "@/lib/classes";
 import {
   SKILL_DESCRIPTIONS,
@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 
 interface StepSkillsProps {
   characterClass: CharacterClass;
+  race: Race;
   selectedSkills: string[];
   selectedCantrips: string[];
   selectedSpells: string[];
@@ -33,8 +34,17 @@ interface StepSkillsProps {
   onBack: () => void;
 }
 
+/** All D&D 5e skills for Half-Elf Skill Versatility bonus choices */
+const ALL_SKILLS = [
+  "Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception",
+  "History", "Insight", "Intimidation", "Investigation", "Medicine",
+  "Nature", "Perception", "Performance", "Persuasion", "Religion",
+  "Sleight of Hand", "Stealth", "Survival",
+];
+
 export function StepSkills({
   characterClass,
+  race,
   selectedSkills,
   selectedCantrips,
   selectedSpells,
@@ -49,7 +59,15 @@ export function StepSkills({
   const classData = CLASS_DATA[characterClass];
   const fightingStyles = FIGHTING_STYLES[characterClass] ?? [];
 
-  const skillsValid = selectedSkills.length === classData.skillChoiceCount;
+  // Half-Elf Skill Versatility: +2 extra skill proficiencies from any skill
+  const halfElfBonus = race === "Half-Elf" ? 2 : 0;
+  const totalSkillChoices = classData.skillChoiceCount + halfElfBonus;
+  // Combine class skills + all skills for Half-Elf
+  const availableSkills = race === "Half-Elf"
+    ? [...new Set([...classData.skillChoices, ...ALL_SKILLS])]
+    : classData.skillChoices;
+
+  const skillsValid = selectedSkills.length === totalSkillChoices;
   const cantripsValid =
     classData.cantripsKnown === 0 ||
     selectedCantrips.length === classData.cantripsKnown;
@@ -71,20 +89,20 @@ export function StepSkills({
             <InfoTip text="Skills represent what your character is trained in. Being proficient in a skill means you add a bonus when attempting related actions." />
           </CardTitle>
           <CardDescription>
-            Choose {classData.skillChoiceCount} skills.
-            {selectedSkills.length < classData.skillChoiceCount && (
+            Choose {totalSkillChoices} skills.
+            {selectedSkills.length < totalSkillChoices && (
               <span className="text-amber-400 ml-1">
-                ({classData.skillChoiceCount - selectedSkills.length} remaining)
+                ({totalSkillChoices - selectedSkills.length} remaining)
               </span>
             )}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 gap-1.5">
-            {classData.skillChoices.map((skill) => {
+            {availableSkills.map((skill) => {
               const selected = selectedSkills.includes(skill);
               const disabled =
-                !selected && selectedSkills.length >= classData.skillChoiceCount;
+                !selected && selectedSkills.length >= totalSkillChoices;
               const desc = SKILL_DESCRIPTIONS[skill];
               return (
                 <button

@@ -34,15 +34,24 @@ export function modifier(score: number): number {
  * Perform an ability check: d20 + ability modifier + proficiency bonus vs DC
  * D&D 5e: Total = d20 + ability mod + proficiency (if proficient)
  * @param lucky - If true, reroll natural 1s (Halfling Lucky trait)
+ * @param advantage - If true, roll twice and take the higher result
  */
 export function abilityCheck(
   abilityScore: number,
   dc: number,
   ability: string,
   proficiencyBonus: number = 0,
-  lucky: boolean = false
+  lucky: boolean = false,
+  advantage: boolean = false
 ): RollResult {
-  const rolled = lucky ? d20Lucky() : d20();
+  let rolled: number;
+  if (advantage) {
+    const r1 = lucky ? d20Lucky() : d20();
+    const r2 = lucky ? d20Lucky() : d20();
+    rolled = Math.max(r1, r2);
+  } else {
+    rolled = lucky ? d20Lucky() : d20();
+  }
   const mod = modifier(abilityScore) + proficiencyBonus;
   const total = rolled + mod;
   return {
@@ -56,15 +65,26 @@ export function abilityCheck(
   };
 }
 
-/** Perform a saving throw: d20 + modifier vs DC */
+/** Perform a saving throw: d20 + modifier vs DC
+ * @param lucky - If true, reroll natural 1s (Halfling Lucky trait)
+ * @param advantage - If true, roll twice and take the higher result
+ */
 export function savingThrow(
   abilityScore: number,
   dc: number,
   ability: string,
   proficiencyBonus: number = 0,
-  lucky: boolean = false
+  lucky: boolean = false,
+  advantage: boolean = false
 ): RollResult {
-  const rolled = lucky ? d20Lucky() : d20();
+  let rolled: number;
+  if (advantage) {
+    const r1 = lucky ? d20Lucky() : d20();
+    const r2 = lucky ? d20Lucky() : d20();
+    rolled = Math.max(r1, r2);
+  } else {
+    rolled = lucky ? d20Lucky() : d20();
+  }
   const mod = modifier(abilityScore) + proficiencyBonus;
   const total = rolled + mod;
   return {

@@ -70,7 +70,64 @@ function getStartingEquipment(cls: CharacterClass): string[] {
   return [...base, ...(classGear[cls] ?? [])];
 }
 
-/** Calculate starting AC based on class armor */
+/** Calculate AC based on equipped armor and class features */
+function computeAC(cls: CharacterClass, dexScore: number, conScore: number, wisScore: number, equipped: string[]): number {
+  const dexMod = computeModifier(dexScore);
+  const conMod = computeModifier(conScore);
+  const wisMod = computeModifier(wisScore);
+
+  // Check what armor is equipped
+  const equippedLower = equipped.map(i => i.toLowerCase());
+  const hasShield = equippedLower.some(i => i.includes("shield"));
+  const shieldBonus = hasShield ? 2 : 0;
+
+  // Find equipped armor
+  const armorNames: Record<string, { base: number; type: "light" | "medium" | "heavy" }> = {
+    "padded armor": { base: 11, type: "light" },
+    "leather armor": { base: 11, type: "light" },
+    "+1 leather armor": { base: 12, type: "light" },
+    "studded leather": { base: 12, type: "light" },
+    "hide armor": { base: 12, type: "medium" },
+    "chain shirt": { base: 13, type: "medium" },
+    "scale mail": { base: 14, type: "medium" },
+    "breastplate": { base: 14, type: "medium" },
+    "half plate": { base: 15, type: "medium" },
+    "ring mail": { base: 14, type: "heavy" },
+    "chain mail": { base: 16, type: "heavy" },
+    "splint armor": { base: 17, type: "heavy" },
+    "plate armor": { base: 18, type: "heavy" },
+  };
+
+  let armorAC: number | null = null;
+  for (const item of equippedLower) {
+    for (const [name, data] of Object.entries(armorNames)) {
+      if (item.includes(name)) {
+        if (data.type === "light") {
+          armorAC = data.base + dexMod;
+        } else if (data.type === "medium") {
+          armorAC = data.base + Math.min(dexMod, 2);
+        } else {
+          armorAC = data.base;
+        }
+        break;
+      }
+    }
+    if (armorAC !== null) break;
+  }
+
+  if (armorAC !== null) {
+    return armorAC + shieldBonus;
+  }
+
+  // No armor — use unarmored defense
+  let baseAC = 10 + dexMod;
+  if (cls === "Barbarian") baseAC = 10 + dexMod + conMod;
+  if (cls === "Monk") baseAC = 10 + dexMod + wisMod;
+
+  return baseAC + shieldBonus;
+}
+
+/** Calculate starting AC based on class armor (used at creation) */
 function computeStartingAC(cls: CharacterClass, dexScore: number, conScore: number = 10): number {
   const dexMod = computeModifier(dexScore);
   const conMod = computeModifier(conScore);
@@ -226,22 +283,28 @@ export const useCharacterStore = create<CharacterStore>()(
         }),
 
       equipItem: (item) =>
-        set((s) => ({
-          character: {
-            ...s.character,
-            equipped: s.character.equipped.includes(item)
-              ? s.character.equipped
-              : [...s.character.equipped, item],
-          },
-        })),
+        set((s) => {
+          const newEquipped = s.character.equipped.includes(item)
+            ? s.character.equipped
+            : [...s.character.equipped, item];
+          const ac = computeAC(
+            s.character.class, s.character.abilityScores.dexterity,
+            s.character.abilityScores.constitution, s.character.abilityScores.wisdom,
+            newEquipped
+          );
+          return { character: { ...s.character, equipped: newEquipped, ac } };
+        }),
 
       unequipItem: (item) =>
-        set((s) => ({
-          character: {
-            ...s.character,
-            equipped: s.character.equipped.filter((i) => i !== item),
-          },
-        })),
+        set((s) => {
+          const newEquipped = s.character.equipped.filter((i) => i !== item);
+          const ac = computeAC(
+            s.character.class, s.character.abilityScores.dexterity,
+            s.character.abilityScores.constitution, s.character.abilityScores.wisdom,
+            newEquipped
+          );
+          return { character: { ...s.character, equipped: newEquipped, ac } };
+        }),
 
       identifyItem: (item) =>
         set((s) => ({
@@ -288,10 +351,14 @@ export const useCharacterStore = create<CharacterStore>()(
             c.inventory = c.inventory.filter(
               (item) => !updates.removeItems!.includes(item)
             );
-            // Also remove from equipped
+            // Also remove from equipped and recalculate AC
+            const oldEquipped = c.equipped;
             c.equipped = c.equipped.filter(
               (item) => !updates.removeItems!.includes(item)
             );
+            if (c.equipped.length !== oldEquipped.length) {
+              c.ac = computeAC(c.class, c.abilityScores.dexterity, c.abilityScores.constitution, c.abilityScores.wisdom, c.equipped);
+            }
           }
 
           // Gold

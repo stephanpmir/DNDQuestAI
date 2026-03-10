@@ -62,6 +62,8 @@ export function CharacterForm() {
   const raceData = RACIAL_DATA[character.race as Race];
   const classData = CLASS_DATA[character.class as CharacterClass];
   const fightingStyles = FIGHTING_STYLES[character.class] ?? [];
+  const halfElfSkillBonus = character.race === "Half-Elf" ? 2 : 0;
+  const totalSkillSlots = classData.skillChoiceCount + halfElfSkillBonus;
 
   // Reset selections when class/race changes
   const handleClassChange = (cls: string | null) => {
@@ -84,7 +86,7 @@ export function CharacterForm() {
   const toggleSkill = (skill: string) => {
     setSelectedSkills((prev) => {
       if (prev.includes(skill)) return prev.filter((s) => s !== skill);
-      if (prev.length >= classData.skillChoiceCount) return prev;
+      if (prev.length >= totalSkillSlots) return prev;
       return [...prev, skill];
     });
   };
@@ -107,7 +109,7 @@ export function CharacterForm() {
 
   // Validation
   const nameValid = character.name.trim().length >= 2;
-  const skillsValid = selectedSkills.length === classData.skillChoiceCount;
+  const skillsValid = selectedSkills.length === totalSkillSlots;
   const cantripsValid = classData.cantripsKnown === 0 || selectedCantrips.length === classData.cantripsKnown;
   const spellsValid = classData.spellsKnown === 0 || selectedSpells.length === classData.spellsKnown;
   const fightingStyleValid = fightingStyles.length === 0 || selectedFightingStyle !== "";
@@ -313,10 +315,10 @@ export function CharacterForm() {
         <CardHeader>
           <CardTitle className="text-base">Skill Proficiencies</CardTitle>
           <CardDescription>
-            Choose {classData.skillChoiceCount} skills from your class list.
-            {selectedSkills.length < classData.skillChoiceCount && (
+            Choose {totalSkillSlots} skills from your class list.
+            {selectedSkills.length < totalSkillSlots && (
               <span className="text-amber-400 ml-1">
-                ({classData.skillChoiceCount - selectedSkills.length} remaining)
+                ({totalSkillSlots - selectedSkills.length} remaining)
               </span>
             )}
           </CardDescription>
@@ -325,7 +327,7 @@ export function CharacterForm() {
           <div className="grid grid-cols-2 gap-1.5">
             {classData.skillChoices.map((skill) => {
               const selected = selectedSkills.includes(skill);
-              const disabled = !selected && selectedSkills.length >= classData.skillChoiceCount;
+              const disabled = !selected && selectedSkills.length >= totalSkillSlots;
               return (
                 <button
                   key={skill}

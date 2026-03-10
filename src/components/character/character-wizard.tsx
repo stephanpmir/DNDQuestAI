@@ -100,7 +100,8 @@ export function CharacterWizard() {
 
     // Auto-pick skills, cantrips, spells, fighting style for the class
     const cData = CLASS_DATA[profile.class];
-    const skills = pickRandomN(cData.skillChoices, cData.skillChoiceCount);
+    const heBonus = profile.race === "Half-Elf" ? 2 : 0;
+    const skills = pickRandomN(cData.skillChoices, cData.skillChoiceCount + heBonus);
     setSkillProficiencies(skills);
 
     if (cData.cantripsKnown > 0) {
@@ -173,15 +174,18 @@ export function CharacterWizard() {
     [setRace]
   );
 
+  const halfElfSkillBonus = character.race === "Half-Elf" ? 2 : 0;
+  const totalSkillSlots = classData.skillChoiceCount + halfElfSkillBonus;
+
   const toggleSkill = useCallback(
     (skill: string) => {
       setSelectedSkills((prev) => {
         if (prev.includes(skill)) return prev.filter((s) => s !== skill);
-        if (prev.length >= classData.skillChoiceCount) return prev;
+        if (prev.length >= totalSkillSlots) return prev;
         return [...prev, skill];
       });
     },
-    [classData.skillChoiceCount]
+    [totalSkillSlots]
   );
 
   const toggleCantrip = useCallback(
@@ -264,7 +268,8 @@ export function CharacterWizard() {
 
     // Random skills
     const cData = CLASS_DATA[cls];
-    const skills = pickRandomN(cData.skillChoices, cData.skillChoiceCount);
+    const heBonus2 = race === "Half-Elf" ? 2 : 0;
+    const skills = pickRandomN(cData.skillChoices, cData.skillChoiceCount + heBonus2);
     setSkillProficiencies(skills);
 
     // Random cantrips/spells
@@ -426,6 +431,7 @@ export function CharacterWizard() {
         {step === 5 && (
           <StepSkills
             characterClass={character.class}
+            race={character.race}
             selectedSkills={selectedSkills}
             selectedCantrips={selectedCantrips}
             selectedSpells={selectedSpells}

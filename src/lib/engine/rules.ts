@@ -13,7 +13,7 @@ import {
   shopPriceModifier,
 } from "@/lib/karma";
 import { detectCrime } from "@/lib/crimes";
-import { getItemInfo, getBuyPrice, getSellPrice, isEquippable, getEquipSlot } from "@/lib/items";
+import { getItemInfo, getBuyPrice, getSellPrice, isEquippable, getEquipSlot, getWeaponDamage } from "@/lib/items";
 
 /** Action categories the engine can detect from player input. */
 type ActionType =
@@ -30,6 +30,7 @@ type ActionType =
   | "drop_item"
   | "second_wind"
   | "breath_weapon"
+  | "rage"
   | "identify_item"
   | "self_harm"
   | "death_save"
@@ -39,6 +40,7 @@ type ActionType =
 const ACTION_PATTERNS: [RegExp, ActionType][] = [
   [/\b(second wind)\b/i, "second_wind"],
   [/\b(breath weapon|breathe fire|breathe ice|breathe lightning|breathe acid|breathe poison|use breath|dragon breath)\b/i, "breath_weapon"],
+  [/\b(rage|enter rage|go into rage|activate rage|start raging)\b/i, "rage"],
   [/\b(identify|appraise|examine closely|inspect item|study item)\b/i, "identify_item"],
   [/\b(attack|strike|hit|fight|slash|stab|shoot|swing)\b/i, "attack"],
   [/\b(cast|spell|magic|fireball|heal|cure)\b/i, "cast_spell"],
@@ -539,10 +541,31 @@ export function resolveAction(
       if (hit.success) {
         // Roll damage — critical hit on natural 20 doubles dice
         const isCrit = hit.rolled === 20;
-        const baseDiceCount = isSpell ? 2 : 1;
-        const diceSides = isSpell ? 6 : 8;
-        const diceCount = isCrit ? baseDiceCount * 2 : baseDiceCount;
+        let baseDiceCount: number;
+        let diceSides: number;
+        if (isSpell) {
+          baseDiceCount = 2;
+          diceSides = 6;
+        } else {
+          // Use actual weapon damage dice from equipped weapon
+          const weaponDmg = getWeaponDamage(character.equipped ?? []);
+          baseDiceCount = weaponDmg.dice;
+          diceSides = weaponDmg.sides;
+        }
+        let diceCount = isCrit ? baseDiceCount * 2 : baseDiceCount;
+
+        // Half-Orc Savage Attacks: extra damage die on critical hit
+        if (isCrit && character.race === "Half-Orc" && !isSpell) {
+          diceCount += 1;
+        }
+
         let dmgBonus = atkMod;
+
+        // Barbarian Rage bonus: +2 damage on STR-based melee attacks (scales at higher levels)
+        if (!isSpell && !isRanged && character.class === "Barbarian" && atkAbility === "strength") {
+          const rageBonus = character.level >= 16 ? 4 : character.level >= 9 ? 3 : 2;
+          dmgBonus += rageBonus;
+        }
 
         // Apply Fighting Style: Dueling (+2 dmg one-handed melee with no offhand weapon)
         if (!isSpell && !isRanged && character.fightingStyle?.includes("Dueling")) {
@@ -583,8 +606,18 @@ export function resolveAction(
         const enemyTotal = enemyRoll + enemy.attackBonus;
         if (enemyTotal >= character.ac) {
           const enemyDmg = damageRoll(enemy.damageDice.count, enemy.damageDice.sides, enemy.damageBonus);
-          outcome.hpChange = -Math.max(1, enemyDmg.total);
-          outcome.damageTaken = Math.max(1, enemyDmg.total);
+          let dmgTaken = Math.max(1, enemyDmg.total);
+          // Barbarian Rage: resistance to bludgeoning, piercing, slashing (halve physical damage)
+          if (character.class === "Barbarian") {
+            dmgTaken = Math.max(1, Math.floor(dmgTaken / 2));
+          }
+          // Tiefling fire resistance & Dragonborn damage resistance (general elemental resistance)
+          // Applied as a small reduction since we don't track damage types
+          if ((character.race === "Tiefling" || character.race === "Dragonborn") && dmgTaken > 2) {
+            dmgTaken = Math.max(1, dmgTaken - 1);
+          }
+          outcome.hpChange = -dmgTaken;
+          outcome.damageTaken = dmgTaken;
         }
       }
       break;
@@ -594,7 +627,9 @@ export function resolveAction(
       const ability = getSkillAbility(playerInput);
       const dc = levelScaledDC(12, character.level);
       const prof = proficiencyBonus(character.level);
-      const result = abilityCheck(character.abilityScores[ability], dc, ability, prof, lucky);
+      // Gnome Cunning: advantage on INT, WIS, CHA saves/checks against magic
+      const gnomeCunning = character.race === "Gnome" && ["intelligence", "wisdom", "charisma"].includes(ability);
+      const result = abilityCheck(character.abilityScores[ability], dc, ability, prof, lucky, gnomeCunning);
       const skillName = ability.charAt(0).toUpperCase() + ability.slice(1);
       outcome.roll = { ...result, reason: `${skillName} check — testing your skill` };
       if (result.success) {
@@ -625,7 +660,8 @@ export function resolveAction(
             const hit = attackRoll(atkScore, enemy.ac, prof, lucky);
             // Don't set outcome.roll — travel encounters are narration-only
             if (hit.success) {
-              const dmg = damageRoll(1, 8, modifier(atkScore));
+              const weaponDmg = getWeaponDamage(character.equipped ?? []);
+              const dmg = damageRoll(weaponDmg.dice, weaponDmg.sides, modifier(atkScore));
               outcome.damageDealt = Math.max(1, dmg.total);
               outcome.xpGained = combatXpReward(character.level);
             } else {
@@ -879,6 +915,31 @@ export function resolveAction(
         reason: `Breath Weapon — ${breathDice}d6 elemental damage`,
       };
       outcome.xpGained = combatXpReward(character.level);
+      break;
+    }
+
+    case "rage": {
+      // Barbarian class feature: enter a rage for bonus damage and damage resistance
+      if (character.class !== "Barbarian") {
+        outcome.actionDenied = {
+          reason: `Rage is a Barbarian class feature. As a ${character.class}, you don't have this ability.`,
+          attempted: "enter a Rage",
+        };
+        break;
+      }
+      // Rage doesn't have a roll — it's a bonus action activation
+      // The damage bonus is applied automatically in the attack handler above
+      // Signal that rage was activated (purely narrative — bonus is always applied for Barbarians)
+      outcome.roll = {
+        type: "check",
+        ability: "strength",
+        rolled: 0,
+        modifier: 0,
+        total: 0,
+        dc: 0,
+        success: true,
+        reason: "Rage activated — primal fury surges through your veins",
+      };
       break;
     }
 
