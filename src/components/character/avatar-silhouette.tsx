@@ -316,7 +316,20 @@ function HairLayer({
   }
 }
 
-function RacialFeatures({ race, headY, headR, skinTone }: { race: Race; headY: number; headR: number; skinTone: string }) {
+/** Darken a hex color by a factor (0–1, where 0 = black) */
+function darkenHex(hex: string, factor: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const f = Math.max(0, Math.min(1, factor));
+  return `#${Math.round(r * f).toString(16).padStart(2, "0")}${Math.round(g * f).toString(16).padStart(2, "0")}${Math.round(b * f).toString(16).padStart(2, "0")}`;
+}
+
+function RacialFeatures({
+  race, headY, headR, skinTone, hairColor, hipY,
+}: {
+  race: Race; headY: number; headR: number; skinTone: string; hairColor: string; hipY: number;
+}) {
   const cx = 100;
 
   switch (race) {
@@ -330,8 +343,9 @@ function RacialFeatures({ race, headY, headR, skinTone }: { race: Race; headY: n
       );
 
     case "Dwarf":
+      // Beard uses hair color so it's visible against skin
       return (
-        <g fill={skinTone} opacity={0.7}>
+        <g fill={hairColor} opacity={0.85}>
           <path d={`M ${cx - 16} ${headY + 10} Q ${cx - 20} ${headY + 40}, ${cx} ${headY + 48} Q ${cx + 20} ${headY + 40}, ${cx + 16} ${headY + 10}`} />
         </g>
       );
@@ -344,40 +358,55 @@ function RacialFeatures({ race, headY, headR, skinTone }: { race: Race; headY: n
         </g>
       );
 
-    case "Tiefling":
+    case "Tiefling": {
+      // Tail positioned relative to hip, not hardcoded
+      const tailStartY = hipY - 10;
       return (
         <g>
           <path d={`M ${cx - 14} ${headY - headR + 4} Q ${cx - 26} ${headY - headR - 20}, ${cx - 30} ${headY - headR - 30}`}
             fill="none" stroke="#5c1a1a" strokeWidth={4} strokeLinecap="round" />
           <path d={`M ${cx + 14} ${headY - headR + 4} Q ${cx + 26} ${headY - headR - 20}, ${cx + 30} ${headY - headR - 30}`}
             fill="none" stroke="#5c1a1a" strokeWidth={4} strokeLinecap="round" />
-          <path d={`M ${cx + 30} 230 Q ${cx + 55} 260, ${cx + 50} 290 Q ${cx + 45} 310, ${cx + 60} 300`}
+          <path d={`M ${cx + 30} ${tailStartY} Q ${cx + 55} ${tailStartY + 30}, ${cx + 50} ${tailStartY + 60} Q ${cx + 45} ${tailStartY + 80}, ${cx + 60} ${tailStartY + 70}`}
             fill="none" stroke={skinTone} strokeWidth={3} strokeLinecap="round" />
         </g>
       );
+    }
 
-    case "Dragonborn":
+    case "Dragonborn": {
+      // Ridges use a darkened skin tone so they're visible on the head
+      const ridgeColor = darkenHex(skinTone, 0.6);
       return (
-        <g fill={skinTone}>
-          <path d={`M ${cx - 10} ${headY + 4} L ${cx} ${headY + 18} L ${cx + 10} ${headY + 4}`} opacity={0.7} />
+        <g>
+          {/* Snout */}
+          <path d={`M ${cx - 10} ${headY + 4} L ${cx} ${headY + 18} L ${cx + 10} ${headY + 4}`} fill={ridgeColor} opacity={0.8} />
+          {/* Head ridges */}
           <path d={`M ${cx - 8} ${headY - headR} L ${cx - 4} ${headY - headR - 14}`}
-            fill="none" stroke={skinTone} strokeWidth={3} strokeLinecap="round" />
+            fill="none" stroke={ridgeColor} strokeWidth={3} strokeLinecap="round" />
           <path d={`M ${cx} ${headY - headR} L ${cx} ${headY - headR - 16}`}
-            fill="none" stroke={skinTone} strokeWidth={3} strokeLinecap="round" />
+            fill="none" stroke={ridgeColor} strokeWidth={3} strokeLinecap="round" />
           <path d={`M ${cx + 8} ${headY - headR} L ${cx + 4} ${headY - headR - 14}`}
-            fill="none" stroke={skinTone} strokeWidth={3} strokeLinecap="round" />
+            fill="none" stroke={ridgeColor} strokeWidth={3} strokeLinecap="round" />
         </g>
       );
+    }
 
     case "Gnome":
+      // Hat uses a distinct muted color, not skin tone
       return (
-        <g fill={skinTone} opacity={0.6}>
+        <g fill="#6b5b4f" opacity={0.7}>
           <polygon points={`${cx - headR + 2},${headY - headR + 4} ${cx},${headY - headR - 28} ${cx + headR - 2},${headY - headR + 4}`} />
         </g>
       );
 
     case "Halfling":
-      return null; // Hair handles the curls
+      // Curly sideburn puffs in hair color (always shown, independent of HairLayer)
+      return (
+        <g fill={hairColor} opacity={0.7}>
+          <circle cx={cx - headR + 2} cy={headY + 4} r={7} />
+          <circle cx={cx + headR - 2} cy={headY + 4} r={7} />
+        </g>
+      );
 
     default:
       return null;
@@ -535,7 +564,14 @@ export function AvatarSilhouette({ race, characterClass, gender, avatar }: Props
       <BaseTorso cfg={cfg} gender={gender} skinTone={a.skinTone} buildArmW={buildArmW} />
 
       {/* Racial features */}
-      <RacialFeatures race={race} headY={cfg.headY} headR={cfg.headR} skinTone={a.skinTone} />
+      <RacialFeatures
+        race={race}
+        headY={cfg.headY}
+        headR={cfg.headR}
+        skinTone={a.skinTone}
+        hairColor={a.hairColor}
+        hipY={cfg.headY + cfg.headR + 4 + 8 + cfg.torsoH}
+      />
 
       {/* Hair */}
       <HairLayer
