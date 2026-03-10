@@ -31,11 +31,18 @@ export interface DMResponsePayload {
     newQuest?: string;
     completeQuest?: string;
     xpGained?: number;
+    lastRestTurn?: number;
   };
   /** Engine outcome details */
   engineOutcome?: {
     roll?: RollResult;
     escalationHint?: boolean;
+    restDenied?: boolean;
+    deathSaveResult?: "nat20" | "nat1" | "success" | "failure";
+    damageDealt?: number;
+    isCriticalHit?: boolean;
+    damageTaken?: number;
+    itemNotFound?: boolean;
   };
   /** Fact ledger updates */
   factUpdates?: {

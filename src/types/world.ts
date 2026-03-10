@@ -67,6 +67,20 @@ export interface EngineOutcome {
   escalationHint?: string;
   /** Any new NPCs to register */
   newNpcs: string[];
+  /** Rest was denied due to abuse prevention */
+  restDenied?: boolean;
+  /** Track the turn of last rest */
+  lastRestTurn?: number;
+  /** Death save result for unconscious characters */
+  deathSaveResult?: "nat20" | "nat1" | "success" | "failure";
+  /** Damage dealt by player attack */
+  damageDealt?: number;
+  /** Was it a critical hit? */
+  isCriticalHit?: boolean;
+  /** Damage taken from enemy counterattack */
+  damageTaken?: number;
+  /** Player tried to use an item they don't have */
+  itemNotFound?: boolean;
 }
 
 /** What the LLM receives to narrate — it does NOT decide outcomes. */

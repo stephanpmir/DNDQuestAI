@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
 import { useWorldStore } from "@/stores/world-store";
-import { RACES, CLASSES } from "@/types/character";
+import { GENDERS, RACES, CLASSES } from "@/types/character";
 import { MAX_NAME_LENGTH } from "@/lib/constants";
 import { AbilityScorePicker } from "./ability-score-picker";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ export function CharacterForm() {
   const {
     character,
     setName,
+    setGender,
     setRace,
     setClass,
     setAbilityScores,
@@ -71,6 +72,26 @@ export function CharacterForm() {
               placeholder="Enter a name..."
               autoFocus
             />
+          </div>
+
+          {/* Gender */}
+          <div className="space-y-1">
+            <Label>Gender</Label>
+            <Select
+              value={character.gender}
+              onValueChange={(v) => setGender(v as typeof character.gender)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {GENDERS.map((g) => (
+                  <SelectItem key={g} value={g}>
+                    {g}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Race */}

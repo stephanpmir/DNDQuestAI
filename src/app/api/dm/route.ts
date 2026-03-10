@@ -19,6 +19,7 @@ function getClient(): OpenAI {
   return new OpenAI({
     baseURL: "https://api.cerebras.ai/v1",
     apiKey,
+    timeout: 30_000,
   });
 }
 
@@ -36,6 +37,65 @@ interface RequestBody {
 }
 
 const MAX_REGENERATION_ATTEMPTS = 1;
+const MAX_RETRY_ATTEMPTS = 4;
+const RETRY_BASE_DELAY_MS = 2000;
+
+/** Sleep for the given number of milliseconds */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Check if an error is a timeout/network error worth retrying */
+function isRetryableError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return (
+      msg.includes("timeout") ||
+      msg.includes("econnreset") ||
+      msg.includes("econnrefused") ||
+      msg.includes("socket hang up") ||
+      msg.includes("network") ||
+      msg.includes("fetch failed") ||
+      msg.includes("aborted") ||
+      msg.includes("503") ||
+      msg.includes("502") ||
+      msg.includes("429")
+    );
+  }
+  return false;
+}
+
+/** Make an LLM call with exponential backoff retry on timeout/network errors */
+async function callWithRetry(
+  client: OpenAI,
+  messages: OpenAI.ChatCompletionMessageParam[]
+): Promise<string> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+    try {
+      const response = await client.chat.completions.create({
+        model: "llama3.1-8b",
+        messages,
+        max_tokens: 1024,
+      });
+      return response.choices[0]?.message?.content ?? "";
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableError(error) || attempt >= MAX_RETRY_ATTEMPTS) {
+        throw error;
+      }
+      const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+      console.warn(
+        `[DM API] Retry ${attempt + 1}/${MAX_RETRY_ATTEMPTS} after ${delay}ms`,
+        error instanceof Error ? error.message : error
+      );
+      await sleep(delay);
+    }
+  }
+
+  throw lastError;
+}
 
 export async function POST(request: Request) {
   try {
@@ -89,13 +149,7 @@ export async function POST(request: Request) {
         { role: "user", content: message },
       ];
 
-      const response = await client.chat.completions.create({
-        model: "llama3.1-8b",
-        messages,
-        max_tokens: 1024,
-      });
-
-      const rawText = response.choices[0]?.message?.content ?? "";
+      const rawText = await callWithRetry(client, messages);
       const parsed = parseDMResponse(rawText);
       narrative = parsed.narrative;
 
@@ -132,10 +186,17 @@ export async function POST(request: Request) {
         newQuest: eo.newQuest,
         completeQuest: eo.completeQuest,
         xpGained: eo.xpGained || undefined,
+        lastRestTurn: eo.lastRestTurn,
       },
       engineOutcome: {
         roll: eo.roll,
         escalationHint: eo.escalationHint ? true : undefined,
+        restDenied: eo.restDenied || undefined,
+        deathSaveResult: eo.deathSaveResult,
+        damageDealt: eo.damageDealt,
+        isCriticalHit: eo.isCriticalHit,
+        damageTaken: eo.damageTaken,
+        itemNotFound: eo.itemNotFound,
       },
       // Fact ledger updates for the client
       factUpdates: {

@@ -9,7 +9,7 @@ import type { WorldEvent } from "@/types/world";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
 import { CharacterSidebar } from "./character-sidebar";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { DeathScreen } from "./death-screen";
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -47,15 +47,13 @@ export function GameView() {
     initializeAnchors,
   } = useWorldStore();
 
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const autoStartFired = useRef(false);
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages change or loading state changes
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isLoading]);
 
   const callDMApi = useCallback(
     async (message: string, showUserMessage: boolean) => {
@@ -107,6 +105,7 @@ export function GameView() {
             removeItems: u.removeItems,
             goldChange: u.goldChange,
             xpGained: u.xpGained,
+            lastRestTurn: u.lastRestTurn,
           });
           if (u.locationChange) {
             setLocation(u.locationChange);
@@ -114,6 +113,12 @@ export function GameView() {
           }
           if (u.newQuest) addQuest(u.newQuest);
           if (u.completeQuest) completeQuest(u.completeQuest);
+        }
+
+        // Handle death save tracking
+        const eo = data.engineOutcome;
+        if (eo?.deathSaveResult) {
+          updateFromGameState({ deathSaveResult: eo.deathSaveResult });
         }
 
         // Apply fact ledger updates
@@ -217,16 +222,22 @@ export function GameView() {
       setCampaignStarted(true);
       // Initialize character identity anchors in the fact ledger
       initializeAnchors(character.name, character.race, character.class);
+      const pronoun = character.gender === "Female" ? "female" : "male";
       callDMApi(
-        `I am ${character.name}, a ${character.race} ${character.class}. Begin my adventure! Set the scene and give me my first quest.`,
+        `I am ${character.name}, a ${pronoun} ${character.race} ${character.class}. Begin my adventure! Set the scene and give me my first quest.`,
         false
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignStarted, character.name]);
 
+  const isDead = character.isDead;
+
   return (
-    <div className="flex h-[calc(100vh-4rem)] gap-4 p-4">
+    <div className="flex h-[100dvh] gap-4 p-4 overflow-hidden">
+      {/* Death screen overlay */}
+      {isDead && <DeathScreen />}
+
       {/* Sidebar */}
       <aside className="hidden md:block w-72 shrink-0">
         <CharacterSidebar />
@@ -234,7 +245,7 @@ export function GameView() {
 
       {/* Chat area */}
       <div className="flex flex-col flex-1 min-w-0 min-h-0">
-        <ScrollArea className="flex-1 min-h-0 pr-4" ref={scrollRef}>
+        <div className="flex-1 min-h-0 overflow-y-auto pr-4">
           <div className="space-y-4 py-4">
             {messages.map((msg) => (
               <ChatMessage key={msg.id} message={msg} />
@@ -249,11 +260,12 @@ export function GameView() {
                 </div>
               </div>
             )}
+            <div ref={bottomRef} />
           </div>
-        </ScrollArea>
+        </div>
 
         <div className="pt-3 border-t">
-          <ChatInput onSend={sendToDM} disabled={isLoading} />
+          <ChatInput onSend={sendToDM} disabled={isLoading || isDead} />
         </div>
       </div>
     </div>

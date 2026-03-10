@@ -14,6 +14,7 @@ export function buildSystemPrompt(
 
 ## Player Character
 - Name: ${character.name}
+- Gender: ${character.gender}
 - Race: ${character.race}
 - Class: ${character.class}
 - Level: ${character.level}
@@ -36,19 +37,20 @@ export function buildSystemPrompt(
 5. NEVER contradict the "Permanent Facts" section. These are absolute truth.
 6. Reference established NPCs by name when they're present.
 7. Be vivid and engaging. Describe scenes, NPCs, and combat with flair.
-8. Present 2-3 meaningful choices to the player at the end of each response.
+8. Do NOT list suggested actions, options, or choices. Do NOT write "You could...", "What do you do?", numbered lists of actions, or any form of menu. Let the player decide freely. The ONLY exception is if the Engine Outcome contains a "MANDATORY ESCALATION" section — then and only then, weave the hint naturally into the narrative.
 9. Keep responses under 250 words.
 10. Write ONLY narrative prose. No code, no JSON keys, no markdown formatting like ** or __ in the narrative text itself. Pure storytelling.
+11. Do NOT begin your narrative with a state summary, recap, or preamble. Jump straight into the scene. Never start with "As a level X...", "Currently at...", "With your HP at...", or any mechanical state description. Start with what is HAPPENING in the story.
+12. On the very first turn, introduce a clear quest or objective for the player within the opening narration — a mission, a mystery, a call to action.
 
 ## Response Format
-Respond with valid JSON containing ONLY these fields:
+Respond with valid JSON containing ONLY this field:
 \`\`\`json
 {
-  "narrative": "Your story text here — pure prose, no markdown, no code, no mechanical statements...",
-  "suggestedActions": ["action 1", "action 2", "action 3"]
+  "narrative": "Your story text here — pure prose, no markdown, no code, no mechanical statements, no action lists..."
 }
 \`\`\`
-Always include "narrative". Do NOT include gameStateUpdate or any mechanical fields — the engine handles that. The narrative must read like a novel, not a game log.`;
+Always include "narrative". Do NOT include gameStateUpdate, suggestedActions, or any other fields — the engine handles everything. The narrative must read like a novel, not a game log.`;
 }
 
 /**
@@ -104,6 +106,28 @@ export function buildEngineContextMessage(
   }
   if (o.completeQuest) {
     outcomeParts.push(`Quest Completed: ${o.completeQuest}`);
+  }
+
+  if (o.restDenied) {
+    outcomeParts.push("REST DENIED: The character is not tired enough to rest. Narrate that they tried to rest but feel too alert or haven't been active enough.");
+  }
+  if (o.deathSaveResult) {
+    const dsLabels: Record<string, string> = {
+      nat20: "NATURAL 20 — The character miraculously regains consciousness with 1 HP!",
+      nat1: "NATURAL 1 — Two death save failures! The character teeters closer to death.",
+      success: "Death save SUCCESS — The character clings to life.",
+      failure: "Death save FAILURE — The character slips closer to death.",
+    };
+    outcomeParts.push(`Death Save: ${dsLabels[o.deathSaveResult]}`);
+  }
+  if (o.damageDealt) {
+    outcomeParts.push(`Damage Dealt: ${o.damageDealt}${o.isCriticalHit ? " (CRITICAL HIT!)" : ""}`);
+  }
+  if (o.damageTaken) {
+    outcomeParts.push(`Damage Taken: ${o.damageTaken} from enemy counterattack`);
+  }
+  if (o.itemNotFound) {
+    outcomeParts.push("ITEM NOT FOUND: The player tried to use an item they don't have. Narrate that they reach for it but can't find it.");
   }
 
   if (outcomeParts.length > 0) {

@@ -120,6 +120,20 @@ function cleanNarrative(text: string): string {
   // Remove trailing commas left from stripped content
   cleaned = cleaned.replace(/,\s*$/gm, "");
 
+  // Remove suggested actions lists that leaked through
+  // e.g. "1. Attack the goblin\n2. Sneak past\n3. Negotiate"
+  cleaned = cleaned.replace(/\n\s*(?:\d+\.\s+(?:You could|Attack|Sneak|Talk|Rest|Explore|Search|Go|Move|Try|Use|Cast|Check)[^\n]{5,}\n?){2,}/gi, "");
+  // e.g. "- Attack the goblin\n- Sneak past\n- Negotiate"
+  cleaned = cleaned.replace(/\n\s*(?:[-*]\s+(?:You could|Attack|Sneak|Talk|Rest|Explore|Search|Go|Move|Try|Use|Cast|Check)[^\n]{5,}\n?){2,}/gi, "");
+  // "What do you do?" / "You could..." trailing prompts
+  cleaned = cleaned.replace(/\n\s*(?:What (?:do you|will you|would you)[^?]*\??)\s*$/i, "");
+  cleaned = cleaned.replace(/\n\s*(?:You (?:could|can|might|may):?)\s*$/i, "");
+
+  // Remove state preamble at the start (e.g. "As a level 5 Fighter with 30 HP...")
+  cleaned = cleaned.replace(/^(?:As (?:a|an) (?:level \d+|Lv\.? ?\d+)[\s\S]{0,100}?(?:\.\s))/i, "");
+  cleaned = cleaned.replace(/^(?:Currently (?:at|in|with)[\s\S]{0,80}?(?:\.\s))/i, "");
+  cleaned = cleaned.replace(/^(?:With (?:your|an?) (?:HP|health|hit points)[\s\S]{0,80}?(?:\.\s))/i, "");
+
   // Collapse multiple blank lines into one
   cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
 

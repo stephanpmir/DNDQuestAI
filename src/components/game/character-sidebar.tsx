@@ -3,6 +3,53 @@
 import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
+
+/** Weapon keywords */
+const WEAPON_KEYWORDS = [
+  "sword", "axe", "mace", "dagger", "bow", "staff", "wand", "spear",
+  "crossbow", "hammer", "flail", "halberd", "rapier", "scimitar",
+  "longsword", "shortsword", "greataxe", "greatsword", "battleaxe",
+  "trident", "lance", "whip", "quarterstaff", "longbow", "shortbow",
+  "handaxe", "javelin", "maul", "morningstar", "pike", "sickle",
+  "war pick", "glaive",
+];
+
+/** Armor/shield keywords */
+const ARMOR_KEYWORDS = [
+  "armor", "shield", "helm", "helmet", "boots", "gauntlets", "bracers",
+  "greaves", "chainmail", "chain mail", "plate", "leather armor",
+  "scale mail", "breastplate", "half plate", "splint", "studded",
+  "wooden shield",
+];
+
+/** Worn accessory keywords */
+const ACCESSORY_KEYWORDS = [
+  "cloak", "ring", "amulet", "robe", "circlet", "belt", "gloves",
+  "holy symbol", "arcane focus", "druidic focus", "spellbook",
+  "lute", "thieves' tools",
+];
+
+type ItemCategory = "weapon" | "armor" | "accessory" | "backpack";
+
+function categorizeItem(item: string): ItemCategory {
+  const lower = item.toLowerCase();
+  if (WEAPON_KEYWORDS.some((kw) => lower.includes(kw))) return "weapon";
+  if (ARMOR_KEYWORDS.some((kw) => lower.includes(kw))) return "armor";
+  if (ACCESSORY_KEYWORDS.some((kw) => lower.includes(kw))) return "accessory";
+  return "backpack";
+}
+
+function isEquipped(item: string): boolean {
+  return categorizeItem(item) !== "backpack";
+}
+
+const CATEGORY_ICONS: Record<ItemCategory, string> = {
+  weapon: "\u2694",   // crossed swords
+  armor: "\uD83D\uDEE1",    // shield
+  accessory: "\u2728", // sparkles
+  backpack: "\u25AA",  // small square
+};
 
 export function CharacterSidebar() {
   const { character } = useCharacterStore();
@@ -12,45 +59,87 @@ export function CharacterSidebar() {
     ? Math.round((character.hp / character.maxHp) * 100)
     : 100;
 
+  const xpPercent = character.xpToNextLevel === Infinity
+    ? 100
+    : character.xpToNextLevel > 0
+      ? Math.round((character.xp / character.xpToNextLevel) * 100)
+      : 0;
+
   const mod = (score: number) => {
     const m = Math.floor((score - 10) / 2);
     return m >= 0 ? `+${m}` : `${m}`;
   };
 
+  const equipped = character.inventory.filter(isEquipped);
+  const backpack = character.inventory.filter((item) => !isEquipped(item));
+
+  const hpColor = hpPercent > 60 ? "bg-red-500" : hpPercent > 25 ? "bg-orange-500" : "bg-red-700";
+
   return (
-    <div className="h-full flex flex-col bg-card border rounded-lg text-card-foreground text-sm overflow-hidden">
-      {/* Character identity */}
-      <div className="px-4 pt-4 pb-2 text-center">
+    <div className="h-full flex flex-col bg-card border border-border/50 rounded-lg text-card-foreground text-sm overflow-hidden">
+      {/* Character identity — dark header */}
+      <div className="px-4 pt-4 pb-2 text-center bg-gradient-to-b from-muted/80 to-transparent">
+        {/* Character silhouette placeholder */}
+        <div className="w-16 h-16 mx-auto mb-2 rounded-full bg-gradient-to-b from-primary/30 to-primary/10 border-2 border-primary/40 flex items-center justify-center">
+          <span className="text-2xl font-black text-primary/70">
+            {character.name ? character.name.charAt(0).toUpperCase() : "?"}
+          </span>
+        </div>
         <div className="text-lg font-bold tracking-tight">{character.name}</div>
         <div className="text-xs text-muted-foreground">
-          Lv {character.level} {character.race} {character.class}
+          Lv {character.level} {character.gender} {character.race} {character.class}
         </div>
       </div>
 
-      {/* HP / AC / Gold bar */}
-      <div className="px-4 space-y-2">
-        {/* HP orb-style bar */}
+      {/* HP bar */}
+      <div className="px-4 space-y-1.5">
         <div>
           <div className="flex justify-between text-xs mb-0.5">
             <span className="text-red-400 font-semibold">HP</span>
             <span className="font-mono">{character.hp}/{character.maxHp}</span>
           </div>
-          <div className="w-full bg-red-950 rounded h-3 overflow-hidden">
+          <div className="w-full bg-red-950/80 rounded-full h-3 overflow-hidden border border-red-900/50">
             <div
-              className="bg-red-500 h-full rounded transition-all duration-300"
+              className={cn("h-full rounded-full transition-all duration-500", hpColor)}
               style={{ width: `${hpPercent}%` }}
             />
           </div>
         </div>
 
-        <div className="flex gap-3">
-          <div className="flex-1 text-center bg-muted/50 rounded py-1">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">AC</div>
-            <div className="text-base font-bold">{character.ac}</div>
+        {/* XP bar */}
+        <div>
+          <div className="flex justify-between text-xs mb-0.5">
+            <span className="text-blue-400 font-semibold">XP</span>
+            <span className="font-mono text-[11px]">
+              {character.xpToNextLevel === Infinity
+                ? "MAX"
+                : `${character.xp}/${character.xpToNextLevel}`}
+            </span>
           </div>
-          <div className="flex-1 text-center bg-muted/50 rounded py-1">
-            <div className="text-[10px] text-amber-400 uppercase tracking-wider">Gold</div>
-            <div className="text-base font-bold text-amber-400">{character.gold}</div>
+          <div className="w-full bg-blue-950/80 rounded-full h-2 overflow-hidden border border-blue-900/50">
+            <div
+              className="bg-blue-500 h-full rounded-full transition-all duration-500"
+              style={{ width: `${Math.min(xpPercent, 100)}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Unconscious/Death warning */}
+        {character.isUnconscious && (
+          <div className="text-center py-1 bg-red-950/60 border border-red-700/50 rounded text-red-300 text-xs font-bold animate-pulse">
+            UNCONSCIOUS — Death Saves: {character.deathSaves.successes}S / {character.deathSaves.failures}F
+          </div>
+        )}
+
+        {/* AC / Gold stat boxes */}
+        <div className="flex gap-2">
+          <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">AC</div>
+            <div className="text-lg font-black leading-tight">{character.ac}</div>
+          </div>
+          <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
+            <div className="text-[10px] text-amber-400/80 uppercase tracking-wider">Gold</div>
+            <div className="text-lg font-black text-amber-400 leading-tight">{character.gold}</div>
           </div>
         </div>
       </div>
@@ -68,7 +157,7 @@ export function CharacterSidebar() {
             ["WIS", character.abilityScores.wisdom],
             ["CHA", character.abilityScores.charisma],
           ] as const).map(([label, val]) => (
-            <div key={label} className="text-center bg-muted/30 rounded py-0.5">
+            <div key={label} className="text-center bg-muted/30 rounded py-0.5 border border-border/20">
               <div className="text-[10px] text-muted-foreground">{label}</div>
               <div className="font-semibold text-xs leading-tight">
                 {val} <span className="text-muted-foreground">({mod(val)})</span>
@@ -83,17 +172,42 @@ export function CharacterSidebar() {
       {/* Location */}
       <div className="px-4">
         <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Location</div>
-        <div className="font-medium text-xs">{location}</div>
+        <div className="font-medium text-xs flex items-center gap-1.5">
+          <span className="text-green-400">&#x25CF;</span>
+          {location}
+        </div>
       </div>
 
       <Separator className="my-2" />
 
-      {/* Inventory */}
-      <div className="px-4 flex-1 min-h-0 overflow-y-auto">
-        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Inventory</div>
-        {character.inventory.length > 0 ? (
+      {/* Equipment section */}
+      <div className="px-4">
+        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Equipped</div>
+        {equipped.length > 0 ? (
           <ul className="space-y-0.5">
-            {character.inventory.map((item) => (
+            {equipped.map((item) => (
+              <li
+                key={item}
+                className="text-xs px-2 py-0.5 bg-primary/10 border border-primary/20 rounded truncate flex items-center gap-1.5"
+              >
+                <span className="text-primary/70">{CATEGORY_ICONS[categorizeItem(item)]}</span>
+                {item}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="text-xs text-muted-foreground italic">None</div>
+        )}
+      </div>
+
+      <Separator className="my-2" />
+
+      {/* Backpack items */}
+      <div className="px-4 flex-1 min-h-0 overflow-y-auto">
+        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Backpack</div>
+        {backpack.length > 0 ? (
+          <ul className="space-y-0.5">
+            {backpack.map((item) => (
               <li
                 key={item}
                 className="text-xs px-2 py-0.5 bg-muted/30 rounded truncate"
