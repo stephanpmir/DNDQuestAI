@@ -1,4 +1,5 @@
 import type { Character } from "./character";
+import type { RollResult } from "./world";
 
 export interface GameState {
   character: Character;
@@ -13,6 +14,8 @@ export interface ChatMessage {
   narrative: string;
   gameState?: Partial<GameState>;
   timestamp: number;
+  /** Dice roll result to display inline */
+  rollResult?: RollResult;
 }
 
 /** The structured JSON the AI DM returns alongside narrative text. */
@@ -28,4 +31,13 @@ export interface DMResponsePayload {
     completeQuest?: string;
     xpGained?: number;
   };
+  /** Engine outcome details (roll results, etc.) */
+  engineOutcome?: {
+    roll?: RollResult;
+    escalationHint?: boolean;
+  };
+  /** New NPCs detected by guardrails */
+  newNpcs?: string[];
+  /** Validation warnings */
+  warnings?: string[];
 }

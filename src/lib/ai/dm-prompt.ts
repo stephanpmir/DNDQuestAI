@@ -1,11 +1,12 @@
 import type { Character } from "@/types/character";
 import type { GameState } from "@/types/game";
+import type { NarrationContext, EngineOutcome, NPC, WorldEvent, LocationRecord } from "@/types/world";
 
 export function buildSystemPrompt(
   character: Character,
   gameState: Pick<GameState, "location" | "questLog" | "turnCount">
 ): string {
-  return `You are an expert Dungeon Master running a solo D&D 5e campaign.
+  return `You are the Narrator for a solo D&D 5e campaign. You do NOT decide game mechanics — a rules engine handles all dice rolls, damage, item changes, and state updates. Your job is to write vivid, engaging narrative text that describes what happens based on the engine's decisions.
 
 ## Player Character
 - Name: ${character.name}
@@ -23,35 +24,105 @@ export function buildSystemPrompt(
 - Turn: ${gameState.turnCount}
 - Active Quests: ${gameState.questLog.length > 0 ? gameState.questLog.join("; ") : "None"}
 
-## Difficulty Scaling
-The player's ability scores were rolled with 4d6-drop-lowest. Adjust difficulty accordingly:
-- If scores are below average (total modifier < 0): give the player luck bonuses — friendly NPCs, fortunate finds, merciful encounters, and near-misses in combat.
-- If scores are above average (total modifier > +6): increase encounter difficulty — smarter enemies, more traps, scarcer resources, and tougher moral choices.
-- Average characters get standard D&D 5e balance.
-
-## Rules
-1. Be vivid and engaging. Describe scenes, NPCs, and combat with flair.
-2. Follow D&D 5e rules loosely — roll dice internally when needed.
-3. Present meaningful choices to the player.
-4. Keep responses under 300 words for the narrative portion.
-5. Track consequences — injuries, resource usage, NPC relationships.
+## Critical Rules
+1. You are the NARRATOR, not the game master. The engine decides outcomes.
+2. When given an engine outcome (roll results, HP changes, items), you MUST incorporate those EXACT results into your narrative. Do not contradict them.
+3. If the engine says a roll failed, describe the failure. If it succeeded, describe success. Never override the engine.
+4. Do NOT invent mechanical effects (no "you gain 50 gold" or "you find a sword" unless the engine says so).
+5. Be vivid and engaging. Describe scenes, NPCs, and combat with flair.
+6. Present 2-3 meaningful choices to the player at the end of each response.
+7. Keep responses under 250 words.
+8. Reference established NPCs by name when they're present.
+9. Maintain consistency with previous events provided in context.
 
 ## Response Format
-You MUST respond with valid JSON matching this exact schema:
+Respond with valid JSON:
 \`\`\`json
 {
   "narrative": "Your story text here...",
-  "gameStateUpdate": {
-    "hpChange": 0,
-    "newItems": [],
-    "removeItems": [],
-    "goldChange": 0,
-    "locationChange": null,
-    "newQuest": null,
-    "completeQuest": null,
-    "xpGained": 0
-  }
+  "suggestedActions": ["action 1", "action 2", "action 3"],
+  "mentionedNpcs": ["NPC Name"],
+  "locationDescription": "Brief description if this is a new location"
 }
 \`\`\`
-Only include fields in gameStateUpdate that actually changed. Always include the "narrative" field.`;
+Always include "narrative". Other fields are optional.`;
+}
+
+/**
+ * Build the narration context message that tells the LLM what the engine decided.
+ * This is injected as a system message right before the user's action.
+ */
+export function buildEngineContextMessage(ctx: NarrationContext): string {
+  const parts: string[] = [];
+
+  parts.push(`## Player Action\n"${ctx.playerAction}"`);
+
+  // Engine outcome
+  const o = ctx.engineOutcome;
+  const outcomeParts: string[] = [];
+
+  if (o.roll) {
+    const rollDesc = o.roll.success ? "SUCCESS" : "FAILURE";
+    outcomeParts.push(
+      `Dice Roll: ${o.roll.type}${o.roll.ability ? ` (${o.roll.ability})` : ""} — rolled ${o.roll.rolled} + ${o.roll.modifier} = ${o.roll.total}${o.roll.dc ? ` vs DC ${o.roll.dc}` : ""} → **${rollDesc}**`
+    );
+  }
+  if (o.hpChange !== 0) {
+    outcomeParts.push(`HP Change: ${o.hpChange > 0 ? "+" : ""}${o.hpChange}`);
+  }
+  if (o.itemsGained.length > 0) {
+    outcomeParts.push(`Items Gained: ${o.itemsGained.join(", ")}`);
+  }
+  if (o.itemsLost.length > 0) {
+    outcomeParts.push(`Items Lost: ${o.itemsLost.join(", ")}`);
+  }
+  if (o.goldChange !== 0) {
+    outcomeParts.push(`Gold Change: ${o.goldChange > 0 ? "+" : ""}${o.goldChange}`);
+  }
+  if (o.xpGained > 0) {
+    outcomeParts.push(`XP Gained: +${o.xpGained}`);
+  }
+  if (o.locationChange) {
+    outcomeParts.push(`Location Change: → ${o.locationChange}`);
+  }
+  if (o.newQuest) {
+    outcomeParts.push(`New Quest: ${o.newQuest}`);
+  }
+  if (o.completeQuest) {
+    outcomeParts.push(`Quest Completed: ${o.completeQuest}`);
+  }
+
+  if (outcomeParts.length > 0) {
+    parts.push(`## Engine Outcome (incorporate these EXACTLY)\n${outcomeParts.join("\n")}`);
+  } else {
+    parts.push("## Engine Outcome\nNo mechanical changes. This is a purely narrative moment.");
+  }
+
+  // Escalation hint
+  if (o.escalationHint) {
+    parts.push(`## MANDATORY ESCALATION\n${o.escalationHint}`);
+  }
+
+  // Recent context
+  if (ctx.recentEvents.length > 0) {
+    const eventSummaries = ctx.recentEvents.slice(-5).map(
+      (e) => `- Turn ${e.turn}: [${e.type}] ${e.summary} (${e.location})`
+    );
+    parts.push(`## Recent History\n${eventSummaries.join("\n")}`);
+  }
+
+  // NPCs in scene
+  if (ctx.relevantNpcs.length > 0) {
+    const npcDescs = ctx.relevantNpcs.map(
+      (n) => `- ${n.name}: ${n.disposition}, first met turn ${n.firstMetTurn}`
+    );
+    parts.push(`## NPCs Present\n${npcDescs.join("\n")}`);
+  }
+
+  // Current location context
+  if (ctx.currentLocation) {
+    parts.push(`## Current Location: ${ctx.currentLocation.name}\n${ctx.currentLocation.description || "No description yet."}`);
+  }
+
+  return parts.join("\n\n");
 }

@@ -3,7 +3,9 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
+import { useWorldStore } from "@/stores/world-store";
 import type { ChatMessage as ChatMessageType, DMResponsePayload } from "@/types/game";
+import type { WorldEvent } from "@/types/world";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
 import { CharacterSidebar } from "./character-sidebar";
@@ -31,6 +33,15 @@ export function GameView() {
     setCampaignStarted,
   } = useGameStore();
 
+  const {
+    events,
+    npcs,
+    locations,
+    addEvent,
+    registerNpc,
+    visitLocation,
+  } = useWorldStore();
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const autoStartFired = useRef(false);
 
@@ -57,7 +68,7 @@ export function GameView() {
       incrementTurn();
 
       try {
-        const history = messages.slice(-20).map((m) => ({
+        const history = messages.slice(-16).map((m) => ({
           role: m.role,
           content: m.narrative,
         }));
@@ -70,6 +81,7 @@ export function GameView() {
             character,
             gameState: { location, questLog, turnCount },
             history,
+            worldState: { events, npcs, locations },
           }),
         });
 
@@ -81,7 +93,7 @@ export function GameView() {
 
         const data: DMResponsePayload = await res.json();
 
-        // Apply game state updates
+        // Apply engine-decided game state updates
         const u = data.gameStateUpdate;
         if (u) {
           updateFromGameState({
@@ -91,17 +103,48 @@ export function GameView() {
             goldChange: u.goldChange,
             xpGained: u.xpGained,
           });
-          if (u.locationChange) setLocation(u.locationChange);
+          if (u.locationChange) {
+            setLocation(u.locationChange);
+            visitLocation(u.locationChange, turnCount);
+          }
           if (u.newQuest) addQuest(u.newQuest);
           if (u.completeQuest) completeQuest(u.completeQuest);
         }
 
-        // Add DM message
+        // Register new NPCs detected by guardrails
+        if (data.newNpcs) {
+          for (const npcName of data.newNpcs) {
+            registerNpc(npcName, turnCount, location);
+          }
+        }
+
+        // Log structured event
+        const eventType = data.engineOutcome?.roll
+          ? data.engineOutcome.roll.type === "attack" ? "combat" : "skill_check"
+          : "exploration";
+        const worldEvent: WorldEvent = {
+          id: generateId(),
+          turn: turnCount,
+          timestamp: Date.now(),
+          type: eventType as WorldEvent["type"],
+          location: u?.locationChange ?? location,
+          summary: message.slice(0, 100),
+          npcs: data.newNpcs ?? [],
+          itemChanges: [
+            ...(u?.newItems ?? []).map((item) => ({ item, gained: true })),
+            ...(u?.removeItems ?? []).map((item) => ({ item, gained: false })),
+          ],
+          rollResult: data.engineOutcome?.roll,
+        };
+        addEvent(worldEvent);
+
+        // Add DM message with roll result
         const dmMsg: ChatMessageType = {
           id: generateId(),
           role: "assistant",
           narrative: data.narrative,
           timestamp: Date.now(),
+          rollResult: data.engineOutcome?.roll,
         };
         addMessage(dmMsg);
       } catch (err) {
@@ -124,6 +167,9 @@ export function GameView() {
       location,
       questLog,
       turnCount,
+      events,
+      npcs,
+      locations,
       addMessage,
       incrementTurn,
       setLoading,
@@ -131,6 +177,9 @@ export function GameView() {
       setLocation,
       addQuest,
       completeQuest,
+      addEvent,
+      registerNpc,
+      visitLocation,
     ]
   );
 
