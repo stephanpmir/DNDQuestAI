@@ -14,33 +14,40 @@ import { computeNpcDisposition } from "@/lib/karma";
 import { runGuardInvestigations, shouldGuardsConfront, buildCrimeContext } from "@/lib/crimes";
 import type { Crime } from "@/lib/crimes";
 
-/** Primary: Z.ai (GLM-4), Fallback: Cerebras (Llama 3.1 8B) */
-function getPrimaryClient(): OpenAI {
-  const apiKey = process.env.ZAI_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      "ZAI_API_KEY is not set. Add it to your environment variables."
-    );
+/**
+ * LLM client setup.
+ * Primary: Cerebras (Llama 3.1 8B) — fast, reliable
+ * Optional upgrade: Z.ai (GLM-4) — used when ZAI_API_KEY is set AND reachable
+ */
+function getClient(): { client: OpenAI; model: string } {
+  // Try Z.ai first if key is available
+  const zaiKey = process.env.ZAI_API_KEY;
+  if (zaiKey) {
+    return {
+      client: new OpenAI({ baseURL: "https://api.z.ai/api/paas/v4", apiKey: zaiKey, timeout: 15_000 }),
+      model: "glm-4",
+    };
   }
-  return new OpenAI({
-    baseURL: "https://api.z.ai/api/paas/v4",
-    apiKey,
-    timeout: 30_000,
-  });
+  // Default: Cerebras
+  const cerebrasKey = process.env.CEREBRAS_API_KEY;
+  if (!cerebrasKey) {
+    throw new Error("No LLM API key set. Set CEREBRAS_API_KEY (or ZAI_API_KEY).");
+  }
+  return {
+    client: new OpenAI({ baseURL: "https://api.cerebras.ai/v1", apiKey: cerebrasKey, timeout: 30_000 }),
+    model: "llama3.1-8b",
+  };
 }
 
-function getFallbackClient(): OpenAI | null {
+/** Get Cerebras as explicit fallback (when Z.ai is primary but fails) */
+function getCerebrasClient(): { client: OpenAI; model: string } | null {
   const apiKey = process.env.CEREBRAS_API_KEY;
   if (!apiKey) return null;
-  return new OpenAI({
-    baseURL: "https://api.cerebras.ai/v1",
-    apiKey,
-    timeout: 30_000,
-  });
+  return {
+    client: new OpenAI({ baseURL: "https://api.cerebras.ai/v1", apiKey, timeout: 30_000 }),
+    model: "llama3.1-8b",
+  };
 }
-
-const PRIMARY_MODEL = "glm-4";
-const FALLBACK_MODEL = "llama3.1-8b";
 
 interface RequestBody {
   message: string;
@@ -92,18 +99,17 @@ function isRetryableError(error: unknown): boolean {
   return false;
 }
 
-/** Make an LLM call with exponential backoff retry, falling back to secondary provider */
+/** Make an LLM call with exponential backoff retry, with automatic fallback */
 async function callWithRetry(
   messages: OpenAI.ChatCompletionMessageParam[]
 ): Promise<string> {
-  // Try primary (Z.ai) first
+  const primary = getClient();
   let lastError: unknown;
-  const primaryClient = getPrimaryClient();
 
   for (let attempt = 0; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
     try {
-      const response = await primaryClient.chat.completions.create({
-        model: PRIMARY_MODEL,
+      const response = await primary.client.chat.completions.create({
+        model: primary.model,
         messages,
         max_tokens: 1024,
       });
@@ -111,31 +117,32 @@ async function callWithRetry(
     } catch (error) {
       lastError = error;
       if (!isRetryableError(error) || attempt >= MAX_RETRY_ATTEMPTS) {
-        break; // Fall through to fallback
+        break;
       }
       const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
       console.warn(
-        `[DM API] Primary retry ${attempt + 1}/${MAX_RETRY_ATTEMPTS} after ${delay}ms`,
+        `[DM API] Retry ${attempt + 1}/${MAX_RETRY_ATTEMPTS} after ${delay}ms`,
         error instanceof Error ? error.message : error
       );
       await sleep(delay);
     }
   }
 
-  // Try fallback (Cerebras) if primary failed
-  const fallbackClient = getFallbackClient();
-  if (fallbackClient) {
-    console.warn("[DM API] Primary (Z.ai) failed, trying fallback (Cerebras)...");
-    try {
-      const response = await fallbackClient.chat.completions.create({
-        model: FALLBACK_MODEL,
-        messages,
-        max_tokens: 1024,
-      });
-      return response.choices[0]?.message?.content ?? "";
-    } catch (fallbackError) {
-      console.error("[DM API] Fallback also failed:", fallbackError instanceof Error ? fallbackError.message : fallbackError);
-      // Throw the original primary error
+  // If primary was Z.ai and it failed, try Cerebras fallback
+  if (process.env.ZAI_API_KEY) {
+    const fallback = getCerebrasClient();
+    if (fallback) {
+      console.warn("[DM API] Z.ai failed, falling back to Cerebras...");
+      try {
+        const response = await fallback.client.chat.completions.create({
+          model: fallback.model,
+          messages,
+          max_tokens: 1024,
+        });
+        return response.choices[0]?.message?.content ?? "";
+      } catch (fallbackError) {
+        console.error("[DM API] Fallback also failed:", fallbackError instanceof Error ? fallbackError.message : fallbackError);
+      }
     }
   }
 
