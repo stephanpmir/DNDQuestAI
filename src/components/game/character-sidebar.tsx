@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
 import { useKarmaStore } from "@/stores/karma-store";
 import { getAlignment, ALIGNMENT_LABELS } from "@/lib/karma";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { CharacterSheet } from "./character-sheet";
 
 /** Weapon keywords */
 const WEAPON_KEYWORDS = [
@@ -58,6 +60,10 @@ export function CharacterSidebar() {
   const { location, questLog } = useGameStore();
   const { companions } = useKarmaStore();
 
+  const [equippedOpen, setEquippedOpen] = useState(true);
+  const [backpackOpen, setBackpackOpen] = useState(true);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
   const alignment = getAlignment(character.karma);
   const alignmentLabel = ALIGNMENT_LABELS[alignment];
   const activeCompanions = companions.filter((c) => c.isRecruited && !c.hasLeft);
@@ -83,212 +89,240 @@ export function CharacterSidebar() {
   const hpColor = hpPercent > 60 ? "bg-red-500" : hpPercent > 25 ? "bg-orange-500" : "bg-red-700";
 
   return (
-    <div className="h-full flex flex-col bg-card border border-border/50 rounded-lg text-card-foreground text-sm overflow-hidden">
-      {/* Character identity — dark header */}
-      <div className="px-4 pt-4 pb-2 text-center bg-gradient-to-b from-muted/80 to-transparent">
-        {/* Character silhouette placeholder */}
-        <div className="w-16 h-16 mx-auto mb-2 rounded-full bg-gradient-to-b from-primary/30 to-primary/10 border-2 border-primary/40 flex items-center justify-center">
-          <span className="text-2xl font-black text-primary/70">
-            {character.name ? character.name.charAt(0).toUpperCase() : "?"}
-          </span>
-        </div>
-        <div className="text-lg font-bold tracking-tight">{character.name}</div>
-        <div className="text-xs text-muted-foreground">
-          Lv {character.level} {character.gender} {character.race} {character.class}
-        </div>
-      </div>
-
-      {/* HP bar */}
-      <div className="px-4 space-y-1.5">
-        <div>
-          <div className="flex justify-between text-xs mb-0.5">
-            <span className="text-red-400 font-semibold">HP</span>
-            <span className="font-mono">{character.hp}/{character.maxHp}</span>
-          </div>
-          <div className="w-full bg-red-950/80 rounded-full h-3 overflow-hidden border border-red-900/50">
-            <div
-              className={cn("h-full rounded-full transition-all duration-500", hpColor)}
-              style={{ width: `${hpPercent}%` }}
-            />
-          </div>
-        </div>
-
-        {/* XP bar */}
-        <div>
-          <div className="flex justify-between text-xs mb-0.5">
-            <span className="text-blue-400 font-semibold">XP</span>
-            <span className="font-mono text-[11px]">
-              {character.xpToNextLevel === Infinity
-                ? "MAX"
-                : `${character.xp}/${character.xpToNextLevel}`}
-            </span>
-          </div>
-          <div className="w-full bg-blue-950/80 rounded-full h-2 overflow-hidden border border-blue-900/50">
-            <div
-              className="bg-blue-500 h-full rounded-full transition-all duration-500"
-              style={{ width: `${Math.min(xpPercent, 100)}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Unconscious/Death warning */}
-        {character.isUnconscious && (
-          <div className="text-center py-1 bg-red-950/60 border border-red-700/50 rounded text-red-300 text-xs font-bold animate-pulse">
-            UNCONSCIOUS — Death Saves: {character.deathSaves.successes}S / {character.deathSaves.failures}F
-          </div>
-        )}
-
-        {/* AC / Gold / Karma stat boxes */}
-        <div className="flex gap-2">
-          <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">AC</div>
-            <div className="text-lg font-black leading-tight">{character.ac}</div>
-          </div>
-          <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
-            <div className="text-[10px] text-amber-400/80 uppercase tracking-wider">Gold</div>
-            <div className="text-lg font-black text-amber-400 leading-tight">{character.gold}</div>
-          </div>
-        </div>
-
-        {/* Karma / Alignment indicator */}
-        <div className="text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Karma</div>
-          <div className={cn(
-            "text-sm font-bold leading-tight",
-            character.karma > 25 ? "text-emerald-400" :
-            character.karma < -25 ? "text-red-400" :
-            "text-gray-400"
-          )}>
-            {character.karma > 0 ? "+" : ""}{character.karma} ({alignmentLabel})
-          </div>
-        </div>
-      </div>
-
-      <Separator className="my-2" />
-
-      {/* Ability scores — compact 2x3 grid */}
-      <div className="px-4">
-        <div className="grid grid-cols-3 gap-1.5">
-          {([
-            ["STR", character.abilityScores.strength],
-            ["DEX", character.abilityScores.dexterity],
-            ["CON", character.abilityScores.constitution],
-            ["INT", character.abilityScores.intelligence],
-            ["WIS", character.abilityScores.wisdom],
-            ["CHA", character.abilityScores.charisma],
-          ] as const).map(([label, val]) => (
-            <div key={label} className="text-center bg-muted/30 rounded py-0.5 border border-border/20">
-              <div className="text-[10px] text-muted-foreground">{label}</div>
-              <div className="font-semibold text-xs leading-tight">
-                {val} <span className="text-muted-foreground">({mod(val)})</span>
+    <>
+      <div className="h-full flex flex-col bg-card border border-border/50 rounded-lg text-card-foreground text-sm overflow-hidden">
+        {/* Character identity — icon left of name */}
+        <div className="px-4 pt-4 pb-2 bg-gradient-to-b from-muted/80 to-transparent">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-gradient-to-b from-primary/30 to-primary/10 border-2 border-primary/40 flex items-center justify-center shrink-0">
+              <span className="text-xl font-black text-primary/70">
+                {character.name ? character.name.charAt(0).toUpperCase() : "?"}
+              </span>
+            </div>
+            <div className="min-w-0">
+              <div className="text-lg font-bold tracking-tight truncate">{character.name}</div>
+              <div className="text-xs text-muted-foreground">
+                Lv {character.level} {character.gender} {character.race} {character.class}
               </div>
             </div>
-          ))}
+          </div>
         </div>
-      </div>
 
-      <Separator className="my-2" />
+        {/* HP bar */}
+        <div className="px-4 space-y-1.5">
+          <div>
+            <div className="flex justify-between text-xs mb-0.5">
+              <span className="text-red-400 font-semibold">HP</span>
+              <span className="font-mono">{character.hp}/{character.maxHp}</span>
+            </div>
+            <div className="w-full bg-red-950/80 rounded-full h-3 overflow-hidden border border-red-900/50">
+              <div
+                className={cn("h-full rounded-full transition-all duration-500", hpColor)}
+                style={{ width: `${hpPercent}%` }}
+              />
+            </div>
+          </div>
 
-      {/* Location */}
-      <div className="px-4">
-        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Location</div>
-        <div className="font-medium text-xs flex items-center gap-1.5">
-          <span className="text-green-400">&#x25CF;</span>
-          {location}
-        </div>
-      </div>
+          {/* XP bar */}
+          <div>
+            <div className="flex justify-between text-xs mb-0.5">
+              <span className="text-blue-400 font-semibold">XP</span>
+              <span className="font-mono text-[11px]">
+                {character.xpToNextLevel === Infinity
+                  ? "MAX"
+                  : `${character.xp}/${character.xpToNextLevel}`}
+              </span>
+            </div>
+            <div className="w-full bg-blue-950/80 rounded-full h-2 overflow-hidden border border-blue-900/50">
+              <div
+                className="bg-blue-500 h-full rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(xpPercent, 100)}%` }}
+              />
+            </div>
+          </div>
 
-      <Separator className="my-2" />
+          {/* Unconscious/Death warning */}
+          {character.isUnconscious && (
+            <div className="text-center py-1 bg-red-950/60 border border-red-700/50 rounded text-red-300 text-xs font-bold animate-pulse">
+              UNCONSCIOUS — Death Saves: {character.deathSaves.successes}S / {character.deathSaves.failures}F
+            </div>
+          )}
 
-      {/* Equipment section */}
-      <div className="px-4">
-        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Equipped</div>
-        {equipped.length > 0 ? (
-          <ul className="space-y-0.5">
-            {equipped.map((item) => (
-              <li
-                key={item}
-                className="text-xs px-2 py-0.5 bg-primary/10 border border-primary/20 rounded truncate flex items-center gap-1.5"
-              >
-                <span className="text-primary/70">{CATEGORY_ICONS[categorizeItem(item)]}</span>
-                {item}
-              </li>
+          {/* AC / Gold / Stats row */}
+          <div className="flex gap-2">
+            <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">AC</div>
+              <div className="text-lg font-black leading-tight">{character.ac}</div>
+            </div>
+            <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
+              <div className="text-[10px] text-amber-400/80 uppercase tracking-wider">Gold</div>
+              <div className="text-lg font-black text-amber-400 leading-tight">{character.gold}</div>
+            </div>
+          </div>
+
+          {/* Ability scores — compact 2x3 grid */}
+          <div className="grid grid-cols-3 gap-1.5">
+            {([
+              ["STR", character.abilityScores.strength],
+              ["DEX", character.abilityScores.dexterity],
+              ["CON", character.abilityScores.constitution],
+              ["INT", character.abilityScores.intelligence],
+              ["WIS", character.abilityScores.wisdom],
+              ["CHA", character.abilityScores.charisma],
+            ] as const).map(([label, val]) => (
+              <div key={label} className="text-center bg-muted/30 rounded py-0.5 border border-border/20">
+                <div className="text-[10px] text-muted-foreground">{label}</div>
+                <div className="font-semibold text-xs leading-tight">
+                  {val} <span className="text-muted-foreground">({mod(val)})</span>
+                </div>
+              </div>
             ))}
-          </ul>
-        ) : (
-          <div className="text-xs text-muted-foreground italic">None</div>
+          </div>
+
+          {/* Character Sheet button (replaces karma display) */}
+          <button
+            type="button"
+            onClick={() => setSheetOpen(true)}
+            className={cn(
+              "w-full text-center bg-muted/40 rounded-lg py-1.5 border border-border/30 cursor-pointer hover:bg-muted/60 transition-colors",
+            )}
+          >
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Character Sheet</div>
+            <div className={cn(
+              "text-sm font-bold leading-tight",
+              character.karma > 25 ? "text-emerald-400" :
+              character.karma < -25 ? "text-red-400" :
+              "text-gray-400"
+            )}>
+              {alignmentLabel}
+            </div>
+          </button>
+        </div>
+
+        <Separator className="my-2" />
+
+        {/* Location */}
+        <div className="px-4">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Location</div>
+          <div className="font-medium text-xs flex items-center gap-1.5">
+            <span className="text-green-400">&#x25CF;</span>
+            {location}
+          </div>
+        </div>
+
+        <Separator className="my-2" />
+
+        {/* Equipment section — collapsible */}
+        <div className="px-4">
+          <button
+            type="button"
+            onClick={() => setEquippedOpen(!equippedOpen)}
+            className="flex items-center justify-between w-full text-[10px] text-muted-foreground uppercase tracking-wider mb-1 hover:text-foreground transition-colors"
+          >
+            <span>Equipped ({equipped.length})</span>
+            <span className="text-xs">{equippedOpen ? "\u25B2" : "\u25BC"}</span>
+          </button>
+          {equippedOpen && (
+            equipped.length > 0 ? (
+              <ul className="space-y-0.5">
+                {equipped.map((item) => (
+                  <li
+                    key={item}
+                    className="text-xs px-2 py-0.5 bg-primary/10 border border-primary/20 rounded truncate flex items-center gap-1.5"
+                  >
+                    <span className="text-primary/70">{CATEGORY_ICONS[categorizeItem(item)]}</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="text-xs text-muted-foreground italic">None</div>
+            )
+          )}
+        </div>
+
+        <Separator className="my-2" />
+
+        {/* Backpack items — collapsible */}
+        <div className="px-4 flex-1 min-h-0 overflow-y-auto">
+          <button
+            type="button"
+            onClick={() => setBackpackOpen(!backpackOpen)}
+            className="flex items-center justify-between w-full text-[10px] text-muted-foreground uppercase tracking-wider mb-1 hover:text-foreground transition-colors"
+          >
+            <span>Backpack ({backpack.length})</span>
+            <span className="text-xs">{backpackOpen ? "\u25B2" : "\u25BC"}</span>
+          </button>
+          {backpackOpen && (
+            backpack.length > 0 ? (
+              <ul className="space-y-0.5">
+                {backpack.map((item) => (
+                  <li
+                    key={item}
+                    className="text-xs px-2 py-0.5 bg-muted/30 rounded truncate"
+                  >
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="text-xs text-muted-foreground italic">Empty</div>
+            )
+          )}
+        </div>
+
+        {/* Companions */}
+        {activeCompanions.length > 0 && (
+          <>
+            <Separator className="my-2" />
+            <div className="px-4">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Companions</div>
+              <ul className="space-y-1">
+                {activeCompanions.map((comp) => (
+                  <li key={comp.id} className="text-xs bg-muted/30 rounded px-2 py-1 border border-border/20">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold truncate">{comp.name}</span>
+                      <span className={cn(
+                        "text-[10px]",
+                        comp.disposition === "loyal" ? "text-emerald-400" :
+                        comp.disposition === "friendly" ? "text-green-400" :
+                        comp.disposition === "neutral" ? "text-gray-400" :
+                        comp.disposition === "wary" ? "text-orange-400" :
+                        "text-red-400"
+                      )}>
+                        {comp.disposition}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {comp.race} {comp.class} L{comp.level} | HP: {comp.hp}/{comp.maxHp}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+
+        {/* Quests */}
+        {questLog.length > 0 && (
+          <>
+            <Separator className="my-2" />
+            <div className="px-4 pb-3">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Quests</div>
+              <ul className="space-y-0.5">
+                {questLog.map((q) => (
+                  <li key={q} className="text-xs text-amber-300/80 truncate">
+                    &#x2694; {q}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
         )}
       </div>
 
-      <Separator className="my-2" />
-
-      {/* Backpack items */}
-      <div className="px-4 flex-1 min-h-0 overflow-y-auto">
-        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Backpack</div>
-        {backpack.length > 0 ? (
-          <ul className="space-y-0.5">
-            {backpack.map((item) => (
-              <li
-                key={item}
-                className="text-xs px-2 py-0.5 bg-muted/30 rounded truncate"
-              >
-                {item}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="text-xs text-muted-foreground italic">Empty</div>
-        )}
-      </div>
-
-      {/* Companions */}
-      {activeCompanions.length > 0 && (
-        <>
-          <Separator className="my-2" />
-          <div className="px-4">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Companions</div>
-            <ul className="space-y-1">
-              {activeCompanions.map((comp) => (
-                <li key={comp.id} className="text-xs bg-muted/30 rounded px-2 py-1 border border-border/20">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold truncate">{comp.name}</span>
-                    <span className={cn(
-                      "text-[10px]",
-                      comp.disposition === "loyal" ? "text-emerald-400" :
-                      comp.disposition === "friendly" ? "text-green-400" :
-                      comp.disposition === "neutral" ? "text-gray-400" :
-                      comp.disposition === "wary" ? "text-orange-400" :
-                      "text-red-400"
-                    )}>
-                      {comp.disposition}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {comp.race} {comp.class} L{comp.level} | HP: {comp.hp}/{comp.maxHp}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </>
-      )}
-
-      {/* Quests */}
-      {questLog.length > 0 && (
-        <>
-          <Separator className="my-2" />
-          <div className="px-4 pb-3">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Quests</div>
-            <ul className="space-y-0.5">
-              {questLog.map((q) => (
-                <li key={q} className="text-xs text-amber-300/80 truncate">
-                  &#x2694; {q}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </>
-      )}
-    </div>
+      {/* Character Sheet Modal */}
+      {sheetOpen && <CharacterSheet onClose={() => setSheetOpen(false)} />}
+    </>
   );
 }

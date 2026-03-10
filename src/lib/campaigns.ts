@@ -780,6 +780,18 @@ export function getRandomCampaign(theme: CampaignTheme): CampaignTemplate {
   return themeCampaigns[Math.floor(Math.random() * themeCampaigns.length)];
 }
 
+/** Get a random campaign theme appropriate for the player's level */
+export function getRandomThemeForLevel(level: number): CampaignTheme {
+  const eligible = CAMPAIGN_TEMPLATES.filter(
+    (t) => level >= t.levelRange[0] && level <= t.levelRange[1]
+  );
+  if (eligible.length === 0) {
+    return CAMPAIGN_THEMES[Math.floor(Math.random() * CAMPAIGN_THEMES.length)];
+  }
+  const picked = eligible[Math.floor(Math.random() * eligible.length)];
+  return picked.theme;
+}
+
 /** Get the narration profile for a theme */
 export function getThemeNarrationProfile(theme: CampaignTheme): ThemeNarrationProfile | undefined {
   return THEME_NARRATION_PROFILES.find((p) => p.theme === theme);

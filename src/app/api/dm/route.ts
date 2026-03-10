@@ -4,6 +4,7 @@ import { buildSystemPrompt, buildEngineContextMessage } from "@/lib/ai/dm-prompt
 import { parseDMResponse } from "@/lib/ai/parse-response";
 import { preGenerate, postGenerate } from "@/lib/engine/pipeline";
 import type { PipelineInput } from "@/lib/engine/pipeline";
+import { getRandomThemeForLevel } from "@/lib/campaigns";
 import type { Character } from "@/types/character";
 import type { GameState } from "@/types/game";
 import type { WorldEvent, NPC, LocationRecord } from "@/types/world";
@@ -137,7 +138,7 @@ export async function POST(request: Request) {
       gameState,
       karmaData ? { karma: karmaData.karma, history: karmaData.history as import("@/lib/karma").KarmaEvent[] } : undefined,
       karmaData?.companions as import("@/types/companion").Companion[] | undefined,
-      character.campaignTheme
+      getRandomThemeForLevel(character.level)
     );
 
     let narrative = "";

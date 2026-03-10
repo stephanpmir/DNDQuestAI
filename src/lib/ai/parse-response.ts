@@ -114,6 +114,17 @@ function cleanNarrative(text: string): string {
   // Remove stray JSON keys that leaked into prose
   cleaned = cleaned.replace(/"(?:narrative|gameStateUpdate|suggestedActions|mentionedNpcs|locationDescription)"\s*:/gi, "");
 
+  // Remove markdown headers like #narrative, ## narrative, ### DM, etc.
+  cleaned = cleaned.replace(/^#{1,6}\s*(?:narrative|dm)\b[^\n]*/gim, "");
+
+  // Remove standalone "DM" label lines
+  cleaned = cleaned.replace(/^\s*DM\s*$/gm, "");
+
+  // Strip markdown formatting (**, __, ##) from narrative prose
+  cleaned = cleaned.replace(/#{1,6}\s+/g, "");
+  cleaned = cleaned.replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1");
+  cleaned = cleaned.replace(/_{1,2}([^_]+)_{1,2}/g, "$1");
+
   // Remove orphaned braces/brackets from stripped JSON
   cleaned = cleaned.replace(/^\s*[{}\[\]]\s*$/gm, "");
 

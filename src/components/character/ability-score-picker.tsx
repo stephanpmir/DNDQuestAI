@@ -49,9 +49,15 @@ interface Props {
   onChange: (scores: AbilityScores) => void;
 }
 
+/** D&D 5e re-roll limits: 1 full re-roll + 2 individual re-rolls */
+const MAX_FULL_REROLLS = 1;
+const MAX_INDIVIDUAL_REROLLS = 2;
+
 export function AbilityScorePicker({ onChange }: Props) {
   const [rolls, setRolls] = useState<DiceRoll[]>(() => rollFullSet());
   const [hasRolled, setHasRolled] = useState(false);
+  const [fullRerollsUsed, setFullRerollsUsed] = useState(0);
+  const [individualRerollsUsed, setIndividualRerollsUsed] = useState(0);
 
   const applyRolls = useCallback(
     (newRolls: DiceRoll[]) => {
@@ -71,7 +77,11 @@ export function AbilityScorePicker({ onChange }: Props) {
   function handleRollAll() {
     const newRolls = rollFullSet();
     setRolls(newRolls);
+    if (hasRolled) {
+      setFullRerollsUsed((n) => n + 1);
+    }
     setHasRolled(true);
+    setIndividualRerollsUsed(0);
     applyRolls(newRolls);
   }
 
@@ -79,8 +89,12 @@ export function AbilityScorePicker({ onChange }: Props) {
     const newRolls = [...rolls];
     newRolls[index] = roll4d6DropLowest();
     setRolls(newRolls);
+    setIndividualRerollsUsed((n) => n + 1);
     applyRolls(newRolls);
   }
+
+  const canFullReroll = !hasRolled || fullRerollsUsed < MAX_FULL_REROLLS;
+  const canIndividualReroll = individualRerollsUsed < MAX_INDIVIDUAL_REROLLS;
 
   const totalMod = getTotalModifier(rolls);
   const avgScore = rolls.reduce((s, r) => s + r.total, 0) / 6;
@@ -88,14 +102,15 @@ export function AbilityScorePicker({ onChange }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <Button type="button" onClick={handleRollAll} variant="outline">
-          {hasRolled ? "Reroll All" : "Roll Dice"}
+        <Button type="button" onClick={handleRollAll} variant="outline" disabled={!canFullReroll}>
+          {hasRolled ? `Reroll All (${MAX_FULL_REROLLS - fullRerollsUsed} left)` : "Roll Dice"}
         </Button>
         {hasRolled && (
           <span className="text-xs text-muted-foreground">
             Avg: {avgScore.toFixed(1)} | Net modifier:{" "}
             {totalMod >= 0 ? "+" : ""}
             {totalMod}
+            {" | "}Individual rerolls: {MAX_INDIVIDUAL_REROLLS - individualRerollsUsed} left
           </span>
         )}
       </div>
@@ -139,6 +154,7 @@ export function AbilityScorePicker({ onChange }: Props) {
                       size="sm"
                       className="h-7 px-2 text-xs ml-auto"
                       onClick={() => handleRerollOne(i)}
+                      disabled={!canIndividualReroll}
                     >
                       Reroll
                     </Button>
@@ -149,16 +165,10 @@ export function AbilityScorePicker({ onChange }: Props) {
           </div>
 
           <div className="text-xs text-muted-foreground space-y-1 bg-muted/50 rounded-lg p-3">
-            <p className="font-medium">How dice rolling works:</p>
+            <p className="font-medium">D&D 5e Dice Rolling (4d6 drop lowest):</p>
             <p>
               Each ability rolls 4d6, dropping the lowest die (crossed out).
-              You can reroll any individual ability or all of them.
-            </p>
-            <p>
-              <strong>Luck system:</strong> Characters with lower total scores
-              gain luck bonuses from the DM — favorable NPC reactions, lucky
-              finds, and merciful encounters. Characters with higher scores
-              face tougher enemies and harder challenges.
+              You get <strong>1 full re-roll</strong> and <strong>2 individual re-rolls</strong> — choose wisely!
             </p>
           </div>
         </>
