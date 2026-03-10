@@ -3,18 +3,13 @@
 import { useState, useEffect, useRef } from "react";
 import type { ChatMessage as ChatMessageType } from "@/types/game";
 import { DiceRollDisplay } from "./dice-roll-display";
-import { cn } from "@/lib/utils";
 
 interface Props {
   message: ChatMessageType;
 }
 
-/** Calculate delay between paragraphs — fast enough for quick readers (~400 WPM) */
-function readingDelayMs(text: string): number {
-  const wordCount = text.trim().split(/\s+/).length;
-  // ~400 WPM pace, minimum 400ms, max 2000ms per paragraph
-  return Math.min(2000, Math.max(400, (wordCount / 400) * 60_000));
-}
+/** 200 WPM = 300ms per word */
+const MS_PER_WORD = 300;
 
 export function ChatMessage({ message }: Props) {
   const isUser = message.role === "user";
@@ -42,65 +37,51 @@ export function ChatMessage({ message }: Props) {
           DM
         </div>
         <div className="max-w-[80%] rounded-lg px-4 py-3 text-sm leading-relaxed bg-muted text-foreground">
-          <FadeInParagraphs text={message.narrative} />
+          <TypewriterText text={message.narrative} />
         </div>
       </div>
     </div>
   );
 }
 
-/** Splits DM text into paragraphs and fades each in sequentially at ~200 WPM */
-function FadeInParagraphs({ text }: { text: string }) {
-  const paragraphs = text.split(/\n\n+/).filter((p) => p.trim().length > 0);
+/** Types out text word-by-word at ~200 WPM */
+function TypewriterText({ text }: { text: string }) {
+  const words = text.split(/(\s+)/); // preserve whitespace tokens
   const [visibleCount, setVisibleCount] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef = useRef(true);
+
+  // Count only actual words (not whitespace) for pacing
+  const totalWords = words.filter((w) => w.trim().length > 0).length;
 
   useEffect(() => {
     mountedRef.current = true;
-    // Start showing first paragraph immediately
-    setVisibleCount(1);
+    let wordIndex = 0;
+
+    intervalRef.current = setInterval(() => {
+      if (!mountedRef.current) return;
+      wordIndex++;
+      setVisibleCount(wordIndex);
+      if (wordIndex >= words.length) {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+      }
+    }, MS_PER_WORD);
+
     return () => {
       mountedRef.current = false;
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, []);
+  }, [words.length, totalWords]);
 
-  useEffect(() => {
-    if (visibleCount >= paragraphs.length || visibleCount === 0) return;
-
-    const currentParagraph = paragraphs[visibleCount - 1];
-    const delay = readingDelayMs(currentParagraph);
-
-    timerRef.current = setTimeout(() => {
-      if (mountedRef.current) {
-        setVisibleCount((c) => c + 1);
-      }
-    }, delay);
-
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [visibleCount, paragraphs]);
-
-  // If only one paragraph, no animation needed
-  if (paragraphs.length <= 1) {
+  // Show all text once fully typed (or if no words)
+  if (visibleCount >= words.length || totalWords === 0) {
     return <div className="whitespace-pre-wrap">{text}</div>;
   }
 
   return (
-    <div className="space-y-3">
-      {paragraphs.map((p, i) => (
-        <p
-          key={i}
-          className={cn(
-            "transition-opacity duration-500 ease-in",
-            i < visibleCount ? "opacity-100" : "opacity-0 h-0 overflow-hidden"
-          )}
-        >
-          {p}
-        </p>
-      ))}
+    <div className="whitespace-pre-wrap">
+      {words.slice(0, visibleCount).join("")}
+      <span className="inline-block w-0.5 h-4 bg-foreground/60 animate-pulse ml-0.5 align-text-bottom" />
     </div>
   );
 }
