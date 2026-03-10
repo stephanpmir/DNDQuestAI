@@ -16,16 +16,16 @@ type ActionType =
   | "death_save"
   | "unknown";
 
-/** Keywords that map to action types */
+/** Keywords that map to action types — ORDER MATTERS: more specific patterns first */
 const ACTION_PATTERNS: [RegExp, ActionType][] = [
   [/\b(attack|strike|hit|fight|slash|stab|shoot|swing)\b/i, "attack"],
   [/\b(cast|spell|magic|fireball|heal|cure)\b/i, "cast_spell"],
   [/\b(pick lock|sneak|hide|stealth|climb|swim|jump|search|investigate|persuade|intimidate|deceive|perception|check)\b/i, "skill_check"],
-  [/\b(explore|look around|examine|enter|go to|travel|move|walk|head)\b/i, "explore"],
-  [/\b(talk|speak|ask|greet|negotiate|converse|say)\b/i, "talk"],
   [/\b(rest|sleep|camp|long rest|short rest)\b/i, "rest"],
+  [/\b(talk|speak|ask|greet|negotiate|converse|say)\b/i, "talk"],
   [/\b(buy|sell|trade|shop|purchase|barter)\b/i, "trade"],
   [/\b(use|drink|eat|equip|open|read)\b/i, "use_item"],
+  [/\b(explore|look around|examine|enter|go to|travel|move|walk|head)\b/i, "explore"],
 ];
 
 /** Patterns that indicate self-harm or dangerous self-targeted actions */
@@ -105,7 +105,7 @@ function levelScaledDC(baseDC: number, characterLevel: number): number {
  */
 function detectLocationChange(playerInput: string): string | undefined {
   const patterns = [
-    /\b(?:go to|travel to|head to|walk to|move to|return to|head toward|walk toward|head towards|walk towards)\s+(?:the\s+)?(.{2,40}?)(?:\.|$|,|!|\?)/i,
+    /\b(?:go to|travel to|head to|walk to|move to|return to)\s+(?:the\s+)?(.{2,40}?)(?:\.|$|,|!|\?)/i,
     /\b(?:enter|visit)\s+(?:the\s+)?(.{2,40}?)(?:\.|$|,|!|\?)/i,
     /\b(?:go|travel|head|walk|move)\s+(?:into|inside|through)\s+(?:the\s+)?(.{2,40}?)(?:\.|$|,|!|\?)/i,
   ];
@@ -299,10 +299,18 @@ export function resolveAction(
 
     case "use_item": {
       // Check if the player has the item they're trying to use
+      // Bidirectional: input contains item name OR item name contains key words from input
       const lower = playerInput.toLowerCase();
-      const matchedItem = character.inventory.find(
-        (item) => lower.includes(item.toLowerCase())
-      );
+      const inputWords = lower.replace(/[^a-z\s]/g, "").split(/\s+/).filter(w => w.length > 2);
+      const ignoreWords = new Set(["use", "drink", "eat", "equip", "open", "read", "the", "my", "this", "that", "some"]);
+      const searchTerms = inputWords.filter(w => !ignoreWords.has(w));
+      const matchedItem = character.inventory.find((item) => {
+        const itemLow = item.toLowerCase();
+        // Exact: input contains full item name
+        if (lower.includes(itemLow)) return true;
+        // Partial: any search term from input appears in item name
+        return searchTerms.some(term => itemLow.includes(term));
+      });
       if (matchedItem) {
         const itemLower = matchedItem.toLowerCase();
         const consumables = ["potion", "rations", "scroll", "elixir", "antidote"];
