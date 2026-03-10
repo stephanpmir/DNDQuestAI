@@ -126,6 +126,8 @@ function computeAC(cls: CharacterClass, dexScore: number, conScore: number, wisS
   let baseAC = 10 + dexMod;
   if (cls === "Barbarian") baseAC = 10 + dexMod + conMod;
   if (cls === "Monk") baseAC = 10 + dexMod + wisMod;
+  // Sorcerer Draconic Resilience: AC = 13 + DEX mod when not wearing armor
+  if (cls === "Sorcerer") baseAC = 13 + dexMod;
 
   return baseAC + shieldBonus;
 }
@@ -141,7 +143,9 @@ function computeMaxHpForLevel(cls: CharacterClass, conScore: number, level: numb
   const conMod = computeModifier(conScore);
   // Level 1: full hit die + CON mod. Levels 2+: avg roll + CON mod per level.
   const avgRoll = Math.floor(hitDie / 2) + 1;
-  return hitDie + conMod + (level - 1) * (avgRoll + conMod);
+  // Sorcerer Draconic Resilience: +1 HP per level
+  const draconicBonus = cls === "Sorcerer" ? level : 0;
+  return hitDie + conMod + (level - 1) * (avgRoll + conMod) + draconicBonus;
 }
 
 export const useCharacterStore = create<CharacterStore>()(

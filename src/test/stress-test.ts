@@ -229,7 +229,8 @@ const HIT_DICE: Record<string, number> = {
 };
 function computeMaxHpForLevel(cls: string, con: number, lvl: number) {
   const hd = HIT_DICE[cls] ?? 8; const cm = mod(con); const avg = Math.floor(hd / 2) + 1;
-  return hd + cm + (lvl - 1) * (avg + cm);
+  const draconicBonus = cls === "Sorcerer" ? lvl : 0;
+  return hd + cm + (lvl - 1) * (avg + cm) + draconicBonus;
 }
 function roll4d6() { return roll(4, 6).sort((a, b) => b - a).slice(0, 3).reduce((a, b) => a + b, 0); }
 
