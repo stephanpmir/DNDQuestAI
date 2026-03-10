@@ -1,15 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import type { ChatMessage as ChatMessageType } from "@/types/game";
 import { DiceRollDisplay } from "./dice-roll-display";
 
 interface Props {
   message: ChatMessageType;
 }
-
-/** 200 WPM = 300ms per word */
-const MS_PER_WORD = 300;
 
 export function ChatMessage({ message }: Props) {
   const isUser = message.role === "user";
@@ -44,44 +41,105 @@ export function ChatMessage({ message }: Props) {
   );
 }
 
-/** Types out text word-by-word at ~200 WPM */
+/**
+ * Typewriter effect — reveals text word-by-word at ~200 WPM
+ * using direct DOM manipulation to avoid React re-render batching.
+ */
 function TypewriterText({ text }: { text: string }) {
-  const words = text.split(/(\s+)/); // preserve whitespace tokens
-  const [visibleCount, setVisibleCount] = useState(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const mountedRef = useRef(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const cursorRef = useRef<HTMLSpanElement>(null);
+  const textRef = useRef(text);
+  const doneRef = useRef(false);
 
-  // Count only actual words (not whitespace) for pacing
-  const totalWords = words.filter((w) => w.trim().length > 0).length;
+  // Split into word tokens: each "word" includes trailing whitespace
+  const getTokens = useCallback((t: string): string[] => {
+    const tokens: string[] = [];
+    let current = "";
+    for (let i = 0; i < t.length; i++) {
+      const ch = t[i];
+      if (ch === " " || ch === "\t") {
+        current += ch;
+      } else if (ch === "\n") {
+        current += ch;
+        tokens.push(current);
+        current = "";
+      } else {
+        if (current.length > 0 && /\S/.test(current)) {
+          tokens.push(current);
+          current = ch;
+        } else {
+          current += ch;
+        }
+      }
+    }
+    if (current.length > 0) tokens.push(current);
+    return tokens;
+  }, []);
 
   useEffect(() => {
-    mountedRef.current = true;
-    let wordIndex = 0;
+    const el = containerRef.current;
+    const cursor = cursorRef.current;
+    if (!el || !cursor) return;
 
-    intervalRef.current = setInterval(() => {
-      if (!mountedRef.current) return;
-      wordIndex++;
-      setVisibleCount(wordIndex);
-      if (wordIndex >= words.length) {
-        if (intervalRef.current) clearInterval(intervalRef.current);
+    // If text changed (shouldn't happen for a message, but safety)
+    if (textRef.current !== text) {
+      textRef.current = text;
+      doneRef.current = false;
+    }
+
+    // If already done (re-render without text change), show full text
+    if (doneRef.current) {
+      el.textContent = text;
+      cursor.style.display = "none";
+      return;
+    }
+
+    // Split text into words (preserving spaces attached to words)
+    const words = text.match(/\S+\s*/g) || [];
+    if (words.length === 0) {
+      el.textContent = text;
+      cursor.style.display = "none";
+      doneRef.current = true;
+      return;
+    }
+
+    let wordIndex = 0;
+    el.textContent = "";
+    cursor.style.display = "";
+
+    // 200 WPM = 1 word every 300ms
+    const timer = setInterval(() => {
+      if (wordIndex < words.length) {
+        el.textContent += words[wordIndex];
+        wordIndex++;
+
+        // Auto-scroll to keep cursor visible
+        const scrollParent = el.closest("[class*='overflow-y']");
+        if (scrollParent) {
+          scrollParent.scrollTop = scrollParent.scrollHeight;
+        }
+      } else {
+        clearInterval(timer);
+        cursor.style.display = "none";
+        doneRef.current = true;
       }
-    }, MS_PER_WORD);
+    }, 300);
 
     return () => {
-      mountedRef.current = false;
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      clearInterval(timer);
+      // On cleanup, show full text so it's not cut off
+      if (el) el.textContent = text;
+      if (cursor) cursor.style.display = "none";
     };
-  }, [words.length, totalWords]);
-
-  // Show all text once fully typed (or if no words)
-  if (visibleCount >= words.length || totalWords === 0) {
-    return <div className="whitespace-pre-wrap">{text}</div>;
-  }
+  }, [text, getTokens]);
 
   return (
     <div className="whitespace-pre-wrap">
-      {words.slice(0, visibleCount).join("")}
-      <span className="inline-block w-0.5 h-4 bg-foreground/60 animate-pulse ml-0.5 align-text-bottom" />
+      <span ref={containerRef} />
+      <span
+        ref={cursorRef}
+        className="inline-block w-0.5 h-4 bg-foreground/60 animate-pulse ml-0.5 align-text-bottom"
+      />
     </div>
   );
 }
