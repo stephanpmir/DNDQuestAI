@@ -1,7 +1,3 @@
 [build]
   command = "npm run build"
   publish = ".next"
-
-# Use the Next.js runtime plugin for API routes and SSR
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
