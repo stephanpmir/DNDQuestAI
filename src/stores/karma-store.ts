@@ -1,17 +1,21 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { KarmaEvent } from "@/lib/karma";
+import type { KarmaEvent, FameEvent } from "@/lib/karma";
 import type { Companion } from "@/types/companion";
 import { getDisposition, calculateApprovalChange, COMPANION_TEMPLATES } from "@/types/companion";
 
 interface KarmaStore {
   /** Karma event history */
   karmaHistory: KarmaEvent[];
+  /** Fame event history */
+  fameHistory: FameEvent[];
   /** Active companions */
   companions: Companion[];
 
   /** Add a karma event */
   addKarmaEvent: (event: KarmaEvent) => void;
+  /** Add a fame event */
+  addFameEvent: (event: FameEvent) => void;
 
   /** Recruit a companion by template ID */
   recruitCompanion: (templateId: string, turn: number) => void;
@@ -39,11 +43,17 @@ export const useKarmaStore = create<KarmaStore>()(
   persist(
     (set) => ({
       karmaHistory: [],
+      fameHistory: [],
       companions: [],
 
       addKarmaEvent: (event) =>
         set((s) => ({
           karmaHistory: [...s.karmaHistory, event],
+        })),
+
+      addFameEvent: (event) =>
+        set((s) => ({
+          fameHistory: [...s.fameHistory, event],
         })),
 
       recruitCompanion: (templateId, turn) =>
@@ -121,12 +131,13 @@ export const useKarmaStore = create<KarmaStore>()(
           ),
         })),
 
-      reset: () => set({ karmaHistory: [], companions: [] }),
+      reset: () => set({ karmaHistory: [], fameHistory: [], companions: [] }),
     }),
     {
       name: "dndquest-karma",
       partialize: (s) => ({
         karmaHistory: s.karmaHistory,
+        fameHistory: s.fameHistory,
         companions: s.companions,
       }),
     }

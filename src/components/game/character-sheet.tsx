@@ -8,6 +8,7 @@ import { getAlignment, ALIGNMENT_LABELS } from "@/lib/karma";
 import type { CharacterClass } from "@/types/character";
 import { cn } from "@/lib/utils";
 import { KarmaHistory } from "./karma-history";
+import { FameHistory } from "./fame-history";
 import { getItemInfo, getItemIcon } from "@/lib/items";
 
 interface Props {
@@ -144,8 +145,9 @@ function useDexForAttack(itemName: string): boolean {
 export function CharacterSheet({ onClose }: Props) {
   const { character } = useCharacterStore();
   const { location, questLog } = useGameStore();
-  const { karmaHistory } = useKarmaStore();
+  const { karmaHistory, fameHistory } = useKarmaStore();
   const [showKarmaHistory, setShowKarmaHistory] = useState(false);
+  const [showFameHistory, setShowFameHistory] = useState(false);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
 
   const equippedItems = character.equipped ?? [];
@@ -519,6 +521,36 @@ export function CharacterSheet({ onClose }: Props) {
               )}
             </button>
 
+            {/* Fame — clickable to show history */}
+            <button
+              type="button"
+              onClick={() => setShowFameHistory(true)}
+              className="w-full text-left bg-muted/30 rounded-lg p-3 border border-border/30 hover:bg-muted/50 transition-colors cursor-pointer"
+            >
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Fame</div>
+              <div className={cn(
+                "text-sm font-bold",
+                character.fame >= 75 ? "text-amber-400" :
+                character.fame >= 40 ? "text-sky-400" :
+                character.fame >= 15 ? "text-slate-300" :
+                "text-gray-500"
+              )}>
+                {character.fame >= 75 ? "Legendary" :
+                 character.fame >= 50 ? "Renowned" :
+                 character.fame >= 30 ? "Well-Known" :
+                 character.fame >= 15 ? "Recognized" :
+                 "Unknown"}
+              </div>
+              <div className="text-[10px] text-muted-foreground mt-1">
+                Score: {character.fame}
+              </div>
+              {fameHistory.length > 0 && (
+                <div className="text-[10px] text-muted-foreground underline">
+                  {fameHistory.length} event{fameHistory.length > 1 ? "s" : ""} — view history
+                </div>
+              )}
+            </button>
+
             {/* Racial Traits & Features */}
             <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
               <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Features & Traits</div>
@@ -627,6 +659,15 @@ export function CharacterSheet({ onClose }: Props) {
             karma={character.karma}
             history={karmaHistory}
             onClose={() => setShowKarmaHistory(false)}
+          />
+        )}
+
+        {/* Fame History sub-modal */}
+        {showFameHistory && (
+          <FameHistory
+            fame={character.fame}
+            history={fameHistory}
+            onClose={() => setShowFameHistory(false)}
           />
         )}
       </div>

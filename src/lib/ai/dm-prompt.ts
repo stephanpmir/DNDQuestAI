@@ -20,7 +20,7 @@ export function buildSystemPrompt(
 ): string {
   // Build optional context sections
   const karmaSection = karmaData
-    ? "\n\n" + buildKarmaContext(karmaData.karma, karmaData.history)
+    ? "\n\n" + buildKarmaContext(karmaData.karma, karmaData.history, character.fame)
     : "";
 
   const companionSection = companions

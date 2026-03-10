@@ -1,7 +1,16 @@
 import type { Character } from "@/types/character";
 import type { EngineOutcome, WorldEvent } from "@/types/world";
 import { abilityCheck, attackRoll, damageRoll, modifier, d20 } from "./dice";
-import { detectKarmaAction, checkDivineIntervention, getItemAffinity } from "@/lib/karma";
+import {
+  detectKarmaAction,
+  checkDivineIntervention,
+  getItemAffinity,
+  applyKarmaDiminishing,
+  karmaRestDrift,
+  fameRestDecay,
+  scaledCombatFame,
+  CRIME_FAME_PENALTY,
+} from "@/lib/karma";
 import { detectCrime } from "@/lib/crimes";
 
 /** Action categories the engine can detect from player input. */
@@ -650,25 +659,43 @@ export function resolveAction(
       break;
   }
 
-  // ── Karma Detection ──────────────────────────────────────────
+  // ── Karma Detection (with diminishing returns at extremes) ──
+  const currentKarma = karma ?? character.karma ?? 0;
+  const currentFame = character.fame ?? 0;
   const karmaAction = detectKarmaAction(playerInput);
   if (karmaAction) {
+    // Apply diminishing returns: harder to push past |50| karma
+    const adjustedAmount = applyKarmaDiminishing(karmaAction.amount, currentKarma);
     outcome.karmaChange = {
       type: karmaAction.type,
-      amount: karmaAction.amount,
+      amount: adjustedAmount,
       description: playerInput.slice(0, 80),
     };
     // Notable actions (good or evil) increase fame — doing things gets you noticed
     const fameGain = Math.max(1, Math.floor(Math.abs(karmaAction.amount) / 2));
     outcome.fameChange = (outcome.fameChange ?? 0) + fameGain;
+    outcome.fameReason = karmaAction.amount > 0
+      ? "Your good deeds have been noticed"
+      : "Word of your actions spreads";
+    outcome.fameCategory = "social";
   }
 
-  // Combat victories and quest completions also increase fame
+  // Combat victories: fame scaled by level (prevents farming weak enemies)
   if (outcome.damageDealt && outcome.damageDealt > 0) {
-    outcome.fameChange = (outcome.fameChange ?? 0) + 1;
+    const combatFame = scaledCombatFame(character.level, currentFame);
+    if (combatFame > 0) {
+      outcome.fameChange = (outcome.fameChange ?? 0) + combatFame;
+      if (!outcome.fameReason) {
+        outcome.fameReason = "Victory in combat";
+        outcome.fameCategory = "combat";
+      }
+    }
   }
+  // Quest completions always grant fame
   if (outcome.completeQuest) {
     outcome.fameChange = (outcome.fameChange ?? 0) + 3;
+    outcome.fameReason = "Quest completed";
+    outcome.fameCategory = "quest";
   }
 
   // ── Crime Detection ─────────────────────────────────────────
@@ -679,10 +706,33 @@ export function resolveAction(
       description: playerInput.slice(0, 80),
       location: gameState.location,
     };
+    // Crimes reduce fame — getting caught doing bad things hurts reputation
+    const crimeFamePenalty = CRIME_FAME_PENALTY[crimeType] ?? -1;
+    outcome.fameChange = (outcome.fameChange ?? 0) + crimeFamePenalty;
+    outcome.fameReason = `Criminal act: ${crimeType}`;
+    outcome.fameCategory = "crime";
+  }
+
+  // ── Karma & Fame Drift on Rest ────────────────────────────
+  if (action === "rest" && !outcome.restDenied) {
+    const karmaDrift = karmaRestDrift(currentKarma);
+    if (karmaDrift !== 0) {
+      outcome.karmaChange = outcome.karmaChange ?? {
+        type: "pragmatic_choice",
+        amount: 0,
+        description: "Karma drifts toward neutral during rest",
+      };
+      outcome.karmaChange.amount += karmaDrift;
+    }
+    const fameDecay = fameRestDecay(currentFame);
+    if (fameDecay !== 0) {
+      outcome.fameChange = (outcome.fameChange ?? 0) + fameDecay;
+      outcome.fameReason = "Time passes — people forget";
+      outcome.fameCategory = "decay";
+    }
   }
 
   // ── Divine Intervention ──────────────────────────────────────
-  const currentKarma = karma ?? character.karma ?? 0;
   const divine = checkDivineIntervention(currentKarma, gameState.turnCount);
   if (divine && divine.source !== "none" && divine.type !== "none") {
     outcome.divineEffect = {

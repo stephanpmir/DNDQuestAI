@@ -138,6 +138,24 @@ export function detectKarmaAction(
   return null;
 }
 
+// ── Fame Event Types ─────────────────────────────────────────────
+
+export interface FameEvent {
+  amount: number;
+  reason: string;
+  category: "quest" | "combat" | "crime" | "social" | "decay";
+  turn: number;
+}
+
+/** Fame change amounts for different crime types */
+export const CRIME_FAME_PENALTY: Record<string, number> = {
+  theft: -2,
+  assault: -5,
+  murder: -10,
+  trespass: -1,
+  vandalism: -2,
+};
+
 // ── Karma Calculations ─────────────────────────────────────────
 
 /** Get alignment category from karma score */
@@ -280,6 +298,98 @@ export function checkDivineIntervention(karma: number, turnCount: number): Divin
   return null;
 }
 
+// ── Karma Drift & Diminishing Returns ─────────────────────────
+
+/**
+ * Apply diminishing returns to karma gain.
+ * The further you are toward an extreme, the less same-direction actions move you.
+ * Opposing-direction actions are amplified (easier to come back from extremes).
+ * Inspired by KOTOR's light/dark point scaling.
+ */
+export function applyKarmaDiminishing(baseAmount: number, currentKarma: number): number {
+  const sameDirection = Math.sign(baseAmount) === Math.sign(currentKarma);
+  const ratio = Math.abs(currentKarma) / 100;
+
+  if (sameDirection) {
+    // Same direction: diminishing — at karma ±100, gain only 20% of base
+    const factor = Math.max(0.2, 1 - ratio * 0.8);
+    return Math.round(baseAmount * factor);
+  }
+  // Opposing direction: amplified — at karma ±100, gain 150% of base
+  const factor = 1 + ratio * 0.5;
+  return Math.round(baseAmount * factor);
+}
+
+/**
+ * Karma drift toward neutral on rest.
+ * Stronger at extremes: karma * 0.95 (lose 5% of current value, minimum ±1).
+ * At karma ±10 or less, no drift (stable neutral zone).
+ */
+export function karmaRestDrift(currentKarma: number): number {
+  if (Math.abs(currentKarma) <= 10) return 0;
+  const drift = Math.sign(currentKarma) * -Math.max(1, Math.floor(Math.abs(currentKarma) * 0.05));
+  return drift;
+}
+
+/**
+ * Fame decay on rest. Lose 1 fame per rest if above 10.
+ * Fame cannot drop below a floor based on highest tier ever reached.
+ * Inspired by Ghostfire Gaming's monthly decay.
+ */
+export function fameRestDecay(currentFame: number): number {
+  if (currentFame <= 10) return 0;
+  return -1;
+}
+
+/**
+ * Scale combat fame by level gap.
+ * No fame for trivially easy fights (5+ levels below player).
+ * Diminishing returns at high fame (harder to gain when already famous).
+ * Inspired by D&D XP scaling and Demon's Souls tendency.
+ */
+export function scaledCombatFame(playerLevel: number, currentFame: number): number {
+  // Base fame from combat: 1 at low fame, scales down as fame grows
+  const fameDiminish = 1 / Math.log2(currentFame + 2);
+  const base = Math.max(0, Math.round(1 * fameDiminish));
+  // Since we don't track enemy CR individually, use player level as proxy:
+  // at high levels, basic encounters give less fame
+  if (playerLevel >= 10 && base <= 0) return 0;
+  return Math.max(0, base);
+}
+
+// ── Encounter Modifiers (Karma-Based) ─────────────────────────
+
+export interface KarmaEncounterModifiers {
+  /** Chance of bounty hunter encounter per rest (0-0.15) */
+  bountyHunterChance: number;
+  /** Who is hunting: paladins hunt evil, thieves hunt good */
+  bountyFaction: string;
+  /** How civilians react: helpful, neutral, fearful, hostile */
+  civilianBehavior: "helpful" | "neutral" | "fearful" | "hostile";
+  /** How authorities react */
+  authorityBehavior: "allied" | "neutral" | "suspicious" | "hostile";
+}
+
+export function getEncounterModifiers(karma: number): KarmaEncounterModifiers {
+  const ratio = karma / 100;
+  const absRatio = Math.abs(ratio);
+
+  return {
+    bountyHunterChance: absRatio > 0.5 ? (absRatio - 0.5) * 0.3 : 0,
+    bountyFaction: karma < 0 ? "Order of the Silver Shield" : "Shadow Guild",
+    civilianBehavior:
+      ratio > 0.6 ? "helpful" :
+      ratio > -0.3 ? "neutral" :
+      ratio > -0.7 ? "fearful" :
+      "hostile",
+    authorityBehavior:
+      ratio > 0.5 ? "allied" :
+      ratio > -0.2 ? "neutral" :
+      ratio > -0.6 ? "suspicious" :
+      "hostile",
+  };
+}
+
 // ── Item Affinity ──────────────────────────────────────────────
 
 /**
@@ -321,16 +431,29 @@ export function getItemAffinity(karma: number): ItemAffinity {
 // ── Karma Consequences for the DM Prompt ───────────────────────
 
 /** Generate the karma context string for the DM system prompt */
-export function buildKarmaContext(karma: number, history: KarmaEvent[]): string {
+export function buildKarmaContext(karma: number, history: KarmaEvent[], fame?: number): string {
   const alignment = getAlignment(karma);
   const trust = npcTrustModifier(karma);
   const recentEvents = history.slice(-5);
+  const mods = getEncounterModifiers(karma);
 
   const lines: string[] = [
     `## Karma & Alignment`,
     `- Karma Score: ${karma} (${ALIGNMENT_LABELS[alignment]})`,
     `- NPC Disposition: NPCs are ${trust} of this character`,
+    `- Civilians are ${mods.civilianBehavior} toward the player`,
+    `- Authorities are ${mods.authorityBehavior} toward the player`,
   ];
+
+  if (fame !== undefined) {
+    const fameTier = fame >= 75 ? "Legendary" : fame >= 50 ? "Renowned" : fame >= 30 ? "Well-Known" : fame >= 15 ? "Recognized" : "Unknown";
+    lines.push(`- Fame: ${fame} (${fameTier})`);
+    if (fame >= 50) {
+      lines.push("- The player is widely recognized. NPCs may reference their deeds (good or bad).");
+    } else if (fame >= 15) {
+      lines.push("- Some NPCs may have heard of the player.");
+    }
+  }
 
   if (karma >= 51) {
     lines.push("- Good-aligned NPCs offer help freely. Temples provide blessings. Merchants give discounts.");
@@ -341,9 +464,16 @@ export function buildKarmaContext(karma: number, history: KarmaEvent[]): string 
     lines.push("- NPCs are fearful or hostile. Guards watch closely. Some merchants refuse service.");
     lines.push("- Dark-aligned NPCs may approach with sinister offers.");
     lines.push("- The character's reputation precedes them — people know of their crimes.");
-    lines.push("- Bounty hunters or paladins may be hunting them.");
+    if (mods.bountyHunterChance > 0) {
+      lines.push(`- The ${mods.bountyFaction} may be hunting them. Bounty hunters could appear.`);
+    }
   } else if (karma <= -25) {
     lines.push("- NPCs are wary. Some refuse to deal with the character.");
+  }
+
+  // High positive karma can also attract enemies (thieves guild)
+  if (karma >= 51 && mods.bountyHunterChance > 0) {
+    lines.push(`- The ${mods.bountyFaction} views the player's heroism as a threat to their operations.`);
   }
 
   if (recentEvents.length > 0) {

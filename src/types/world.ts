@@ -89,6 +89,10 @@ export interface EngineOutcome {
   karmaChange?: { type: string; amount: number; description: string };
   /** Fame change from this action */
   fameChange?: number;
+  /** Reason for fame change (for history log) */
+  fameReason?: string;
+  /** Category of fame change */
+  fameCategory?: "quest" | "combat" | "crime" | "social" | "decay";
   /** Divine intervention effect */
   divineEffect?: {
     source: "good_god" | "evil_god";

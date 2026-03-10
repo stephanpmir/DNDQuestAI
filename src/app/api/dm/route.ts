@@ -266,6 +266,8 @@ export async function POST(request: Request) {
         : undefined,
       karmaChange: eo.karmaChange,
       fameChange: eo.fameChange,
+      fameReason: eo.fameReason,
+      fameCategory: eo.fameCategory,
       divineEffect: eo.divineEffect,
       crimeDetected: eo.crimeDetected,
       guardInvestigation: eo.guardInvestigation,

@@ -54,6 +54,7 @@ export function GameView() {
     karmaHistory,
     companions,
     addKarmaEvent,
+    addFameEvent,
     updateCompanionApproval,
   } = useKarmaStore();
 
@@ -171,6 +172,12 @@ export function GameView() {
         // Handle fame changes
         if (data.fameChange) {
           updateFromGameState({ fameChange: data.fameChange });
+          addFameEvent({
+            amount: data.fameChange,
+            reason: data.fameReason ?? (data.fameChange > 0 ? "Your deeds have been noticed" : "Your reputation has suffered"),
+            category: data.fameCategory ?? (data.fameChange > 0 ? "social" : "crime"),
+            turn: turnCount,
+          });
         }
 
         // Handle crime detection
@@ -302,6 +309,7 @@ export function GameView() {
       karmaHistory,
       companions,
       addKarmaEvent,
+      addFameEvent,
       updateCompanionApproval,
       crimes,
       addCrime,
