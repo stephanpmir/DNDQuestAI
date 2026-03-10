@@ -4,7 +4,8 @@ import { buildSystemPrompt, buildEngineContextMessage } from "@/lib/ai/dm-prompt
 import { parseDMResponse } from "@/lib/ai/parse-response";
 import { preGenerate, postGenerate } from "@/lib/engine/pipeline";
 import type { PipelineInput } from "@/lib/engine/pipeline";
-import { getRandomThemeForLevel } from "@/lib/campaigns";
+import { getRandomThemeForLevel, getRandomCampaign } from "@/lib/campaigns";
+import type { CampaignTheme } from "@/lib/campaigns";
 import type { Character } from "@/types/character";
 import type { GameState } from "@/types/game";
 import type { WorldEvent, NPC, LocationRecord } from "@/types/world";
@@ -116,6 +117,14 @@ export async function POST(request: Request) {
       );
     }
 
+    // ── Set starting location on first turn ────────────────────────
+    const isFirstTurn = gameState.turnCount <= 1 && gameState.location === "Unknown";
+    let campaignThemeStr = (character.campaignTheme ?? getRandomThemeForLevel(character.level)) as string;
+    if (isFirstTurn) {
+      const campaign = getRandomCampaign(campaignThemeStr as CampaignTheme);
+      gameState.location = campaign.startLocation;
+    }
+
     // ── PIPELINE STEPS 1-4: Pre-generation ────────────────────────
     const pipelineInput: PipelineInput = {
       playerAction: message,
@@ -138,7 +147,7 @@ export async function POST(request: Request) {
       gameState,
       karmaData ? { karma: karmaData.karma, history: karmaData.history as import("@/lib/karma").KarmaEvent[] } : undefined,
       karmaData?.companions as import("@/types/companion").Companion[] | undefined,
-      getRandomThemeForLevel(character.level)
+      campaignThemeStr
     );
 
     let narrative = "";
@@ -196,7 +205,7 @@ export async function POST(request: Request) {
         newItems: eo.itemsGained.length > 0 ? eo.itemsGained : undefined,
         removeItems: eo.itemsLost.length > 0 ? eo.itemsLost : undefined,
         goldChange: eo.goldChange || undefined,
-        locationChange: eo.locationChange,
+        locationChange: eo.locationChange ?? (isFirstTurn ? gameState.location : undefined),
         newQuest: eo.newQuest,
         completeQuest: eo.completeQuest,
         xpGained: eo.xpGained || undefined,

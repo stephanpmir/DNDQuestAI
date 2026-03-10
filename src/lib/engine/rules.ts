@@ -104,19 +104,62 @@ function levelScaledDC(baseDC: number, characterLevel: number): number {
  * Detect location changes from player input.
  * Only extract the actual destination name, cleaned up.
  */
-function detectLocationChange(playerInput: string): string | undefined {
-  const patterns = [
+/** Words that indicate a nearby/indoor destination — not overland travel */
+const LOCAL_DESTINATION_KEYWORDS = [
+  "inn", "tavern", "shop", "store", "market", "house", "home", "room",
+  "door", "building", "tent", "hut", "cabin", "shack", "barn", "stable",
+  "church", "temple", "shrine", "chapel", "library", "guild", "hall",
+  "castle", "keep", "tower", "dungeon", "cellar", "basement", "attic",
+  "upstairs", "downstairs", "inside", "back", "alley", "street", "square",
+  "courtyard", "garden", "warehouse", "forge", "smithy", "bakery",
+  "apothecary", "armory", "barracks", "jail", "prison", "throne",
+];
+
+interface LocationChange {
+  destination: string;
+  /** True if this is overland/long-distance travel vs entering a nearby place */
+  isTravel: boolean;
+}
+
+function detectLocationChange(playerInput: string): LocationChange | undefined {
+  const travelPatterns = [
     /\b(?:go to|travel to|head to|walk to|move to|return to)\s+(?:the\s+)?(.{2,40}?)(?:\.|$|,|!|\?)/i,
-    /\b(?:enter|visit)\s+(?:the\s+)?(.{2,40}?)(?:\.|$|,|!|\?)/i,
     /\b(?:go|travel|head|walk|move)\s+(?:into|inside|through)\s+(?:the\s+)?(.{2,40}?)(?:\.|$|,|!|\?)/i,
   ];
+  const localPatterns = [
+    /\b(?:enter|visit|step into|go inside|walk inside|go in)\s+(?:the\s+)?(.{2,40}?)(?:\.|$|,|!|\?)/i,
+    /\b(?:enter|go into|step into)\b/i,
+  ];
 
-  for (const pattern of patterns) {
+  // Check for explicit "enter/visit" — these are almost always local
+  let isLocalVerb = false;
+  for (const pattern of localPatterns) {
+    if (pattern.test(playerInput)) {
+      isLocalVerb = true;
+      break;
+    }
+  }
+
+  const allPatterns = [
+    ...travelPatterns,
+    /\b(?:enter|visit)\s+(?:the\s+)?(.{2,40}?)(?:\.|$|,|!|\?)/i,
+  ];
+
+  for (const pattern of allPatterns) {
     const match = playerInput.match(pattern);
     if (match?.[1]) {
       const dest = match[1].trim().replace(/\s+/g, " ");
       if (dest.length < 2) continue;
-      return dest.charAt(0).toUpperCase() + dest.slice(1);
+      const destination = dest.charAt(0).toUpperCase() + dest.slice(1);
+
+      // Determine if this is local movement or actual travel
+      const destLower = dest.toLowerCase();
+      const isLocalDest = LOCAL_DESTINATION_KEYWORDS.some(
+        (kw) => destLower.includes(kw)
+      );
+      const isTravel = !isLocalVerb && !isLocalDest;
+
+      return { destination, isTravel };
     }
   }
   return undefined;
@@ -344,9 +387,9 @@ export function resolveAction(
   };
 
   // Detect location changes for any action type
-  const destination = detectLocationChange(playerInput);
-  if (destination) {
-    outcome.locationChange = destination;
+  const locationInfo = detectLocationChange(playerInput);
+  if (locationInfo) {
+    outcome.locationChange = locationInfo.destination;
   }
 
   // ── Action validation — reject impossible/unrealistic actions ──
@@ -453,22 +496,26 @@ export function resolveAction(
     }
 
     case "explore": {
-      // If traveling to a destination, check for random encounter along the way
-      if (outcome.locationChange) {
+      // Only trigger travel encounters for actual overland travel, not local movement
+      // (e.g. entering an inn next to you should NOT trigger a wilderness encounter)
+      const isOverlandTravel = outcome.locationChange && locationInfo?.isTravel;
+      if (isOverlandTravel) {
         const encounterRoll = d20();
-        // 30% chance of encounter (roll 1-6 on d20)
+        // 30% chance of travel encounter (roll 1-6 on d20)
+        // Travel encounters are resolved in the background — no DC check shown
+        // to the player. The DM narrates the encounter seamlessly.
         if (encounterRoll <= 6) {
           const encounterType = getRandomTravelEncounter(character.level);
           outcome.travelEncounter = encounterType;
 
           if (encounterType.type === "combat") {
-            // Combat encounter on the road
+            // Combat encounter on the road — resolved silently
             const atkAbility = "strength" as const;
             const atkScore = character.abilityScores[atkAbility];
             const prof = proficiencyBonus(character.level);
             const enemy = scaledEnemy(character.level);
             const hit = attackRoll(atkScore, enemy.ac, prof);
-            outcome.roll = { ...hit, reason: `Travel encounter — ${encounterType.description}` };
+            // Don't set outcome.roll — travel encounters are narration-only
             if (hit.success) {
               const dmg = damageRoll(1, 8, modifier(atkScore));
               outcome.damageDealt = Math.max(1, dmg.total);
@@ -483,27 +530,18 @@ export function resolveAction(
               }
             }
           } else {
-            // Non-combat encounter — perception/wisdom check
+            // Non-combat encounter — resolved silently, DM narrates
             const dc = levelScaledDC(10, character.level);
             const prof = proficiencyBonus(character.level);
             const check = abilityCheck(character.abilityScores.wisdom, dc, "wisdom", prof);
-            outcome.roll = { ...check, reason: `Travel encounter — ${encounterType.description}` };
             if (check.success) {
               outcome.xpGained = explorationXpReward(character.level);
             }
           }
-        } else {
-          // Safe travel — just a perception check for the new area
-          const dc = levelScaledDC(10, character.level);
-          const prof = proficiencyBonus(character.level);
-          const perc = abilityCheck(character.abilityScores.wisdom, dc, "wisdom", prof);
-          outcome.roll = { ...perc, reason: "Perception check — surveying the new area" };
-          if (perc.success) {
-            outcome.xpGained = explorationXpReward(character.level);
-          }
         }
-      } else {
-        // Not traveling, just looking around
+        // Safe travel (no encounter) — no roll needed, just arrive
+      } else if (!outcome.locationChange) {
+        // Not traveling, just looking around locally
         const dc = levelScaledDC(10, character.level);
         const prof = proficiencyBonus(character.level);
         const perc = abilityCheck(character.abilityScores.wisdom, dc, "wisdom", prof);
@@ -512,6 +550,7 @@ export function resolveAction(
           outcome.xpGained = explorationXpReward(character.level);
         }
       }
+      // Local movement (entering a nearby building) — no roll, just go there
       break;
     }
 
