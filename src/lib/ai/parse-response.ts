@@ -1,4 +1,11 @@
-import type { DMResponsePayload } from "@/types/game";
+/**
+ * Parse the LLM response and extract ONLY the narrative text.
+ *
+ * Critical: The LLM is the NARRATOR, not the game master. We extract
+ * narrative text only. All gameStateUpdate, items, gold, XP, etc. come
+ * from the rules engine, never from the LLM. Any mechanical data the
+ * LLM tries to include is discarded.
+ */
 
 /**
  * Attempt JSON.parse, also handling Python-style single-quoted dicts.
@@ -9,7 +16,6 @@ function tryParseJSON(text: string): unknown | null {
   } catch {
     // ignore
   }
-  // Replace single quotes with double quotes (handles Python dict syntax)
   try {
     const fixed = text
       .replace(/'/g, '"')
@@ -23,90 +29,99 @@ function tryParseJSON(text: string): unknown | null {
 }
 
 /**
- * Normalize non-standard keys the model sometimes uses in gameStateUpdate.
+ * Extract narrative text from the LLM response.
+ * Returns ONLY { narrative, gameStateUpdate: {} }.
+ * gameStateUpdate is always empty — the engine decides state, not the LLM.
  */
-function normalizeGameState(
-  obj: Record<string, unknown>
-): DMResponsePayload["gameStateUpdate"] {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    // Map non-standard keys to our schema
-    if (key === "inventory" || key === "addItems" || key === "items") {
-      result.newItems = value;
-    } else if (key === "location" || key === "newLocation") {
-      result.locationChange = value;
-    } else if (key === "quest" || key === "addQuest") {
-      result.newQuest = value;
-    } else if (key === "hp" && typeof value === "number") {
-      result.hpChange = value;
-    } else if (key === "gold" && typeof value === "number") {
-      result.goldChange = value;
-    } else if (key === "xp" && typeof value === "number") {
-      result.xpGained = value;
-    } else {
-      result[key] = value;
-    }
-  }
-  return result as DMResponsePayload["gameStateUpdate"];
-}
+export function parseDMResponse(raw: string): { narrative: string; gameStateUpdate: Record<string, never> } {
+  let narrative = "";
 
-/**
- * Parse the AI DM response. Expects JSON, but gracefully handles
- * cases where the model wraps it in markdown fences, adds preamble,
- * or uses non-JSON formatting for the game state update.
- */
-function normalizePayload(obj: Record<string, unknown>): DMResponsePayload {
-  const payload = obj as unknown as DMResponsePayload;
-  if (payload.gameStateUpdate && typeof payload.gameStateUpdate === "object") {
-    payload.gameStateUpdate = normalizeGameState(
-      payload.gameStateUpdate as unknown as Record<string, unknown>
-    );
-  }
-  return payload;
-}
-
-export function parseDMResponse(raw: string): DMResponsePayload {
-  // Try direct JSON parse first
+  // Try direct JSON parse — extract "narrative" field only
   const direct = tryParseJSON(raw);
-  if (direct && typeof direct === "object" && "narrative" in (direct as Record<string, unknown>)) {
-    return normalizePayload(direct as Record<string, unknown>);
+  if (direct && typeof direct === "object") {
+    const obj = direct as Record<string, unknown>;
+    if (typeof obj.narrative === "string") {
+      narrative = obj.narrative;
+    }
   }
 
   // Try extracting from markdown code fences
-  const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenceMatch) {
-    const parsed = tryParseJSON(fenceMatch[1].trim());
-    if (parsed && typeof parsed === "object" && "narrative" in (parsed as Record<string, unknown>)) {
-      return normalizePayload(parsed as Record<string, unknown>);
+  if (!narrative) {
+    const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenceMatch) {
+      const parsed = tryParseJSON(fenceMatch[1].trim());
+      if (parsed && typeof parsed === "object") {
+        const obj = parsed as Record<string, unknown>;
+        if (typeof obj.narrative === "string") {
+          narrative = obj.narrative;
+        }
+      }
     }
   }
 
-  // Handle inline **gameStateUpdate**: {...} pattern the model sometimes uses
-  const inlineMatch = raw.match(/\*{0,2}gameStateUpdate\*{0,2}\s*[:=]\s*(\{[\s\S]*\})/i);
-  if (inlineMatch) {
-    const narrative = raw.slice(0, inlineMatch.index).replace(/\n+$/, "").trim();
-    const stateObj = tryParseJSON(inlineMatch[1]);
-    return {
-      narrative,
-      gameStateUpdate: stateObj
-        ? normalizeGameState(stateObj as Record<string, unknown>)
-        : {},
-    };
-  }
-
-  // Try finding a full JSON object with "narrative" key
-  const braceStart = raw.indexOf("{");
-  const braceEnd = raw.lastIndexOf("}");
-  if (braceStart !== -1 && braceEnd > braceStart) {
-    const parsed = tryParseJSON(raw.slice(braceStart, braceEnd + 1));
-    if (parsed && typeof parsed === "object" && "narrative" in (parsed as Record<string, unknown>)) {
-      return normalizePayload(parsed as Record<string, unknown>);
+  // Try finding a JSON object with "narrative" key in the raw text
+  if (!narrative) {
+    const braceStart = raw.indexOf("{");
+    const braceEnd = raw.lastIndexOf("}");
+    if (braceStart !== -1 && braceEnd > braceStart) {
+      const parsed = tryParseJSON(raw.slice(braceStart, braceEnd + 1));
+      if (parsed && typeof parsed === "object") {
+        const obj = parsed as Record<string, unknown>;
+        if (typeof obj.narrative === "string") {
+          narrative = obj.narrative;
+        }
+      }
     }
   }
 
-  // Couldn't parse structured data — return narrative only
-  return {
-    narrative: raw,
-    gameStateUpdate: {},
-  };
+  // Last resort: use raw text but strip any JSON/syntax artifacts
+  if (!narrative) {
+    narrative = raw;
+  }
+
+  // Clean the narrative of any syntax artifacts
+  narrative = cleanNarrative(narrative);
+
+  return { narrative, gameStateUpdate: {} };
+}
+
+/**
+ * Strip JSON syntax, code fences, gameStateUpdate blocks, markdown
+ * artifacts, and mechanical override text from the narrative.
+ */
+function cleanNarrative(text: string): string {
+  let cleaned = text;
+
+  // Remove code fences and their contents if they contain JSON
+  cleaned = cleaned.replace(/```(?:json)?[\s\S]*?```/g, "");
+
+  // Remove inline gameStateUpdate blocks (any format)
+  cleaned = cleaned.replace(/\*{0,2}gameStateUpdate\*{0,2}\s*[:=]\s*\{[\s\S]*?\}/gi, "");
+  cleaned = cleaned.replace(/\*{0,2}game_state_update\*{0,2}\s*[:=]\s*\{[\s\S]*?\}/gi, "");
+
+  // Remove suggestedActions / mentionedNpcs JSON arrays leaked into text
+  cleaned = cleaned.replace(/\*{0,2}suggestedActions\*{0,2}\s*[:=]\s*\[[\s\S]*?\]/gi, "");
+  cleaned = cleaned.replace(/\*{0,2}mentionedNpcs\*{0,2}\s*[:=]\s*\[[\s\S]*?\]/gi, "");
+  cleaned = cleaned.replace(/\*{0,2}locationDescription\*{0,2}\s*[:=]\s*"[^"]*"/gi, "");
+
+  // Remove mechanical override statements the LLM shouldn't make
+  // Items, gold, XP, levels, HP — the engine controls all of these
+  cleaned = cleaned.replace(
+    /\n?[*_]*\(?(?:You|Player)[\s:]*(?:gain|receive|find|pick up|loot|obtain|acquire|earn|get|are awarded|have been granted|level up to|advance to|reach level|are now level)\s+[\s\S]{1,80}?(?:\.|!|\))\)?[*_]*/gi,
+    ""
+  );
+
+  // Remove stray JSON keys that leaked into prose
+  cleaned = cleaned.replace(/"(?:narrative|gameStateUpdate|suggestedActions|mentionedNpcs|locationDescription)"\s*:/gi, "");
+
+  // Remove orphaned braces/brackets from stripped JSON
+  cleaned = cleaned.replace(/^\s*[{}\[\]]\s*$/gm, "");
+
+  // Remove trailing commas left from stripped content
+  cleaned = cleaned.replace(/,\s*$/gm, "");
+
+  // Collapse multiple blank lines into one
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
+
+  return cleaned.trim();
 }
