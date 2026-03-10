@@ -35,6 +35,8 @@ type ActionType =
   | "channel_divinity"
   | "wild_shape"
   | "flurry_of_blows"
+  | "lay_on_hands"
+  | "divine_smite"
   | "identify_item"
   | "self_harm"
   | "death_save"
@@ -49,6 +51,8 @@ const ACTION_PATTERNS: [RegExp, ActionType][] = [
   [/\b(channel divinity|turn undead|preserve life|destroy undead|radiance of the dawn)\b/i, "channel_divinity"],
   [/\b(wild shape|shapeshift|shift into|transform into .*(beast|animal|wolf|bear|spider|hawk|cat|rat|panther))\b/i, "wild_shape"],
   [/\b(flurry of blows|ki strike|ki attack|stunning strike|patient defense|step of the wind)\b/i, "flurry_of_blows"],
+  [/\b(lay on hands|laying on hands|heal with hands|divine healing touch)\b/i, "lay_on_hands"],
+  [/\b(divine smite|smite|holy smite|radiant smite)\b/i, "divine_smite"],
   [/\b(identify|appraise|examine closely|inspect item|study item)\b/i, "identify_item"],
   [/\b(attack|strike|hit|fight|slash|stab|shoot|swing)\b/i, "attack"],
   [/\b(cast|spell|magic|fireball|heal|cure)\b/i, "cast_spell"],
@@ -574,7 +578,8 @@ export function resolveAction(
       const isSpell = action === "cast_spell";
 
       // ── Healing spell detection: Cure Wounds, Healing Word, Goodberry, etc. ──
-      if (isSpell && /\b(cure wounds|healing word|heal|lay on hands|goodberry)\b/i.test(playerInput)) {
+      // Note: Lay on Hands is handled separately as a Paladin class feature
+      if (isSpell && /\b(cure wounds|healing word|heal|goodberry)\b/i.test(playerInput)) {
         const isCaster = FULL_CASTERS.includes(character.class) || HALF_CASTERS.includes(character.class);
         if (!isCaster) {
           outcome.actionDenied = {
@@ -1210,6 +1215,84 @@ export function resolveAction(
           const stunDC = 8 + profMonk + modifier(character.abilityScores.wisdom);
           outcome.roll = { ...outcome.roll, reason: `Stunning Strike — DC ${stunDC} CON save or stunned` };
         }
+      } else {
+        // Counterattack
+        const enemyRoll = d20();
+        const enemyTotal = enemyRoll + enemy.attackBonus;
+        if (enemyTotal >= character.ac) {
+          const enemyDmg = damageRoll(enemy.damageDice.count, enemy.damageDice.sides, enemy.damageBonus);
+          outcome.hpChange = -Math.max(1, enemyDmg.total);
+          outcome.damageTaken = Math.max(1, enemyDmg.total);
+        }
+      }
+      break;
+    }
+
+    case "lay_on_hands": {
+      // Paladin class feature: heal up to 5 × Paladin level HP (flat, no roll)
+      if (character.class !== "Paladin") {
+        outcome.actionDenied = {
+          reason: `Lay on Hands is a Paladin class feature. As a ${character.class}, you don't have this ability.`,
+          attempted: "use Lay on Hands",
+        };
+        break;
+      }
+      const healPool = 5 * character.level;
+      const healed = Math.min(healPool, character.maxHp - character.hp);
+      outcome.hpChange = healed;
+      outcome.roll = {
+        type: "check",
+        ability: "charisma",
+        rolled: healPool,
+        modifier: 0,
+        total: healPool,
+        dc: 0,
+        success: true,
+        reason: `Lay on Hands — ${healPool} HP healing pool (${healed} HP restored)`,
+      };
+      break;
+    }
+
+    case "divine_smite": {
+      // Paladin class feature: melee attack + extra radiant damage
+      if (character.class !== "Paladin") {
+        outcome.actionDenied = {
+          reason: `Divine Smite is a Paladin class feature. As a ${character.class}, you don't have this ability.`,
+          attempted: "use Divine Smite",
+        };
+        break;
+      }
+      if (character.level < 2) {
+        outcome.actionDenied = {
+          reason: "You haven't yet learned to channel divine energy into your strikes. Paladins gain Divine Smite at level 2.",
+          attempted: "use Divine Smite",
+        };
+        break;
+      }
+      // Melee attack + 2d8 radiant damage (scales: +1d8 per spell slot level above 1st)
+      const atkScore = character.abilityScores.strength;
+      const prof = proficiencyBonus(character.level);
+      const enemy = scaledEnemy(character.level);
+      const hit = attackRoll(atkScore, enemy.ac, prof, lucky);
+      outcome.roll = { ...hit, reason: "Divine Smite — holy strike" };
+      if (hit.success) {
+        const isCrit = hit.rolled === 20;
+        const weaponDmg = getWeaponDamage(character.equipped ?? []);
+        // Weapon damage + 2d8 radiant (3d8 vs undead, but we simplify)
+        const smiteDice = character.level >= 11 ? 4 : character.level >= 5 ? 3 : 2;
+        const weaponDice = isCrit ? weaponDmg.dice * 2 : weaponDmg.dice;
+        const smiteDiceCount = isCrit ? smiteDice * 2 : smiteDice;
+        let totalDiceCount = weaponDice + smiteDiceCount;
+        // Half-Orc Savage Attacks on crit
+        if (isCrit && character.race === "Half-Orc") totalDiceCount += 1;
+        const atkMod = modifier(atkScore);
+        // Roll weapon damage
+        const weapDmgRoll = damageRoll(weaponDice, weaponDmg.sides, atkMod);
+        // Roll smite damage (d8 radiant)
+        const smiteDmgRoll = damageRoll(smiteDiceCount, 8, 0);
+        outcome.damageDealt = Math.max(1, weapDmgRoll.total + smiteDmgRoll.total);
+        outcome.isCriticalHit = isCrit;
+        outcome.xpGained = combatXpReward(character.level);
       } else {
         // Counterattack
         const enemyRoll = d20();
