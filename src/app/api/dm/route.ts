@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { buildSystemPrompt } from "@/lib/ai/dm-prompt";
 import { parseDMResponse } from "@/lib/ai/parse-response";
 import type { Character } from "@/types/character";
 import type { GameState } from "@/types/game";
 
-const anthropic = new Anthropic();
+const client = new OpenAI({
+  baseURL: "https://api.cerebras.ai/v1",
+  apiKey: process.env.CEREBRAS_API_KEY,
+});
 
 interface RequestBody {
   message: string;
@@ -28,7 +31,8 @@ export async function POST(request: Request) {
 
     const systemPrompt = buildSystemPrompt(character, gameState);
 
-    const messages: Anthropic.MessageParam[] = [
+    const messages: OpenAI.ChatCompletionMessageParam[] = [
+      { role: "system", content: systemPrompt },
       ...history.map((h) => ({
         role: h.role as "user" | "assistant",
         content: h.content,
@@ -36,16 +40,13 @@ export async function POST(request: Request) {
       { role: "user", content: message },
     ];
 
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1024,
-      system: systemPrompt,
+    const response = await client.chat.completions.create({
+      model: "llama-3.3-70b",
       messages,
+      max_tokens: 1024,
     });
 
-    const rawText =
-      response.content[0].type === "text" ? response.content[0].text : "";
-
+    const rawText = response.choices[0]?.message?.content ?? "";
     const parsed = parseDMResponse(rawText);
 
     return NextResponse.json(parsed);
