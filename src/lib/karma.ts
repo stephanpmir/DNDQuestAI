@@ -170,6 +170,56 @@ export function npcTrustModifier(karma: number): "trusted" | "normal" | "suspici
   return "feared";
 }
 
+/**
+ * NPC fame-based disposition check.
+ *
+ * When a new NPC is introduced, they "roll" against the player's fame
+ * to see if they've heard of the player. If they recognize the player,
+ * karma determines whether that recognition is positive or negative.
+ *
+ * Fame check: d20 vs DC (20 - fame/5). Higher fame = easier to recognize.
+ *   - Fame 0:   DC 20 (virtually impossible to recognize)
+ *   - Fame 25:  DC 15
+ *   - Fame 50:  DC 10
+ *   - Fame 75:  DC 5
+ *   - Fame 100: DC 0 (everyone knows you)
+ *
+ * If recognized:
+ *   - Karma > 25:  friendly (they've heard good things)
+ *   - Karma -25–25: cautious (they've heard rumors, unsure)
+ *   - Karma < -25:  hostile (they've heard bad things / fear you)
+ *
+ * If not recognized: neutral (no opinion, treat normally)
+ */
+export type NpcDisposition = "friendly" | "neutral" | "cautious" | "hostile";
+
+export function computeNpcDisposition(fame: number, karma: number): {
+  disposition: NpcDisposition;
+  recognized: boolean;
+  fameRoll: number;
+  fameDC: number;
+} {
+  const fameDC = Math.max(0, 20 - Math.floor(fame / 5));
+  const fameRoll = Math.floor(Math.random() * 20) + 1;
+  const recognized = fameRoll >= fameDC;
+
+  if (!recognized) {
+    return { disposition: "neutral", recognized: false, fameRoll, fameDC };
+  }
+
+  // They've heard of you — karma determines their attitude
+  let disposition: NpcDisposition;
+  if (karma > 25) {
+    disposition = "friendly";
+  } else if (karma < -25) {
+    disposition = "hostile";
+  } else {
+    disposition = "cautious";
+  }
+
+  return { disposition, recognized: true, fameRoll, fameDC };
+}
+
 /** Divine favor — good gods help good players, evil god helps evil players */
 export interface DivineEffect {
   source: "good_god" | "evil_god" | "none";

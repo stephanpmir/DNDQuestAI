@@ -117,7 +117,8 @@ export function preGenerate(input: PipelineInput): PreGenerationResult {
     chatHistory,
     currentLocation,
     gameState.questLog,
-    events
+    events,
+    npcs
   );
 
   const formattedContext = formatContextForPrompt(assembledContext);

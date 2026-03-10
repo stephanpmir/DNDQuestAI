@@ -56,6 +56,14 @@ export interface DMResponsePayload {
   };
   /** New NPCs detected */
   newNpcs?: string[];
+  /** Dispositions computed for new NPCs based on fame/karma check */
+  npcDispositions?: {
+    name: string;
+    disposition: "friendly" | "neutral" | "cautious" | "hostile";
+    recognized: boolean;
+    fameRoll: number;
+    fameDC: number;
+  }[];
   /** Number of contradictions caught */
   contradictions?: number;
   /** Karma change from this action */

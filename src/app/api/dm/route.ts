@@ -10,6 +10,7 @@ import type { Character } from "@/types/character";
 import type { GameState } from "@/types/game";
 import type { WorldEvent, NPC, LocationRecord } from "@/types/world";
 import type { Fact } from "@/lib/engine/fact-ledger";
+import { computeNpcDisposition } from "@/lib/karma";
 
 function getClient(): OpenAI {
   const apiKey = process.env.CEREBRAS_API_KEY;
@@ -228,6 +229,13 @@ export async function POST(request: Request) {
         promotedAnchors: postResult.promotedAnchors,
       },
       newNpcs: postResult.newNpcs.length > 0 ? postResult.newNpcs : undefined,
+      // Compute dispositions for newly introduced NPCs based on fame/karma
+      npcDispositions: postResult.newNpcs.length > 0
+        ? postResult.newNpcs.map((name) => {
+            const result = computeNpcDisposition(character.fame, character.karma);
+            return { name, ...result };
+          })
+        : undefined,
       contradictions: postResult.contradictions.length > 0
         ? postResult.contradictions.length
         : undefined,

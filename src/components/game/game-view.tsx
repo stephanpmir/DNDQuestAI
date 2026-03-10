@@ -41,6 +41,7 @@ export function GameView() {
     facts,
     addEvent,
     registerNpc,
+    updateNpcDisposition,
     visitLocation,
     addFacts,
     bumpFactReferences,
@@ -176,10 +177,16 @@ export function GameView() {
           }
         }
 
-        // Register new NPCs
+        // Register new NPCs with fame-based dispositions
         if (data.newNpcs) {
           for (const npcName of data.newNpcs) {
             registerNpc(npcName, turnCount, location);
+          }
+          // Apply computed dispositions from fame/karma check
+          if (data.npcDispositions) {
+            for (const npcDisp of data.npcDispositions) {
+              updateNpcDisposition(npcDisp.name, npcDisp.disposition, npcDisp.recognized);
+            }
           }
         }
 
@@ -250,6 +257,7 @@ export function GameView() {
       bumpFactReferences,
       promoteToAnchor,
       registerNpc,
+      updateNpcDisposition,
       visitLocation,
       karmaHistory,
       companions,

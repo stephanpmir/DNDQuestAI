@@ -32,7 +32,9 @@ export interface NPC {
   firstMetTurn: number;
   lastSeenTurn: number;
   location: string;
-  disposition: "friendly" | "neutral" | "hostile" | "unknown";
+  disposition: "friendly" | "neutral" | "cautious" | "hostile" | "unknown";
+  /** Whether this NPC recognized the player by fame */
+  recognizedPlayer?: boolean;
   notes: string[];
 }
 

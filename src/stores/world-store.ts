@@ -19,7 +19,7 @@ interface WorldStore {
 
   // ── NPCs ──
   registerNpc: (name: string, turn: number, location: string) => void;
-  updateNpcDisposition: (name: string, disposition: NPC["disposition"]) => void;
+  updateNpcDisposition: (name: string, disposition: NPC["disposition"], recognized?: boolean) => void;
 
   // ── Locations ──
   visitLocation: (name: string, turn: number, description?: string) => void;
@@ -85,11 +85,11 @@ export const useWorldStore = create<WorldStore>()(
           };
         }),
 
-      updateNpcDisposition: (name, disposition) =>
+      updateNpcDisposition: (name, disposition, recognized) =>
         set((s) => ({
           npcs: s.npcs.map((n) =>
             n.name.toLowerCase() === name.toLowerCase()
-              ? { ...n, disposition }
+              ? { ...n, disposition, recognizedPlayer: recognized ?? n.recognizedPlayer }
               : n
           ),
         })),

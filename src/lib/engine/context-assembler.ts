@@ -38,6 +38,8 @@ export interface AssembledContext {
   };
   /** Retrieved facts relevant to the current action */
   retrieved: string[];
+  /** NPC disposition summaries for the DM */
+  npcDispositions: string[];
   /** Total estimated token count */
   estimatedTokens: number;
 }
@@ -69,7 +71,8 @@ export function assembleContext(
   recentMessages: { role: string; content: string }[],
   currentLocation: LocationRecord | null,
   activeQuests: string[],
-  recentEvents: WorldEvent[]
+  recentEvents: WorldEvent[],
+  knownNpcs?: NPC[]
 ): AssembledContext {
   // ── TIER 1: ANCHORS ──────────────────────────────────────────────
   const anchorFacts = getAnchors(facts);
@@ -127,11 +130,32 @@ export function assembleContext(
     }
   }
 
+  // ── NPC Dispositions ────────────────────────────────────────────
+  const npcDispositions: string[] = [];
+  if (knownNpcs && knownNpcs.length > 0) {
+    const dispositionLabels: Record<string, string> = {
+      friendly: "friendly — has heard good things about the player",
+      cautious: "cautious — has heard rumors, unsure of the player",
+      hostile: "hostile — fears or distrusts the player based on reputation",
+      neutral: "neutral — does not recognize the player",
+      unknown: "unknown — no prior interaction",
+    };
+    // Only include NPCs at current location or recently seen
+    for (const npc of knownNpcs.slice(-10)) {
+      if (npc.disposition !== "unknown") {
+        const label = dispositionLabels[npc.disposition] ?? npc.disposition;
+        const recognized = npc.recognizedPlayer ? " (recognized by fame)" : "";
+        npcDispositions.push(`${npc.name}: ${label}${recognized}`);
+      }
+    }
+  }
+
   const estimatedTokens = anchorTokens +
     estimateTokens(recentDialogue.map((m) => m.content).join(" ")) +
     estimateTokens(currentScene) +
     estimateTokens(activeQuestDetails.join(" ")) +
-    retrievalTokens;
+    retrievalTokens +
+    estimateTokens(npcDispositions.join(" "));
 
   return {
     anchors,
@@ -141,6 +165,7 @@ export function assembleContext(
       activeQuestDetails,
     },
     retrieved,
+    npcDispositions,
     estimatedTokens,
   };
 }
@@ -165,6 +190,13 @@ export function formatContextForPrompt(ctx: AssembledContext): string {
   if (ctx.slidingWindow.activeQuestDetails.length > 0) {
     parts.push(
       `## Active Quests\n${ctx.slidingWindow.activeQuestDetails.map((q) => `- ${q}`).join("\n")}`
+    );
+  }
+
+  // NPC dispositions
+  if (ctx.npcDispositions.length > 0) {
+    parts.push(
+      `## NPC Dispositions (use these to guide NPC behavior)\n${ctx.npcDispositions.map((d) => `- ${d}`).join("\n")}`
     );
   }
 
