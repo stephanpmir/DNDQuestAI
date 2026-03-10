@@ -136,6 +136,8 @@ export interface Character {
   campaignId?: string;
   /** Avatar appearance customization */
   avatar: AvatarCustomization;
+  /** AI-generated avatar image (base64 data URL) */
+  avatarUrl?: string;
   /** Beginner survey answers (undefined if skipped) */
   beginnerSurvey?: BeginnerSurvey;
 }

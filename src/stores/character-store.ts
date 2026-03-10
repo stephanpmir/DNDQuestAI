@@ -20,6 +20,7 @@ interface CharacterStore {
   setFightingStyle: (style: string) => void;
   setHalfElfBonuses: (bonuses: [string, string]) => void;
   setAvatar: (avatar: Partial<AvatarCustomization>) => void;
+  setAvatarUrl: (url: string) => void;
   setBeginnerSurvey: (survey: BeginnerSurvey) => void;
   finalizeCharacter: () => void;
   equipItem: (item: string) => void;
@@ -149,6 +150,9 @@ export const useCharacterStore = create<CharacterStore>()(
             avatar: { ...s.character.avatar, ...avatar },
           },
         })),
+
+      setAvatarUrl: (url) =>
+        set((s) => ({ character: { ...s.character, avatarUrl: url } })),
 
       setBeginnerSurvey: (survey) =>
         set((s) => ({ character: { ...s.character, beginnerSurvey: survey } })),

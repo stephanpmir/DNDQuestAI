@@ -22,6 +22,7 @@ import { StepSurvey } from "./step-survey";
 import { CharacterAvatar } from "./character-avatar";
 import { StepSuggestion } from "./step-suggestion";
 import { recommend, type SurveyRecommendation } from "@/lib/survey-recommend";
+import { generateAvatar } from "@/lib/avatar";
 
 const STEP_LABELS = [
   "Welcome",
@@ -59,6 +60,7 @@ export function CharacterWizard() {
     setFightingStyle,
     setHalfElfBonuses,
     setAvatar,
+    setAvatarUrl,
     setBeginnerSurvey,
     finalizeCharacter,
   } = useCharacterStore();
@@ -120,17 +122,30 @@ export function CharacterWizard() {
     }
 
     // Random avatar
-    setAvatar({
+    const avatarData = {
       hairStyle: pickRandom(HAIR_STYLES),
       hairColor: pickRandom(HAIR_COLORS).value,
       skinTone: pickRandom(SKIN_TONES).value,
       bodyBuild: pickRandom(BODY_BUILDS),
       height: pickRandom(HEIGHT_OPTIONS),
-    });
+    };
+    setAvatar(avatarData);
 
     resetGame();
     resetWorld();
     resetKarma();
+
+    // Fire avatar generation in background
+    generateAvatar({
+      ...useCharacterStore.getState().character,
+      name: profile.name,
+      gender: profile.gender,
+      race: profile.race,
+      class: profile.class,
+      avatar: { ...useCharacterStore.getState().character.avatar, ...avatarData },
+    }).then((url) => {
+      if (url) setAvatarUrl(url);
+    });
 
     setTimeout(() => {
       finalizeCharacter();
@@ -204,6 +219,12 @@ export function CharacterWizard() {
     resetWorld();
     resetKarma();
 
+    // Fire avatar generation in background (don't block navigation)
+    const charSnapshot = { ...character };
+    generateAvatar(charSnapshot).then((url) => {
+      if (url) setAvatarUrl(url);
+    });
+
     setTimeout(() => {
       finalizeCharacter();
       router.push("/game");
@@ -268,17 +289,31 @@ export function CharacterWizard() {
     }
 
     // Random avatar customization
-    setAvatar({
+    const avatarData = {
       hairStyle: pickRandom(HAIR_STYLES),
       hairColor: pickRandom(HAIR_COLORS).value,
       skinTone: pickRandom(SKIN_TONES).value,
       bodyBuild: pickRandom(BODY_BUILDS),
       height: pickRandom(HEIGHT_OPTIONS),
-    });
+    };
+    setAvatar(avatarData);
 
     resetGame();
     resetWorld();
     resetKarma();
+
+    // Fire avatar generation in background
+    const charName = useCharacterStore.getState().character.name;
+    generateAvatar({
+      ...useCharacterStore.getState().character,
+      name: charName,
+      gender,
+      race,
+      class: cls,
+      avatar: { ...useCharacterStore.getState().character.avatar, ...avatarData },
+    }).then((url) => {
+      if (url) setAvatarUrl(url);
+    });
 
     setTimeout(() => {
       finalizeCharacter();

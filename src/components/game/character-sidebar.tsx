@@ -46,14 +46,22 @@ export function CharacterSidebar() {
   return (
     <>
       <div className="h-full flex flex-col bg-card border border-border/50 rounded-lg text-card-foreground text-sm overflow-hidden">
-        {/* Character identity — icon left of name */}
+        {/* Character identity — avatar + name */}
         <div className="px-4 pt-4 pb-2 bg-gradient-to-b from-muted/80 to-transparent">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-b from-primary/30 to-primary/10 border-2 border-primary/40 flex items-center justify-center shrink-0">
-              <span className="text-xl font-black text-primary/70">
-                {character.name ? character.name.charAt(0).toUpperCase() : "?"}
-              </span>
-            </div>
+            {character.avatarUrl ? (
+              <img
+                src={character.avatarUrl}
+                alt={`${character.name} portrait`}
+                className="w-12 h-12 rounded-full object-cover border-2 border-primary/40 shrink-0"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-gradient-to-b from-primary/30 to-primary/10 border-2 border-primary/40 flex items-center justify-center shrink-0">
+                <span className="text-xl font-black text-primary/70">
+                  {character.name ? character.name.charAt(0).toUpperCase() : "?"}
+                </span>
+              </div>
+            )}
             <div className="min-w-0">
               <div className="text-lg font-bold tracking-tight truncate">{character.name}</div>
               <div className="text-xs text-muted-foreground">
