@@ -2,6 +2,8 @@
 
 import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
+import { useKarmaStore } from "@/stores/karma-store";
+import { getAlignment, ALIGNMENT_LABELS } from "@/lib/karma";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +56,11 @@ const CATEGORY_ICONS: Record<ItemCategory, string> = {
 export function CharacterSidebar() {
   const { character } = useCharacterStore();
   const { location, questLog } = useGameStore();
+  const { companions } = useKarmaStore();
+
+  const alignment = getAlignment(character.karma);
+  const alignmentLabel = ALIGNMENT_LABELS[alignment];
+  const activeCompanions = companions.filter((c) => c.isRecruited && !c.hasLeft);
 
   const hpPercent = character.maxHp
     ? Math.round((character.hp / character.maxHp) * 100)
@@ -131,7 +138,7 @@ export function CharacterSidebar() {
           </div>
         )}
 
-        {/* AC / Gold stat boxes */}
+        {/* AC / Gold / Karma stat boxes */}
         <div className="flex gap-2">
           <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
             <div className="text-[10px] text-muted-foreground uppercase tracking-wider">AC</div>
@@ -140,6 +147,19 @@ export function CharacterSidebar() {
           <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
             <div className="text-[10px] text-amber-400/80 uppercase tracking-wider">Gold</div>
             <div className="text-lg font-black text-amber-400 leading-tight">{character.gold}</div>
+          </div>
+        </div>
+
+        {/* Karma / Alignment indicator */}
+        <div className="text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Karma</div>
+          <div className={cn(
+            "text-sm font-bold leading-tight",
+            character.karma > 25 ? "text-emerald-400" :
+            character.karma < -25 ? "text-red-400" :
+            "text-gray-400"
+          )}>
+            {character.karma > 0 ? "+" : ""}{character.karma} ({alignmentLabel})
           </div>
         </div>
       </div>
@@ -220,6 +240,38 @@ export function CharacterSidebar() {
           <div className="text-xs text-muted-foreground italic">Empty</div>
         )}
       </div>
+
+      {/* Companions */}
+      {activeCompanions.length > 0 && (
+        <>
+          <Separator className="my-2" />
+          <div className="px-4">
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Companions</div>
+            <ul className="space-y-1">
+              {activeCompanions.map((comp) => (
+                <li key={comp.id} className="text-xs bg-muted/30 rounded px-2 py-1 border border-border/20">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold truncate">{comp.name}</span>
+                    <span className={cn(
+                      "text-[10px]",
+                      comp.disposition === "loyal" ? "text-emerald-400" :
+                      comp.disposition === "friendly" ? "text-green-400" :
+                      comp.disposition === "neutral" ? "text-gray-400" :
+                      comp.disposition === "wary" ? "text-orange-400" :
+                      "text-red-400"
+                    )}>
+                      {comp.disposition}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {comp.race} {comp.class} L{comp.level} | HP: {comp.hp}/{comp.maxHp}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </>
+      )}
 
       {/* Quests */}
       {questLog.length > 0 && (

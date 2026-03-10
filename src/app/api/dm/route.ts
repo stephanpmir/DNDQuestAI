@@ -34,6 +34,12 @@ interface RequestBody {
     locations: LocationRecord[];
     facts: Fact[];
   };
+  /** Karma system data */
+  karmaData?: {
+    karma: number;
+    history: { type: string; amount: number; description: string; turn: number }[];
+    companions: { id: string; name: string; race: string; class: string; level: number; hp: number; maxHp: number; primaryMod: number; approval: number; disposition: string; moralLeaning: string; personality: { approves: string[]; disapproves: string[]; trait: string; ideal: string; flaw: string; bond: string }; backstory: string; isRecruited: boolean; hasLeft: boolean; recruitedTurn: number; personalQuest?: string; personalQuestComplete: boolean }[];
+  };
 }
 
 const MAX_REGENERATION_ATTEMPTS = 1;
@@ -100,7 +106,7 @@ async function callWithRetry(
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as RequestBody;
-    const { message, character, gameState, history, worldState } = body;
+    const { message, character, gameState, history, worldState, karmaData } = body;
 
     if (!message || !character || !gameState) {
       return NextResponse.json(
@@ -119,13 +125,20 @@ export async function POST(request: Request) {
       events: worldState?.events ?? [],
       npcs: worldState?.npcs ?? [],
       locations: worldState?.locations ?? [],
+      karma: karmaData?.karma ?? character.karma ?? 0,
     };
 
     const preResult = preGenerate(pipelineInput);
 
     // ── PIPELINE STEP 5: LLM Generation ───────────────────────────
     const client = getClient();
-    const systemPrompt = buildSystemPrompt(character, gameState);
+    const systemPrompt = buildSystemPrompt(
+      character,
+      gameState,
+      karmaData ? { karma: karmaData.karma, history: karmaData.history as import("@/lib/karma").KarmaEvent[] } : undefined,
+      karmaData?.companions as import("@/types/companion").Companion[] | undefined,
+      character.campaignTheme
+    );
 
     let narrative = "";
     let postResult = null;
@@ -208,6 +221,8 @@ export async function POST(request: Request) {
       contradictions: postResult.contradictions.length > 0
         ? postResult.contradictions.length
         : undefined,
+      karmaChange: eo.karmaChange,
+      divineEffect: eo.divineEffect,
     });
   } catch (error: unknown) {
     const errMsg =

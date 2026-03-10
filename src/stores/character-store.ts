@@ -11,6 +11,7 @@ interface CharacterStore {
   setRace: (race: Race) => void;
   setClass: (cls: CharacterClass) => void;
   setAbilityScores: (scores: AbilityScores) => void;
+  setCampaignTheme: (theme: string) => void;
   finalizeCharacter: () => void;
   updateFromGameState: (updates: {
     hpChange?: number;
@@ -20,6 +21,7 @@ interface CharacterStore {
     xpGained?: number;
     lastRestTurn?: number;
     deathSaveResult?: "nat20" | "nat1" | "success" | "failure";
+    karmaChange?: number;
   }) => void;
   reset: () => void;
 }
@@ -108,6 +110,9 @@ export const useCharacterStore = create<CharacterStore>()(
 
       setAbilityScores: (scores) =>
         set((s) => ({ character: { ...s.character, abilityScores: scores } })),
+
+      setCampaignTheme: (theme) =>
+        set((s) => ({ character: { ...s.character, campaignTheme: theme } })),
 
       finalizeCharacter: () =>
         set((s) => {
@@ -222,6 +227,11 @@ export const useCharacterStore = create<CharacterStore>()(
               c.maxHp = newMaxHp;
               c.hp = Math.min(c.maxHp, c.hp + hpIncrease);
             }
+          }
+
+          // Karma
+          if (updates.karmaChange) {
+            c.karma = Math.max(-100, Math.min(100, c.karma + updates.karmaChange));
           }
 
           return { character: c };

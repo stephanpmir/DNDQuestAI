@@ -81,6 +81,15 @@ export interface EngineOutcome {
   damageTaken?: number;
   /** Player tried to use an item they don't have */
   itemNotFound?: boolean;
+  /** Karma change from this action */
+  karmaChange?: { type: string; amount: number; description: string };
+  /** Divine intervention effect */
+  divineEffect?: {
+    source: "good_god" | "evil_god";
+    type: "blessing" | "punishment" | "temptation";
+    description: string;
+    rollModifier: number;
+  };
 }
 
 /** What the LLM receives to narrate — it does NOT decide outcomes. */

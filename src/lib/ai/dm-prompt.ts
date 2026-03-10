@@ -1,6 +1,11 @@
 import type { Character } from "@/types/character";
 import type { GameState } from "@/types/game";
 import type { EngineOutcome } from "@/types/world";
+import type { Companion } from "@/types/companion";
+import type { KarmaEvent } from "@/lib/karma";
+import { buildKarmaContext } from "@/lib/karma";
+import { buildCompanionContext } from "@/types/companion";
+import { getThemeNarrationProfile, type CampaignTheme } from "@/lib/campaigns";
 
 /**
  * System prompt — defines the LLM's role as NARRATOR only.
@@ -8,8 +13,32 @@ import type { EngineOutcome } from "@/types/world";
  */
 export function buildSystemPrompt(
   character: Character,
-  gameState: Pick<GameState, "location" | "questLog" | "turnCount">
+  gameState: Pick<GameState, "location" | "questLog" | "turnCount">,
+  karmaData?: { karma: number; history: KarmaEvent[] },
+  companions?: Companion[],
+  campaignTheme?: string
 ): string {
+  // Build optional context sections
+  const karmaSection = karmaData
+    ? "\n\n" + buildKarmaContext(karmaData.karma, karmaData.history)
+    : "";
+
+  const companionSection = companions
+    ? "\n\n" + buildCompanionContext(companions)
+    : "";
+
+  let campaignSection = "";
+  if (campaignTheme) {
+    const profile = getThemeNarrationProfile(campaignTheme as CampaignTheme);
+    if (profile) {
+      campaignSection = `\n\n## Campaign Tone
+- Theme: ${profile.theme}
+- Narrative Style: ${profile.narrativeInstructions}
+- Non-Combat Encounters: ${profile.nonCombatEncounters.join(", ")}
+- Consequence Style: ${profile.consequenceStyle}`;
+    }
+  }
+
   return `You are the Narrator for a solo D&D 5e campaign. You do NOT decide game mechanics — a rules engine handles all dice rolls, damage, item changes, and state updates. Your job is to write vivid, engaging narrative text that describes what happens based on the engine's decisions.
 
 ## Player Character
@@ -28,6 +57,7 @@ export function buildSystemPrompt(
 - Location: ${gameState.location || "Unknown"}
 - Turn: ${gameState.turnCount}
 - Active Quests: ${gameState.questLog.length > 0 ? gameState.questLog.join("; ") : "None"}
+${karmaSection}${companionSection}${campaignSection}
 
 ## Critical Rules
 1. You are the NARRATOR, not the game master. The engine decides outcomes.
@@ -36,12 +66,15 @@ export function buildSystemPrompt(
 4. Do NOT invent mechanical effects. NEVER write things like "you gain 50 gold", "you find a sword", "you level up", "you earn 100 XP", "you receive a potion". The engine controls ALL items, gold, XP, levels, and HP. Your narrative must NEVER declare the player gaining, losing, or receiving anything.
 5. NEVER contradict the "Permanent Facts" section. These are absolute truth.
 6. Reference established NPCs by name when they're present.
-7. Be vivid and engaging. Describe scenes, NPCs, and combat with flair.
+7. Be vivid and engaging. Describe scenes, NPCs, and combat with flair. Prioritize narration, puzzles, dialogue, and moral dilemmas over pure combat.
 8. Do NOT list suggested actions, options, or choices. Do NOT write "You could...", "What do you do?", numbered lists of actions, or any form of menu. Let the player decide freely. The ONLY exception is if the Engine Outcome contains a "MANDATORY ESCALATION" section — then and only then, weave the hint naturally into the narrative.
 9. Keep responses under 250 words.
 10. Write ONLY narrative prose. No code, no JSON keys, no markdown formatting like ** or __ in the narrative text itself. Pure storytelling.
 11. Do NOT begin your narrative with a state summary, recap, or preamble. Jump straight into the scene. Never start with "As a level X...", "Currently at...", "With your HP at...", or any mechanical state description. Start with what is HAPPENING in the story.
 12. On the very first turn, introduce a clear quest or objective for the player within the opening narration — a mission, a mystery, a call to action.
+13. When companions are present, weave them into the scene. They speak, react, and have opinions about the player's choices. Use their personality traits.
+14. Reflect the player's karma alignment in how NPCs react, how the world responds, and in the tone of narration. Evil players face distrust and hostility from good NPCs. Good players receive warmth and aid.
+15. When divine intervention occurs, describe it vividly — divine blessings as radiant warmth, divine punishment as cold dread, dark temptation as shadowy whispers.
 
 ## Response Format
 Respond with valid JSON containing ONLY this field:
@@ -128,6 +161,13 @@ export function buildEngineContextMessage(
   }
   if (o.itemNotFound) {
     outcomeParts.push("ITEM NOT FOUND: The player tried to use an item they don't have. Narrate that they reach for it but can't find it.");
+  }
+  if (o.karmaChange) {
+    const direction = o.karmaChange.amount > 0 ? "GOOD" : "EVIL";
+    outcomeParts.push(`Karma Shift: ${direction} action detected (${o.karmaChange.type}). Narrate subtle moral weight — NPCs notice, the world reacts.`);
+  }
+  if (o.divineEffect) {
+    outcomeParts.push(`DIVINE INTERVENTION: ${o.divineEffect.description} (${o.divineEffect.type} from ${o.divineEffect.source === "good_god" ? "the gods of light" : "dark powers"}, roll modifier ${o.divineEffect.rollModifier > 0 ? "+" : ""}${o.divineEffect.rollModifier})`);
   }
 
   if (outcomeParts.length > 0) {

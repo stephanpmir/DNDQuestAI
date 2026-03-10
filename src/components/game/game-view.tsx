@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
 import { useWorldStore } from "@/stores/world-store";
+import { useKarmaStore } from "@/stores/karma-store";
 import type { ChatMessage as ChatMessageType, DMResponsePayload } from "@/types/game";
 import type { WorldEvent } from "@/types/world";
 import { ChatMessage } from "./chat-message";
@@ -47,6 +48,13 @@ export function GameView() {
     initializeAnchors,
   } = useWorldStore();
 
+  const {
+    karmaHistory,
+    companions,
+    addKarmaEvent,
+    updateCompanionApproval,
+  } = useKarmaStore();
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoStartFired = useRef(false);
 
@@ -85,6 +93,11 @@ export function GameView() {
             gameState: { location, questLog, turnCount },
             history,
             worldState: { events, npcs, locations, facts },
+            karmaData: {
+              karma: character.karma,
+              history: karmaHistory,
+              companions,
+            },
           }),
         });
 
@@ -119,6 +132,18 @@ export function GameView() {
         const eo = data.engineOutcome;
         if (eo?.deathSaveResult) {
           updateFromGameState({ deathSaveResult: eo.deathSaveResult });
+        }
+
+        // Handle karma changes
+        if (data.karmaChange) {
+          updateFromGameState({ karmaChange: data.karmaChange.amount });
+          addKarmaEvent({
+            type: data.karmaChange.type as import("@/lib/karma").KarmaActionType,
+            amount: data.karmaChange.amount,
+            description: data.karmaChange.description,
+            turn: turnCount,
+          });
+          updateCompanionApproval(data.karmaChange.type);
         }
 
         // Apply fact ledger updates
@@ -207,6 +232,10 @@ export function GameView() {
       promoteToAnchor,
       registerNpc,
       visitLocation,
+      karmaHistory,
+      companions,
+      addKarmaEvent,
+      updateCompanionApproval,
     ]
   );
 

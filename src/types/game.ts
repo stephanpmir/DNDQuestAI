@@ -54,4 +54,13 @@ export interface DMResponsePayload {
   newNpcs?: string[];
   /** Number of contradictions caught */
   contradictions?: number;
+  /** Karma change from this action */
+  karmaChange?: { type: string; amount: number; description: string };
+  /** Divine intervention that occurred */
+  divineEffect?: {
+    source: "good_god" | "evil_god";
+    type: "blessing" | "punishment" | "temptation";
+    description: string;
+    rollModifier: number;
+  };
 }

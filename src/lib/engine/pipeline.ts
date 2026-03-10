@@ -44,6 +44,8 @@ export interface PipelineInput {
   npcs: NPC[];
   /** Known locations */
   locations: LocationRecord[];
+  /** Current karma score for rules engine */
+  karma?: number;
 }
 
 /** The result after steps 1-4 (everything before LLM call) */
@@ -96,7 +98,7 @@ export function preGenerate(input: PipelineInput): PreGenerationResult {
   const referencedFactIds = referencedFacts.map((f) => f.id);
 
   // STEP 3: Resolve — deterministic rules engine
-  const engineOutcome = resolveAction(playerAction, character, gameState, events);
+  const engineOutcome = resolveAction(playerAction, character, gameState, events, input.karma);
 
   // Check escalation
   const escalation = checkEscalation(events, gameState.location);
@@ -211,6 +213,29 @@ export function postGenerate(
       "event",
       `${character.name} fell unconscious`,
       [character.name.toLowerCase()],
+      { isAnchor: true }
+    ));
+  }
+
+  // Karma-related facts
+  if (engineOutcome.karmaChange) {
+    const karmaDir = engineOutcome.karmaChange.amount > 0 ? "good" : "evil";
+    newFacts.push(createFact(
+      `${turnId}_karma`,
+      gameState.turnCount,
+      "event",
+      `${character.name} performed a ${karmaDir} act: ${engineOutcome.karmaChange.type}`,
+      [character.name.toLowerCase(), "karma"]
+    ));
+  }
+
+  if (engineOutcome.divineEffect) {
+    newFacts.push(createFact(
+      `${turnId}_divine`,
+      gameState.turnCount,
+      "event",
+      `Divine intervention: ${engineOutcome.divineEffect.description}`,
+      [character.name.toLowerCase(), "divine"],
       { isAnchor: true }
     ));
   }

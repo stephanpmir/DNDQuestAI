@@ -1,6 +1,7 @@
 import type { Character } from "@/types/character";
 import type { EngineOutcome, WorldEvent } from "@/types/world";
 import { abilityCheck, attackRoll, damageRoll, modifier, d20 } from "./dice";
+import { detectKarmaAction, checkDivineIntervention, getItemAffinity } from "@/lib/karma";
 
 /** Action categories the engine can detect from player input. */
 type ActionType =
@@ -147,7 +148,8 @@ export function resolveAction(
   playerInput: string,
   character: Character,
   gameState: { location: string; questLog: string[]; turnCount: number },
-  recentEvents: WorldEvent[]
+  recentEvents: WorldEvent[],
+  karma?: number
 ): EngineOutcome {
   const action = detectAction(playerInput, character);
   const outcome: EngineOutcome = {
@@ -360,6 +362,37 @@ export function resolveAction(
     case "unknown":
       // Purely narrative — no mechanical effect
       break;
+  }
+
+  // ── Karma Detection ──────────────────────────────────────────
+  const karmaAction = detectKarmaAction(playerInput);
+  if (karmaAction) {
+    outcome.karmaChange = {
+      type: karmaAction.type,
+      amount: karmaAction.amount,
+      description: playerInput.slice(0, 80),
+    };
+  }
+
+  // ── Divine Intervention ──────────────────────────────────────
+  const currentKarma = karma ?? character.karma ?? 0;
+  const divine = checkDivineIntervention(currentKarma, gameState.turnCount);
+  if (divine && divine.source !== "none" && divine.type !== "none") {
+    outcome.divineEffect = {
+      source: divine.source as "good_god" | "evil_god",
+      type: divine.type as "blessing" | "punishment" | "temptation",
+      description: divine.description,
+      rollModifier: divine.rollModifier,
+    };
+  }
+
+  // ── Item Affinity Modifiers (evil = harder, good = more gold) ──
+  const affinity = getItemAffinity(currentKarma);
+  if (affinity.powerBonus > 0 && outcome.damageDealt) {
+    outcome.damageDealt += affinity.powerBonus;
+  }
+  if (affinity.goldMultiplier !== 1.0 && outcome.goldChange > 0) {
+    outcome.goldChange = Math.round(outcome.goldChange * affinity.goldMultiplier);
   }
 
   return outcome;

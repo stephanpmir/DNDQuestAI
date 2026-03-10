@@ -63,6 +63,12 @@ export interface Character {
   isUnconscious: boolean;
   /** Is the character dead (3 death save failures)? */
   isDead: boolean;
+  /** Karma score: -100 (evil) to +100 (good), starts at 0 */
+  karma: number;
+  /** Selected campaign theme */
+  campaignTheme?: string;
+  /** Selected campaign template ID */
+  campaignId?: string;
 }
 
 /** D&D 5e XP thresholds for levels 1-20 */
@@ -104,5 +110,6 @@ export function createDefaultCharacter(): Character {
     deathSaves: { successes: 0, failures: 0 },
     isUnconscious: false,
     isDead: false,
+    karma: 0,
   };
 }

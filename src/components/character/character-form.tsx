@@ -5,6 +5,7 @@ import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
 import { useWorldStore } from "@/stores/world-store";
 import { GENDERS, RACES, CLASSES } from "@/types/character";
+import { CAMPAIGN_THEMES, THEME_LABELS, THEME_DESCRIPTIONS } from "@/lib/campaigns";
 import { MAX_NAME_LENGTH } from "@/lib/constants";
 import { AbilityScorePicker } from "./ability-score-picker";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ export function CharacterForm() {
     setRace,
     setClass,
     setAbilityScores,
+    setCampaignTheme,
     finalizeCharacter,
   } = useCharacterStore();
   const resetGame = useGameStore((s) => s.reset);
@@ -149,6 +151,36 @@ export function CharacterForm() {
             scores={character.abilityScores}
             onChange={setAbilityScores}
           />
+        </CardContent>
+      </Card>
+
+      {/* Campaign Theme */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Campaign Theme</CardTitle>
+          <CardDescription>
+            Choose the type of adventure you want to experience.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Select
+            value={character.campaignTheme ?? "dungeon_crawl"}
+            onValueChange={(v) => setCampaignTheme(v ?? "dungeon_crawl")}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CAMPAIGN_THEMES.map((theme) => (
+                <SelectItem key={theme} value={theme}>
+                  {THEME_LABELS[theme]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {THEME_DESCRIPTIONS[(character.campaignTheme ?? "dungeon_crawl") as typeof CAMPAIGN_THEMES[number]]}
+          </p>
         </CardContent>
       </Card>
 
