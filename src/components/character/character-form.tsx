@@ -114,8 +114,7 @@ export function CharacterForm() {
         <CardHeader>
           <CardTitle>Ability Scores</CardTitle>
           <CardDescription>
-            Assign the standard array (15, 14, 13, 12, 10, 8) to your
-            abilities.
+            Roll 4d6, drop the lowest die for each ability.
           </CardDescription>
         </CardHeader>
         <CardContent>

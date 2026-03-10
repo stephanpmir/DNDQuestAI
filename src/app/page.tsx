@@ -17,7 +17,7 @@ export default function HomePage() {
           <CardDescription className="text-base">
             A solo AI-powered D&D 5e adventure.
             <br />
-            Claude is your Dungeon Master.
+            Your AI Dungeon Master awaits.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

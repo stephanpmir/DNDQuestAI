@@ -23,6 +23,12 @@ export function buildSystemPrompt(
 - Turn: ${gameState.turnCount}
 - Active Quests: ${gameState.questLog.length > 0 ? gameState.questLog.join("; ") : "None"}
 
+## Difficulty Scaling
+The player's ability scores were rolled with 4d6-drop-lowest. Adjust difficulty accordingly:
+- If scores are below average (total modifier < 0): give the player luck bonuses — friendly NPCs, fortunate finds, merciful encounters, and near-misses in combat.
+- If scores are above average (total modifier > +6): increase encounter difficulty — smarter enemies, more traps, scarcer resources, and tougher moral choices.
+- Average characters get standard D&D 5e balance.
+
 ## Rules
 1. Be vivid and engaging. Describe scenes, NPCs, and combat with flair.
 2. Follow D&D 5e rules loosely — roll dice internally when needed.

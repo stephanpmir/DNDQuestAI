@@ -5,10 +5,18 @@ import { parseDMResponse } from "@/lib/ai/parse-response";
 import type { Character } from "@/types/character";
 import type { GameState } from "@/types/game";
 
-const client = new OpenAI({
-  baseURL: "https://api.cerebras.ai/v1",
-  apiKey: process.env.CEREBRAS_API_KEY,
-});
+function getClient(): OpenAI {
+  const apiKey = process.env.CEREBRAS_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "CEREBRAS_API_KEY is not set. Add it to your environment variables."
+    );
+  }
+  return new OpenAI({
+    baseURL: "https://api.cerebras.ai/v1",
+    apiKey,
+  });
+}
 
 interface RequestBody {
   message: string;
@@ -24,11 +32,12 @@ export async function POST(request: Request) {
 
     if (!message || !character || !gameState) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Missing required fields: message, character, and gameState are all required." },
         { status: 400 }
       );
     }
 
+    const client = getClient();
     const systemPrompt = buildSystemPrompt(character, gameState);
 
     const messages: OpenAI.ChatCompletionMessageParam[] = [
@@ -50,10 +59,13 @@ export async function POST(request: Request) {
     const parsed = parseDMResponse(rawText);
 
     return NextResponse.json(parsed);
-  } catch (error) {
-    console.error("DM API error:", error);
+  } catch (error: unknown) {
+    const errMsg =
+      error instanceof Error ? error.message : "Unknown error occurred";
+    console.error("DM API error:", errMsg, error);
+
     return NextResponse.json(
-      { error: "Failed to get DM response" },
+      { error: `DM API failed: ${errMsg}` },
       { status: 500 }
     );
   }

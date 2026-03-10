@@ -40,23 +40,23 @@ export function GameView() {
     }
   }, [messages]);
 
-  const sendToDM = useCallback(
-    async (userMessage: string) => {
+  const callDMApi = useCallback(
+    async (message: string, showUserMessage: boolean) => {
       setLoading(true);
 
-      // Add user message
-      const userMsg: ChatMessageType = {
-        id: generateId(),
-        role: "user",
-        narrative: userMessage,
-        timestamp: Date.now(),
-      };
-      addMessage(userMsg);
+      if (showUserMessage) {
+        const userMsg: ChatMessageType = {
+          id: generateId(),
+          role: "user",
+          narrative: message,
+          timestamp: Date.now(),
+        };
+        addMessage(userMsg);
+      }
       incrementTurn();
 
       try {
-        // Build history for context (last 20 messages)
-        const history = [...messages, userMsg].slice(-20).map((m) => ({
+        const history = messages.slice(-20).map((m) => ({
           role: m.role,
           content: m.narrative,
         }));
@@ -65,15 +65,17 @@ export function GameView() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            message: userMessage,
+            message,
             character,
             gameState: { location, questLog, turnCount },
-            history: history.slice(0, -1), // exclude the user msg we already send as `message`
+            history,
           }),
         });
 
         if (!res.ok) {
-          throw new Error(`DM API returned ${res.status}`);
+          const errorBody = await res.json().catch(() => null);
+          const detail = errorBody?.error ?? `HTTP ${res.status}`;
+          throw new Error(detail);
         }
 
         const data: DMResponsePayload = await res.json();
@@ -102,12 +104,13 @@ export function GameView() {
         };
         addMessage(dmMsg);
       } catch (err) {
-        console.error("Error calling DM:", err);
+        const errorMessage =
+          err instanceof Error ? err.message : "Unknown error";
+        console.error("Error calling DM:", errorMessage, err);
         addMessage({
           id: generateId(),
           role: "assistant",
-          narrative:
-            "*(The Dungeon Master seems momentarily distracted... Please try again.)*",
+          narrative: `**Error:** ${errorMessage}\n\n*Check that CEREBRAS_API_KEY is set in your environment variables and the /api/dm endpoint is deployed correctly.*`,
           timestamp: Date.now(),
         });
       } finally {
@@ -130,15 +133,21 @@ export function GameView() {
     ]
   );
 
-  // Start campaign on first load
+  const sendToDM = useCallback(
+    (message: string) => callDMApi(message, true),
+    [callDMApi]
+  );
+
+  // Auto-start campaign — DM intro fires without showing a user message
   useEffect(() => {
     if (!campaignStarted && character.name) {
       setCampaignStarted(true);
-      sendToDM(
-        `I am ${character.name}, a ${character.race} ${character.class}. Begin my adventure! Set the scene and give me my first quest.`
+      callDMApi(
+        `I am ${character.name}, a ${character.race} ${character.class}. Begin my adventure! Set the scene and give me my first quest.`,
+        false
       );
     }
-  }, [campaignStarted, character.name, character.race, character.class, setCampaignStarted, sendToDM]);
+  }, [campaignStarted, character.name, character.race, character.class, setCampaignStarted, callDMApi]);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] gap-4 p-4">

@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "DNDQuestAI — AI Dungeon Master",
   description:
-    "A solo AI-powered D&D 5e adventure where Claude is your Dungeon Master.",
+    "A solo AI-powered D&D 5e adventure with an AI Dungeon Master.",
 };
 
 export default function RootLayout({
