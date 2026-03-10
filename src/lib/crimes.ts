@@ -181,9 +181,15 @@ export function detectCrime(playerInput: string): CrimeType | null {
     return "murder";
   }
 
-  // Theft / stealing
-  if (/\b(steal|take|pocket|pilfer|swipe|grab|snatch|pickpocket|loot|rob)\b/.test(lower) &&
-      !/\b(from (the )?enemy|from (the )?(goblin|bandit|orc|monster|creature|undead|demon))\b/.test(lower)) {
+  // Theft / stealing — only flag words that inherently imply crime,
+  // or "take/grab" when combined with explicitly criminal context.
+  // "take" and "grab" alone are neutral (accepting items, picking up quest items, etc.)
+  const isExplicitTheft = /\b(steal|pilfer|swipe|snatch|pickpocket|rob|shoplift)\b/.test(lower);
+  const isTakeWithCriminalIntent = /\b(take|grab|pocket|loot)\b/.test(lower) &&
+    /\b(without paying|secretly|sneakily|while.*not looking|from (the )?(shop|store|stall|merchant|shopkeeper|counter|display|shelf|chest|vault|safe|treasury))\b/.test(lower);
+  const isFromEnemy = /\b(from (the )?enemy|from (the )?(goblin|bandit|orc|monster|creature|undead|demon))\b/.test(lower);
+
+  if ((isExplicitTheft || isTakeWithCriminalIntent) && !isFromEnemy) {
     return "theft";
   }
 
