@@ -185,6 +185,31 @@ export function buildEngineContextMessage(
   if (o.guardConfrontation) {
     outcomeParts.push(`GUARD CONFRONTATION: Guards have identified the player for a ${o.guardConfrontation.crimeType} committed at ${o.guardConfrontation.crimeLocation}. They approach the player to confront them. Narrate a tense encounter — guards demand surrender, threaten arrest, or engage in a standoff. The player can fight, flee, or talk their way out.`);
   }
+  if (o.tradeResult) {
+    if (o.tradeResult.success) {
+      if (o.tradeResult.type === "buy") {
+        outcomeParts.push(`TRADE: Player BOUGHT "${o.tradeResult.item}" for ${o.tradeResult.price} gold. Narrate the merchant handing over the item and taking the coin.`);
+      } else {
+        outcomeParts.push(`TRADE: Player SOLD "${o.tradeResult.item}" for ${o.tradeResult.price} gold. Narrate the merchant inspecting the item and paying.`);
+      }
+    } else {
+      outcomeParts.push(`TRADE FAILED: Player tried to ${o.tradeResult.type} "${o.tradeResult.item}" but failed. Reason: ${o.tradeResult.reason}. Narrate the merchant explaining the issue — not enough gold, item not in stock, etc.`);
+    }
+  }
+  if (o.pickupResult) {
+    if (o.pickupResult.success) {
+      outcomeParts.push(`PICKUP: Player picked up "${o.pickupResult.item}". Narrate them grabbing/collecting it.`);
+    } else {
+      outcomeParts.push(`PICKUP ATTEMPT: Player tried to pick up something but no specific item was identified. Narrate what they find (or don't find) in the scene.`);
+    }
+  }
+  if (o.dropResult) {
+    if (o.dropResult.success) {
+      outcomeParts.push(`DROP: Player dropped "${o.dropResult.item}". Narrate them discarding or leaving the item behind.`);
+    } else {
+      outcomeParts.push(`DROP FAILED: Player tried to drop "${o.dropResult.item}" but doesn't have it. Narrate the confusion.`);
+    }
+  }
 
   if (outcomeParts.length > 0) {
     parts.push(`## Engine Outcome (incorporate these EXACTLY)\n${outcomeParts.join("\n")}`);

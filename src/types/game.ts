@@ -98,4 +98,23 @@ export interface DMResponsePayload {
     crimeType: string;
     crimeLocation: string;
   };
+  /** Trade result */
+  tradeResult?: {
+    type: "buy" | "sell";
+    item: string;
+    price: number;
+    success: boolean;
+    reason?: string;
+  };
+  /** Item pickup result */
+  pickupResult?: {
+    item: string;
+    success: boolean;
+    reason?: string;
+  };
+  /** Item drop result */
+  dropResult?: {
+    item: string;
+    success: boolean;
+  };
 }

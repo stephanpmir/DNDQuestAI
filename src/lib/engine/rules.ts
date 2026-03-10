@@ -10,8 +10,10 @@ import {
   fameRestDecay,
   scaledCombatFame,
   CRIME_FAME_PENALTY,
+  shopPriceModifier,
 } from "@/lib/karma";
 import { detectCrime } from "@/lib/crimes";
+import { getItemInfo, getBuyPrice, getSellPrice } from "@/lib/items";
 
 /** Action categories the engine can detect from player input. */
 type ActionType =
@@ -23,6 +25,8 @@ type ActionType =
   | "rest"
   | "trade"
   | "use_item"
+  | "pickup"
+  | "drop_item"
   | "self_harm"
   | "death_save"
   | "unknown";
@@ -35,6 +39,8 @@ const ACTION_PATTERNS: [RegExp, ActionType][] = [
   [/\b(rest|sleep|camp|long rest|short rest)\b/i, "rest"],
   [/\b(talk|speak|ask|greet|negotiate|converse|say)\b/i, "talk"],
   [/\b(buy|sell|trade|shop|purchase|barter)\b/i, "trade"],
+  [/\b(pick up|grab|take|loot|collect|gather)\b/i, "pickup"],
+  [/\b(drop|discard|throw away|leave behind|abandon)\s/i, "drop_item"],
   [/\b(use|drink|eat|equip|open|read)\b/i, "use_item"],
   [/\b(explore|look around|examine|enter|go to|travel|move|walk|head)\b/i, "explore"],
 ];
@@ -590,7 +596,89 @@ export function resolveAction(
     }
 
     case "trade": {
-      // Trade interactions are narrative — no mechanical effect from engine
+      // Detect buy or sell intent and resolve mechanically
+      const lower = playerInput.toLowerCase();
+      const priceModifier = shopPriceModifier(karma ?? character.karma ?? 0);
+
+      // Detect if buying or selling
+      const isSelling = /\b(sell|unload|offload|get rid of)\b/i.test(lower);
+      const isBuying = /\b(buy|purchase)\b/i.test(lower);
+
+      // Extract item name from input
+      const ignoreTradeWords = new Set(["buy", "sell", "trade", "purchase", "barter", "shop", "the", "a", "an", "some", "my", "from", "to", "at", "for", "this", "that", "merchant", "shopkeeper", "vendor", "trader"]);
+      const tradeWords = lower.replace(/[^a-z\s]/g, "").split(/\s+/).filter(w => w.length > 1 && !ignoreTradeWords.has(w));
+
+      if (isSelling) {
+        // Try to find matching item in inventory
+        const matchedItem = character.inventory.find((item) => {
+          const itemLow = item.toLowerCase();
+          return tradeWords.some(term => itemLow.includes(term));
+        });
+        if (matchedItem) {
+          const sellPrice = getSellPrice(matchedItem, priceModifier);
+          outcome.itemsLost = [matchedItem];
+          outcome.goldChange = sellPrice;
+          outcome.tradeResult = { type: "sell", item: matchedItem, price: sellPrice, success: true };
+        } else {
+          outcome.tradeResult = { type: "sell", item: tradeWords.join(" "), price: 0, success: false, reason: "Item not found in inventory" };
+        }
+      } else if (isBuying) {
+        // Try to find item in database
+        const searchTerm = tradeWords.join(" ");
+        const itemInfo = getItemInfo(searchTerm);
+        if (itemInfo) {
+          const buyPrice = getBuyPrice(itemInfo.name, priceModifier);
+          if (character.gold >= buyPrice) {
+            outcome.itemsGained = [itemInfo.name.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")];
+            outcome.goldChange = -buyPrice;
+            outcome.tradeResult = { type: "buy", item: itemInfo.name, price: buyPrice, success: true };
+          } else {
+            outcome.tradeResult = { type: "buy", item: itemInfo.name, price: buyPrice, success: false, reason: "Not enough gold" };
+          }
+        } else {
+          // Unknown item — let the DM narrate, no mechanical effect
+          outcome.tradeResult = { type: "buy", item: searchTerm, price: 0, success: false, reason: "Item not available" };
+        }
+      }
+      // Generic "trade" or "shop" without buy/sell — purely narrative
+      break;
+    }
+
+    case "pickup": {
+      // Pickup is narrative — the DM decides what's available to pick up
+      // Engine just signals the intent; actual item granting comes from DM context
+      const lower = playerInput.toLowerCase();
+      const ignorePickupWords = new Set(["pick", "up", "grab", "take", "loot", "collect", "gather", "the", "a", "an", "some", "this", "that", "it"]);
+      const pickupWords = lower.replace(/[^a-z\s]/g, "").split(/\s+/).filter(w => w.length > 1 && !ignorePickupWords.has(w));
+      const searchTerm = pickupWords.join(" ");
+      const itemInfo = searchTerm ? getItemInfo(searchTerm) : null;
+
+      if (itemInfo) {
+        const itemName = itemInfo.name.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+        outcome.itemsGained = [itemName];
+        outcome.pickupResult = { item: itemName, success: true };
+      } else {
+        // Can't identify specific item — DM handles narratively
+        outcome.pickupResult = { item: searchTerm || "unknown", success: false, reason: "Let the DM describe what you find" };
+      }
+      break;
+    }
+
+    case "drop_item": {
+      // Drop an item from inventory
+      const lower = playerInput.toLowerCase();
+      const ignoreDropWords = new Set(["drop", "discard", "throw", "away", "leave", "behind", "abandon", "the", "a", "an", "my", "this", "that"]);
+      const dropWords = lower.replace(/[^a-z\s]/g, "").split(/\s+/).filter(w => w.length > 1 && !ignoreDropWords.has(w));
+      const matchedItem = character.inventory.find((item) => {
+        const itemLow = item.toLowerCase();
+        return dropWords.some(term => itemLow.includes(term));
+      });
+      if (matchedItem) {
+        outcome.itemsLost = [matchedItem];
+        outcome.dropResult = { item: matchedItem, success: true };
+      } else {
+        outcome.dropResult = { item: dropWords.join(" "), success: false };
+      }
       break;
     }
 

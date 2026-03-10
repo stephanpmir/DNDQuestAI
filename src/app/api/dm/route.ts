@@ -272,6 +272,9 @@ export async function POST(request: Request) {
       crimeDetected: eo.crimeDetected,
       guardInvestigation: eo.guardInvestigation,
       guardConfrontation: eo.guardConfrontation,
+      tradeResult: eo.tradeResult,
+      pickupResult: eo.pickupResult,
+      dropResult: eo.dropResult,
     });
   } catch (error: unknown) {
     const errMsg =
