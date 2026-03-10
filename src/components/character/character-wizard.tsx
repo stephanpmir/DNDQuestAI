@@ -6,7 +6,7 @@ import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
 import { useWorldStore } from "@/stores/world-store";
 import { useKarmaStore } from "@/stores/karma-store";
-import type { CharacterClass, Race, Gender } from "@/types/character";
+import type { CharacterClass, Race } from "@/types/character";
 import { RACES, CLASSES } from "@/types/character";
 import { CLASS_DATA, FIGHTING_STYLES } from "@/lib/classes";
 import { generateRandomName } from "@/lib/descriptions";
@@ -18,6 +18,7 @@ import { StepClass } from "./step-class";
 import { StepAbilities } from "./step-abilities";
 import { StepSkills } from "./step-skills";
 import { StepReview } from "./step-review";
+import { CharacterAvatar } from "./character-avatar";
 
 const STEP_LABELS = [
   "Welcome",
@@ -213,95 +214,114 @@ export function CharacterWizard() {
 
   const progress = Math.round((step / (STEP_LABELS.length - 1)) * 100);
 
-  return (
-    <div className="space-y-4 max-w-lg mx-auto">
-      {/* Progress bar */}
-      {step > 0 && (
-        <div className="space-y-1">
-          <div className="flex justify-between text-[10px] text-muted-foreground">
-            <span>Step {step} of {STEP_LABELS.length - 1}</span>
-            <span>{STEP_LABELS[step]}</span>
-          </div>
-          <Progress value={progress} />
-        </div>
-      )}
+  const showAvatar = step >= 1;
 
-      {/* Steps */}
-      {step === 0 && (
-        <StepWelcome
-          onNext={() => setStep(1)}
-          onQuickStart={handleQuickStart}
-        />
-      )}
-      {step === 1 && (
-        <StepIdentity
-          name={character.name}
-          gender={character.gender}
-          onNameChange={setName}
-          onGenderChange={setGender}
-          onNext={() => setStep(2)}
-          onBack={() => setStep(0)}
-        />
-      )}
-      {step === 2 && (
-        <StepRace
-          selectedRace={character.race}
-          halfElfBonus1={halfElfBonus1}
-          halfElfBonus2={halfElfBonus2}
-          onRaceChange={handleRaceChange}
-          onHalfElfBonus1Change={setHalfElfBonus1}
-          onHalfElfBonus2Change={setHalfElfBonus2}
-          onNext={() => setStep(3)}
-          onBack={() => setStep(1)}
-        />
-      )}
-      {step === 3 && (
-        <StepClass
-          selectedClass={character.class}
-          onClassChange={handleClassChange}
-          onNext={() => setStep(4)}
-          onBack={() => setStep(2)}
-        />
-      )}
-      {step === 4 && (
-        <StepAbilities
-          scores={character.abilityScores}
-          race={character.race}
-          halfElfBonuses={
-            character.race === "Half-Elf"
-              ? [halfElfBonus1, halfElfBonus2].filter(Boolean)
-              : []
-          }
-          onChange={setAbilityScores}
-          onNext={() => setStep(5)}
-          onBack={() => setStep(3)}
-        />
-      )}
-      {step === 5 && (
-        <StepSkills
-          characterClass={character.class}
-          selectedSkills={selectedSkills}
-          selectedCantrips={selectedCantrips}
-          selectedSpells={selectedSpells}
-          selectedFightingStyle={selectedFightingStyle}
-          onToggleSkill={toggleSkill}
-          onToggleCantrip={toggleCantrip}
-          onToggleSpell={toggleSpell}
-          onFightingStyleChange={setSelectedFightingStyle}
-          onNext={() => setStep(6)}
-          onBack={() => setStep(4)}
-        />
-      )}
-      {step === 6 && (
-        <StepReview
-          character={character}
-          selectedSkills={selectedSkills}
-          selectedCantrips={selectedCantrips}
-          selectedSpells={selectedSpells}
-          selectedFightingStyle={selectedFightingStyle}
-          onBack={() => setStep(5)}
-          onSubmit={handleSubmit}
-        />
+  return (
+    <div className="flex justify-center gap-8 max-w-4xl mx-auto">
+      {/* Main wizard column */}
+      <div className="space-y-4 w-full max-w-lg">
+        {/* Progress bar */}
+        {step > 0 && (
+          <div className="space-y-1">
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>Step {step} of {STEP_LABELS.length - 1}</span>
+              <span>{STEP_LABELS[step]}</span>
+            </div>
+            <Progress value={progress} />
+          </div>
+        )}
+
+        {/* Steps */}
+        {step === 0 && (
+          <StepWelcome
+            onNext={() => setStep(1)}
+            onQuickStart={handleQuickStart}
+          />
+        )}
+        {step === 1 && (
+          <StepIdentity
+            name={character.name}
+            gender={character.gender}
+            onNameChange={setName}
+            onGenderChange={setGender}
+            onNext={() => setStep(2)}
+            onBack={() => setStep(0)}
+          />
+        )}
+        {step === 2 && (
+          <StepRace
+            selectedRace={character.race}
+            halfElfBonus1={halfElfBonus1}
+            halfElfBonus2={halfElfBonus2}
+            onRaceChange={handleRaceChange}
+            onHalfElfBonus1Change={setHalfElfBonus1}
+            onHalfElfBonus2Change={setHalfElfBonus2}
+            onNext={() => setStep(3)}
+            onBack={() => setStep(1)}
+          />
+        )}
+        {step === 3 && (
+          <StepClass
+            selectedClass={character.class}
+            onClassChange={handleClassChange}
+            onNext={() => setStep(4)}
+            onBack={() => setStep(2)}
+          />
+        )}
+        {step === 4 && (
+          <StepAbilities
+            scores={character.abilityScores}
+            race={character.race}
+            halfElfBonuses={
+              character.race === "Half-Elf"
+                ? [halfElfBonus1, halfElfBonus2].filter(Boolean)
+                : []
+            }
+            onChange={setAbilityScores}
+            onNext={() => setStep(5)}
+            onBack={() => setStep(3)}
+          />
+        )}
+        {step === 5 && (
+          <StepSkills
+            characterClass={character.class}
+            selectedSkills={selectedSkills}
+            selectedCantrips={selectedCantrips}
+            selectedSpells={selectedSpells}
+            selectedFightingStyle={selectedFightingStyle}
+            onToggleSkill={toggleSkill}
+            onToggleCantrip={toggleCantrip}
+            onToggleSpell={toggleSpell}
+            onFightingStyleChange={setSelectedFightingStyle}
+            onNext={() => setStep(6)}
+            onBack={() => setStep(4)}
+          />
+        )}
+        {step === 6 && (
+          <StepReview
+            character={character}
+            selectedSkills={selectedSkills}
+            selectedCantrips={selectedCantrips}
+            selectedSpells={selectedSpells}
+            selectedFightingStyle={selectedFightingStyle}
+            onBack={() => setStep(5)}
+            onSubmit={handleSubmit}
+          />
+        )}
+      </div>
+
+      {/* Avatar panel — sticky on the right, hidden on small screens */}
+      {showAvatar && (
+        <div className="hidden lg:block w-56 shrink-0">
+          <div className="sticky top-24">
+            <CharacterAvatar
+              name={character.name}
+              race={character.race}
+              characterClass={character.class}
+              gender={character.gender}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
