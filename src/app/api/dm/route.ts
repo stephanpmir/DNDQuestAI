@@ -317,6 +317,8 @@ export async function POST(request: Request) {
         isCriticalHit: eo.isCriticalHit,
         damageTaken: eo.damageTaken,
         itemNotFound: eo.itemNotFound,
+        equipItem: eo.equipItem,
+        identifyItem: eo.identifyItem,
       },
       // Fact ledger updates for the client
       factUpdates: {

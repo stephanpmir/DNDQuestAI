@@ -157,6 +157,14 @@ export function GameView() {
           updateFromGameState({ deathSaveResult: eo.deathSaveResult });
         }
 
+        // Handle equip/identify from engine
+        if (eo?.equipItem) {
+          useCharacterStore.getState().equipItem(eo.equipItem);
+        }
+        if (eo?.identifyItem) {
+          useCharacterStore.getState().identifyItem(eo.identifyItem);
+        }
+
         // Handle karma changes
         if (data.karmaChange) {
           updateFromGameState({ karmaChange: data.karmaChange.amount });

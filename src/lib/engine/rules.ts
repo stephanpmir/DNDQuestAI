@@ -1,6 +1,6 @@
 import type { Character } from "@/types/character";
 import type { EngineOutcome, WorldEvent } from "@/types/world";
-import { abilityCheck, attackRoll, damageRoll, modifier, d20 } from "./dice";
+import { abilityCheck, attackRoll, damageRoll, modifier, d20, d20Lucky, d } from "./dice";
 import {
   detectKarmaAction,
   checkDivineIntervention,
@@ -13,7 +13,7 @@ import {
   shopPriceModifier,
 } from "@/lib/karma";
 import { detectCrime } from "@/lib/crimes";
-import { getItemInfo, getBuyPrice, getSellPrice } from "@/lib/items";
+import { getItemInfo, getBuyPrice, getSellPrice, isEquippable, getEquipSlot } from "@/lib/items";
 
 /** Action categories the engine can detect from player input. */
 type ActionType =
@@ -25,14 +25,21 @@ type ActionType =
   | "rest"
   | "trade"
   | "use_item"
+  | "equip_item"
   | "pickup"
   | "drop_item"
+  | "second_wind"
+  | "breath_weapon"
+  | "identify_item"
   | "self_harm"
   | "death_save"
   | "unknown";
 
 /** Keywords that map to action types — ORDER MATTERS: more specific patterns first */
 const ACTION_PATTERNS: [RegExp, ActionType][] = [
+  [/\b(second wind)\b/i, "second_wind"],
+  [/\b(breath weapon|breathe fire|breathe ice|breathe lightning|breathe acid|breathe poison|use breath|dragon breath)\b/i, "breath_weapon"],
+  [/\b(identify|appraise|examine closely|inspect item|study item)\b/i, "identify_item"],
   [/\b(attack|strike|hit|fight|slash|stab|shoot|swing)\b/i, "attack"],
   [/\b(cast|spell|magic|fireball|heal|cure)\b/i, "cast_spell"],
   [/\b(pick lock|sneak|hide|stealth|climb|swim|jump|search|investigate|persuade|intimidate|deceive|perception|check)\b/i, "skill_check"],
@@ -40,8 +47,9 @@ const ACTION_PATTERNS: [RegExp, ActionType][] = [
   [/\b(talk|speak|ask|greet|negotiate|converse|say)\b/i, "talk"],
   [/\b(buy|sell|trade|shop|purchase|barter)\b/i, "trade"],
   [/\b(pick up|grab|take|loot|collect|gather)\b/i, "pickup"],
-  [/\b(drop|discard|throw away|leave behind|abandon)\s/i, "drop_item"],
-  [/\b(use|drink|eat|equip|open|read)\b/i, "use_item"],
+  [/\b(drop|discard|throw away|leave behind|abandon)\b/i, "drop_item"],
+  [/\b(equip|wield|wear|put on|don)\b/i, "equip_item"],
+  [/\b(use|drink|eat|open|read)\b/i, "use_item"],
   [/\b(explore|look around|examine|enter|go to|travel|move|walk|head)\b/i, "explore"],
 ];
 
@@ -381,6 +389,50 @@ function getRandomTravelEncounter(level: number): { type: "combat" | "social" | 
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+/** Finesse weapons — can use STR or DEX (whichever is higher) */
+const FINESSE_WEAPONS = ["rapier", "shortsword", "scimitar", "dagger", "whip"];
+/** Ranged weapons — always use DEX */
+const RANGED_WEAPONS = ["longbow", "shortbow", "crossbow"];
+
+/**
+ * Determine the correct attack ability based on weapon, class, and context.
+ * D&D 5e rules: ranged = DEX, finesse = higher of STR/DEX, melee = STR.
+ */
+function getAttackAbility(
+  character: Character,
+  playerInput: string,
+  isSpell: boolean,
+  isRanged: boolean
+): keyof Character["abilityScores"] {
+  if (isSpell) {
+    // Spellcasting ability varies by class
+    const cls = character.class;
+    if (["Wizard"].includes(cls)) return "intelligence";
+    if (["Cleric", "Druid", "Ranger"].includes(cls)) return "wisdom";
+    if (["Bard", "Sorcerer", "Warlock", "Paladin"].includes(cls)) return "charisma";
+    return "intelligence";
+  }
+
+  if (isRanged) return "dexterity";
+
+  // Check equipped weapons for finesse
+  const lower = playerInput.toLowerCase();
+  const equippedWeapons = character.equipped ?? [];
+  const hasFinesse = equippedWeapons.some((w) => FINESSE_WEAPONS.some((f) => w.toLowerCase().includes(f)))
+    || FINESSE_WEAPONS.some((f) => lower.includes(f));
+  const hasRanged = equippedWeapons.some((w) => RANGED_WEAPONS.some((r) => w.toLowerCase().includes(r)));
+
+  if (hasRanged && !FINESSE_WEAPONS.some((f) => lower.includes(f))) return "dexterity";
+
+  if (hasFinesse) {
+    // Use the higher of STR or DEX for finesse weapons
+    return character.abilityScores.dexterity >= character.abilityScores.strength
+      ? "dexterity" : "strength";
+  }
+
+  return "strength";
+}
+
 /**
  * The Rules Engine. Given a player action and game state, it produces
  * deterministic outcomes. The LLM only narrates what happened.
@@ -393,6 +445,8 @@ export function resolveAction(
   karma?: number
 ): EngineOutcome {
   const action = detectAction(playerInput, character);
+  // Halfling Lucky trait: reroll natural 1s on d20 rolls
+  const lucky = character.race === "Halfling";
   const outcome: EngineOutcome = {
     hpChange: 0,
     itemsGained: [],
@@ -422,7 +476,7 @@ export function resolveAction(
   switch (action) {
     case "death_save": {
       // D&D 5e death saving throws — DC 10, no modifiers
-      const rolled = d20();
+      const rolled = lucky ? d20Lucky() : d20();
       const result = {
         type: "save" as const,
         ability: "death",
@@ -450,7 +504,7 @@ export function resolveAction(
 
     case "self_harm": {
       // CON save DC 12 to resist, take 1d6+2 on failure, half on success
-      const conSave = abilityCheck(character.abilityScores.constitution, 12, "constitution");
+      const conSave = abilityCheck(character.abilityScores.constitution, 12, "constitution", 0, lucky);
       outcome.roll = { ...conSave, type: "save", reason: "CON save — resisting self-inflicted harm" };
       const dmg = damageRoll(1, 6, 2);
       if (conSave.success) {
@@ -464,24 +518,62 @@ export function resolveAction(
     case "attack":
     case "cast_spell": {
       // D&D 5e attack: d20 + ability modifier + proficiency bonus vs enemy AC
-      const atkAbility = action === "cast_spell" ? "intelligence" : "strength";
+      const isSpell = action === "cast_spell";
+      const isRanged = /\b(shoot|longbow|shortbow|crossbow|bow|arrow)\b/i.test(playerInput);
+      const atkAbility = getAttackAbility(character, playerInput, isSpell, isRanged);
       const atkScore = character.abilityScores[atkAbility];
       const atkMod = modifier(atkScore);
       const prof = proficiencyBonus(character.level);
-      const totalAtkBonus = atkMod + prof;
 
       const enemy = scaledEnemy(character.level);
-      const hit = attackRoll(atkScore, enemy.ac, prof);
-      outcome.roll = { ...hit, reason: action === "cast_spell" ? "Spell attack roll" : "Attack roll — striking the enemy" };
+      let atkBonus = prof;
+
+      // Apply Fighting Style: Archery (+2 ranged attack)
+      if (isRanged && character.fightingStyle?.includes("Archery")) {
+        atkBonus += 2;
+      }
+
+      const hit = attackRoll(atkScore, enemy.ac, atkBonus, lucky);
+      outcome.roll = { ...hit, reason: isSpell ? "Spell attack roll" : "Attack roll — striking the enemy" };
 
       if (hit.success) {
         // Roll damage — critical hit on natural 20 doubles dice
         const isCrit = hit.rolled === 20;
-        const baseDiceCount = action === "cast_spell" ? 2 : 1;
-        const diceSides = action === "cast_spell" ? 6 : 8;
+        const baseDiceCount = isSpell ? 2 : 1;
+        const diceSides = isSpell ? 6 : 8;
         const diceCount = isCrit ? baseDiceCount * 2 : baseDiceCount;
-        const dmg = damageRoll(diceCount, diceSides, atkMod);
-        // Minimum 1 damage on a hit
+        let dmgBonus = atkMod;
+
+        // Apply Fighting Style: Dueling (+2 dmg one-handed melee with no offhand weapon)
+        if (!isSpell && !isRanged && character.fightingStyle?.includes("Dueling")) {
+          const hasTwoHanded = character.equipped?.some((item) => {
+            const info = getItemInfo(item);
+            return info?.twoHanded;
+          });
+          if (!hasTwoHanded) dmgBonus += 2;
+        }
+
+        let dmg = damageRoll(diceCount, diceSides, dmgBonus);
+
+        // Apply Fighting Style: Great Weapon Fighting (reroll 1-2 on damage dice)
+        if (!isSpell && character.fightingStyle?.includes("Great Weapon Fighting")) {
+          const hasTwoHanded = character.equipped?.some((item) => {
+            const info = getItemInfo(item);
+            return info?.twoHanded;
+          });
+          if (hasTwoHanded) {
+            // Reroll each die that rolled 1 or 2 (take new result even if worse — D&D RAW)
+            let rerolledTotal = 0;
+            for (let i = 0; i < diceCount; i++) {
+              let dieResult = d(diceSides);
+              if (dieResult <= 2) dieResult = d(diceSides);
+              rerolledTotal += dieResult;
+            }
+            const gwfTotal = Math.max(1, rerolledTotal + dmgBonus);
+            dmg = { ...dmg, total: gwfTotal };
+          }
+        }
+
         outcome.damageDealt = Math.max(1, dmg.total);
         outcome.isCriticalHit = isCrit;
         outcome.xpGained = combatXpReward(character.level);
@@ -502,7 +594,7 @@ export function resolveAction(
       const ability = getSkillAbility(playerInput);
       const dc = levelScaledDC(12, character.level);
       const prof = proficiencyBonus(character.level);
-      const result = abilityCheck(character.abilityScores[ability], dc, ability, prof);
+      const result = abilityCheck(character.abilityScores[ability], dc, ability, prof, lucky);
       const skillName = ability.charAt(0).toUpperCase() + ability.slice(1);
       outcome.roll = { ...result, reason: `${skillName} check — testing your skill` };
       if (result.success) {
@@ -526,11 +618,11 @@ export function resolveAction(
 
           if (encounterType.type === "combat") {
             // Combat encounter on the road — resolved silently
-            const atkAbility = "strength" as const;
+            const atkAbility = getAttackAbility(character, playerInput, false, false);
             const atkScore = character.abilityScores[atkAbility];
             const prof = proficiencyBonus(character.level);
             const enemy = scaledEnemy(character.level);
-            const hit = attackRoll(atkScore, enemy.ac, prof);
+            const hit = attackRoll(atkScore, enemy.ac, prof, lucky);
             // Don't set outcome.roll — travel encounters are narration-only
             if (hit.success) {
               const dmg = damageRoll(1, 8, modifier(atkScore));
@@ -549,7 +641,7 @@ export function resolveAction(
             // Non-combat encounter — resolved silently, DM narrates
             const dc = levelScaledDC(10, character.level);
             const prof = proficiencyBonus(character.level);
-            const check = abilityCheck(character.abilityScores.wisdom, dc, "wisdom", prof);
+            const check = abilityCheck(character.abilityScores.wisdom, dc, "wisdom", prof, lucky);
             if (check.success) {
               outcome.xpGained = explorationXpReward(character.level);
             }
@@ -560,7 +652,7 @@ export function resolveAction(
         // Not traveling, just looking around locally
         const dc = levelScaledDC(10, character.level);
         const prof = proficiencyBonus(character.level);
-        const perc = abilityCheck(character.abilityScores.wisdom, dc, "wisdom", prof);
+        const perc = abilityCheck(character.abilityScores.wisdom, dc, "wisdom", prof, lucky);
         outcome.roll = { ...perc, reason: "Perception check — searching the area" };
         if (perc.success) {
           outcome.xpGained = explorationXpReward(character.level);
@@ -645,22 +737,16 @@ export function resolveAction(
     }
 
     case "pickup": {
-      // Pickup is narrative — the DM decides what's available to pick up
-      // Engine just signals the intent; actual item granting comes from DM context
+      // Pickup is PURELY NARRATIVE — the DM describes what's available.
+      // The engine does NOT grant items from thin air. Items can only be gained
+      // through trade (buying), quest rewards (DM-controlled), or loot after combat.
+      // This prevents the exploit of typing "pick up longsword" to get free items.
       const lower = playerInput.toLowerCase();
       const ignorePickupWords = new Set(["pick", "up", "grab", "take", "loot", "collect", "gather", "the", "a", "an", "some", "this", "that", "it"]);
       const pickupWords = lower.replace(/[^a-z\s]/g, "").split(/\s+/).filter(w => w.length > 1 && !ignorePickupWords.has(w));
       const searchTerm = pickupWords.join(" ");
-      const itemInfo = searchTerm ? getItemInfo(searchTerm) : null;
-
-      if (itemInfo) {
-        const itemName = itemInfo.name.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-        outcome.itemsGained = [itemName];
-        outcome.pickupResult = { item: itemName, success: true };
-      } else {
-        // Can't identify specific item — DM handles narratively
-        outcome.pickupResult = { item: searchTerm || "unknown", success: false, reason: "Let the DM describe what you find" };
-      }
+      // Signal intent but don't mechanically grant anything
+      outcome.pickupResult = { item: searchTerm || "unknown", success: false, reason: "The DM will describe what you find, if anything" };
       break;
     }
 
@@ -722,22 +808,143 @@ export function resolveAction(
     }
 
     case "talk": {
-      // Social interaction: CHA check with proficiency
-      // getSkillAbility returns "charisma" for persuade/deceive/intimidate
-      // For generic "talk" it returns "wisdom" — override to charisma for social
+      // Social interaction: detect specific social skills or default to CHA
       const detectedAbility = getSkillAbility(playerInput);
-      const socialAbility = detectedAbility === "charisma" ? "charisma" : "charisma";
+      // Intimidate → CHA, Persuade → CHA, Deceive → CHA, Insight → WIS
+      const socialAbility = (detectedAbility === "wisdom" && /\binsight\b/i.test(playerInput))
+        ? "wisdom" : "charisma";
       const dc = levelScaledDC(11, character.level);
       const prof = proficiencyBonus(character.level);
       const socialResult = abilityCheck(
         character.abilityScores[socialAbility],
         dc,
-        "charisma",
-        prof
+        socialAbility,
+        prof,
+        lucky
       );
-      outcome.roll = { ...socialResult, reason: "Charisma check — social interaction" };
+      const skillLabel = socialAbility === "wisdom" ? "Insight" : "Charisma";
+      outcome.roll = { ...socialResult, reason: `${skillLabel} check — social interaction` };
       if (socialResult.success) {
         outcome.xpGained = skillCheckXpReward(character.level);
+      }
+      break;
+    }
+
+    case "second_wind": {
+      // Fighter class feature: heal 1d10 + Fighter level, usable once per rest
+      if (character.class !== "Fighter") {
+        outcome.actionDenied = {
+          reason: `Second Wind is a Fighter class feature. As a ${character.class}, you don't have this ability.`,
+          attempted: "use Second Wind",
+        };
+        break;
+      }
+      // Heal 1d10 + level
+      const healRoll = d(10) + character.level;
+      const healed = Math.min(healRoll, character.maxHp - character.hp);
+      outcome.hpChange = healed;
+      outcome.roll = {
+        type: "check",
+        ability: "constitution",
+        rolled: healRoll - character.level,
+        modifier: character.level,
+        total: healRoll,
+        dc: 0,
+        success: true,
+        reason: "Second Wind — rallying your strength",
+      };
+      break;
+    }
+
+    case "breath_weapon": {
+      // Dragonborn racial trait: 2d6 damage, DC 8 + CON mod + prof
+      if (character.race !== "Dragonborn") {
+        outcome.actionDenied = {
+          reason: "Breath Weapon is a Dragonborn racial ability. Your race doesn't have this feature.",
+          attempted: "use Breath Weapon",
+        };
+        break;
+      }
+      const prof = proficiencyBonus(character.level);
+      // Scale damage: 2d6 at levels 1-5, 3d6 at 6-10, 4d6 at 11-15, 5d6 at 16+
+      const breathDice = character.level >= 16 ? 5 : character.level >= 11 ? 4 : character.level >= 6 ? 3 : 2;
+      const breathDmg = damageRoll(breathDice, 6, 0);
+      outcome.damageDealt = Math.max(1, breathDmg.total);
+      outcome.roll = {
+        type: "damage",
+        rolled: breathDmg.rolled,
+        modifier: 0,
+        total: breathDmg.total,
+        success: true,
+        reason: `Breath Weapon — ${breathDice}d6 elemental damage`,
+      };
+      outcome.xpGained = combatXpReward(character.level);
+      break;
+    }
+
+    case "equip_item": {
+      // Parse item name from input and signal equip to the store
+      const lower = playerInput.toLowerCase();
+      const ignoreEquipWords = new Set(["equip", "wield", "wear", "put", "on", "don", "the", "my", "a", "an", "this", "that"]);
+      const equipWords = lower.replace(/[^a-z\s]/g, "").split(/\s+/).filter(w => w.length > 1 && !ignoreEquipWords.has(w));
+      const matchedItem = character.inventory.find((item) => {
+        const itemLow = item.toLowerCase();
+        return equipWords.some(term => itemLow.includes(term));
+      });
+      if (matchedItem) {
+        if (isEquippable(matchedItem)) {
+          outcome.equipItem = matchedItem;
+        } else {
+          outcome.actionDenied = {
+            reason: `${matchedItem} is not an equippable item. It's a general supply or consumable.`,
+            attempted: `equip ${matchedItem}`,
+          };
+        }
+      } else {
+        outcome.itemNotFound = true;
+      }
+      break;
+    }
+
+    case "identify_item": {
+      // Identifying items: requires Arcana check or a caster with Identify spell
+      const lower = playerInput.toLowerCase();
+      const ignoreIdWords = new Set(["identify", "appraise", "examine", "closely", "inspect", "study", "item", "the", "my", "a", "an", "this", "that"]);
+      const idWords = lower.replace(/[^a-z\s]/g, "").split(/\s+/).filter(w => w.length > 1 && !ignoreIdWords.has(w));
+      const matchedItem = character.inventory.find((item) => {
+        const itemLow = item.toLowerCase();
+        return idWords.some(term => itemLow.includes(term));
+      });
+      if (matchedItem) {
+        const itemInfo = getItemInfo(matchedItem);
+        if (itemInfo?.isMagical && !character.identifiedItems?.includes(matchedItem)) {
+          // Arcana check to identify — DC 15 (standard for magical items)
+          const prof = proficiencyBonus(character.level);
+          const hasArcana = character.skillProficiencies?.includes("Arcana");
+          const arcanaResult = abilityCheck(
+            character.abilityScores.intelligence,
+            15,
+            "intelligence",
+            hasArcana ? prof : 0,
+            lucky
+          );
+          outcome.roll = { ...arcanaResult, reason: "Arcana check — identifying magical item" };
+          if (arcanaResult.success) {
+            outcome.identifyItem = matchedItem;
+            outcome.xpGained = skillCheckXpReward(character.level);
+          }
+        } else if (itemInfo && !itemInfo.isMagical) {
+          // Non-magical items are automatically recognized
+          outcome.identifyItem = matchedItem;
+        } else {
+          // Already identified
+          outcome.actionDenied = {
+            reason: "You've already identified this item.",
+            attempted: `identify ${matchedItem}`,
+          };
+        }
+      } else {
+        outcome.itemNotFound = true;
       }
       break;
     }

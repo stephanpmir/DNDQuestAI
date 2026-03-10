@@ -263,8 +263,14 @@ export const useCharacterStore = create<CharacterStore>()(
 
             // D&D death rules: 0 HP = unconscious
             if (c.hp <= 0) {
-              c.hp = 0;
-              c.isUnconscious = true;
+              // Half-Orc Relentless Endurance: drop to 1 HP instead of 0, once per long rest
+              if (c.race === "Half-Orc" && !c.isUnconscious && !c.relentlessUsed) {
+                c.hp = 1;
+                c.relentlessUsed = true;
+              } else {
+                c.hp = 0;
+                c.isUnconscious = true;
+              }
             }
 
             // Healing from unconscious
@@ -296,6 +302,10 @@ export const useCharacterStore = create<CharacterStore>()(
           // Rest tracking
           if (updates.lastRestTurn !== undefined) {
             c.lastRestTurn = updates.lastRestTurn;
+            // Reset Half-Orc Relentless Endurance on rest
+            if (c.race === "Half-Orc") {
+              c.relentlessUsed = false;
+            }
           }
 
           // Death save tracking

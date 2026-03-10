@@ -18,6 +18,13 @@ export function d20(): number {
   return d(20);
 }
 
+/** D20 with Halfling Lucky trait — reroll natural 1s */
+export function d20Lucky(): number {
+  let result = d(20);
+  if (result === 1) result = d(20);
+  return result;
+}
+
 /** Ability score modifier */
 export function modifier(score: number): number {
   return Math.floor((score - 10) / 2);
@@ -26,14 +33,16 @@ export function modifier(score: number): number {
 /**
  * Perform an ability check: d20 + ability modifier + proficiency bonus vs DC
  * D&D 5e: Total = d20 + ability mod + proficiency (if proficient)
+ * @param lucky - If true, reroll natural 1s (Halfling Lucky trait)
  */
 export function abilityCheck(
   abilityScore: number,
   dc: number,
   ability: string,
-  proficiencyBonus: number = 0
+  proficiencyBonus: number = 0,
+  lucky: boolean = false
 ): RollResult {
-  const rolled = d20();
+  const rolled = lucky ? d20Lucky() : d20();
   const mod = modifier(abilityScore) + proficiencyBonus;
   const total = rolled + mod;
   return {
@@ -52,9 +61,10 @@ export function savingThrow(
   abilityScore: number,
   dc: number,
   ability: string,
-  proficiencyBonus: number = 0
+  proficiencyBonus: number = 0,
+  lucky: boolean = false
 ): RollResult {
-  const rolled = d20();
+  const rolled = lucky ? d20Lucky() : d20();
   const mod = modifier(abilityScore) + proficiencyBonus;
   const total = rolled + mod;
   return {
@@ -71,13 +81,15 @@ export function savingThrow(
 /**
  * Attack roll: d20 + ability modifier + proficiency bonus vs target AC
  * D&D 5e: Natural 20 always hits, Natural 1 always misses
+ * @param lucky - If true, reroll natural 1s (Halfling Lucky trait)
  */
 export function attackRoll(
   abilityScore: number,
   targetAC: number,
-  proficiencyBonus: number = 0
+  proficiencyBonus: number = 0,
+  lucky: boolean = false
 ): RollResult {
-  const rolled = d20();
+  const rolled = lucky ? d20Lucky() : d20();
   const mod = modifier(abilityScore) + proficiencyBonus;
   const total = rolled + mod;
   return {

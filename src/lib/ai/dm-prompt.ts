@@ -199,11 +199,7 @@ export function buildEngineContextMessage(
     }
   }
   if (o.pickupResult) {
-    if (o.pickupResult.success) {
-      outcomeParts.push(`PICKUP: Player picked up "${o.pickupResult.item}". Narrate them grabbing/collecting it.`);
-    } else {
-      outcomeParts.push(`PICKUP ATTEMPT: Player tried to pick up something but no specific item was identified. Narrate what they find (or don't find) in the scene.`);
-    }
+    outcomeParts.push(`PICKUP ATTEMPT: The player tried to pick up "${o.pickupResult.item}". Items cannot be freely picked up — only obtained through trade, quest rewards, or after combat. Narrate what they see in the scene but do NOT grant any items mechanically.`);
   }
   if (o.dropResult) {
     if (o.dropResult.success) {
@@ -211,6 +207,12 @@ export function buildEngineContextMessage(
     } else {
       outcomeParts.push(`DROP FAILED: Player tried to drop "${o.dropResult.item}" but doesn't have it. Narrate the confusion.`);
     }
+  }
+  if (o.equipItem) {
+    outcomeParts.push(`EQUIP: Player equipped "${o.equipItem}". Narrate them readying the item — strapping on armor, gripping a weapon, slipping on a ring, etc.`);
+  }
+  if (o.identifyItem) {
+    outcomeParts.push(`IDENTIFY: Player successfully identified "${o.identifyItem}". Reveal the item's magical properties through narration — a glow, an inscription, a vision.`);
   }
 
   if (outcomeParts.length > 0) {

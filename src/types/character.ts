@@ -140,6 +140,8 @@ export interface Character {
   avatarUrl?: string;
   /** Beginner survey answers (undefined if skipped) */
   beginnerSurvey?: BeginnerSurvey;
+  /** Half-Orc Relentless Endurance used this rest cycle */
+  relentlessUsed?: boolean;
 }
 
 /** D&D 5e XP thresholds for levels 1-20 */

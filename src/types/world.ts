@@ -146,6 +146,10 @@ export interface EngineOutcome {
     item: string;
     success: boolean;
   };
+  /** Item to equip (engine signals, store applies) */
+  equipItem?: string;
+  /** Item to add to identified list (engine signals, store applies) */
+  identifyItem?: string;
 }
 
 /** What the LLM receives to narrate — it does NOT decide outcomes. */

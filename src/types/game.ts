@@ -47,6 +47,8 @@ export interface DMResponsePayload {
     isCriticalHit?: boolean;
     damageTaken?: number;
     itemNotFound?: boolean;
+    equipItem?: string;
+    identifyItem?: string;
   };
   /** Fact ledger updates */
   factUpdates?: {
