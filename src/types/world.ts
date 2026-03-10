@@ -106,6 +106,23 @@ export interface EngineOutcome {
     reason: string;
     attempted: string;
   };
+  /** Crime detected from player action */
+  crimeDetected?: {
+    type: "theft" | "murder" | "assault" | "trespass" | "vandalism";
+    description: string;
+    location: string;
+  };
+  /** Guard investigation result this turn */
+  guardInvestigation?: {
+    crimeId: string;
+    newEvidenceLevel: string;
+    narrativeHint: string;
+  };
+  /** Guard confrontation triggered */
+  guardConfrontation?: {
+    crimeType: string;
+    crimeLocation: string;
+  };
 }
 
 /** What the LLM receives to narrate — it does NOT decide outcomes. */

@@ -2,6 +2,7 @@ import type { Character } from "@/types/character";
 import type { EngineOutcome, WorldEvent } from "@/types/world";
 import { abilityCheck, attackRoll, damageRoll, modifier, d20 } from "./dice";
 import { detectKarmaAction, checkDivineIntervention, getItemAffinity } from "@/lib/karma";
+import { detectCrime } from "@/lib/crimes";
 
 /** Action categories the engine can detect from player input. */
 type ActionType =
@@ -668,6 +669,16 @@ export function resolveAction(
   }
   if (outcome.completeQuest) {
     outcome.fameChange = (outcome.fameChange ?? 0) + 3;
+  }
+
+  // ── Crime Detection ─────────────────────────────────────────
+  const crimeType = detectCrime(playerInput);
+  if (crimeType) {
+    outcome.crimeDetected = {
+      type: crimeType,
+      description: playerInput.slice(0, 80),
+      location: gameState.location,
+    };
   }
 
   // ── Divine Intervention ──────────────────────────────────────

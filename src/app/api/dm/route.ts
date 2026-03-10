@@ -11,6 +11,8 @@ import type { GameState } from "@/types/game";
 import type { WorldEvent, NPC, LocationRecord } from "@/types/world";
 import type { Fact } from "@/lib/engine/fact-ledger";
 import { computeNpcDisposition } from "@/lib/karma";
+import { runGuardInvestigations, shouldGuardsConfront, buildCrimeContext } from "@/lib/crimes";
+import type { Crime } from "@/lib/crimes";
 
 function getClient(): OpenAI {
   const apiKey = process.env.CEREBRAS_API_KEY;
@@ -37,6 +39,8 @@ interface RequestBody {
     locations: LocationRecord[];
     facts: Fact[];
   };
+  /** Crime log */
+  crimes?: Crime[];
   /** Karma system data */
   karmaData?: {
     karma: number;
@@ -109,7 +113,7 @@ async function callWithRetry(
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as RequestBody;
-    const { message, character, gameState, history, worldState, karmaData } = body;
+    const { message, character, gameState, history, worldState, karmaData, crimes } = body;
 
     if (!message || !character || !gameState) {
       return NextResponse.json(
@@ -196,9 +200,30 @@ export async function POST(request: Request) {
       throw new Error("Pipeline failed to produce a result");
     }
 
-    // ── PIPELINE STEP 8: Deliver ──────────────────────────────────
+    // ── Crime Processing ────────────────────────────────────────────
     const eo = preResult.engineOutcome;
 
+    // Run guard investigations on existing crimes (background, once per turn)
+    const crimeList = crimes ?? [];
+    const investigation = runGuardInvestigations(crimeList, gameState.turnCount, character.fame);
+    if (investigation) {
+      eo.guardInvestigation = {
+        crimeId: investigation.crimeId,
+        newEvidenceLevel: investigation.newEvidenceLevel,
+        narrativeHint: investigation.narrativeHint,
+      };
+    }
+
+    // Check if guards should confront the player
+    const confrontation = shouldGuardsConfront(crimeList, gameState.location);
+    if (confrontation) {
+      eo.guardConfrontation = {
+        crimeType: confrontation.type,
+        crimeLocation: confrontation.location,
+      };
+    }
+
+    // ── PIPELINE STEP 8: Deliver ──────────────────────────────────
     return NextResponse.json({
       narrative: postResult.narrative,
       gameStateUpdate: {
@@ -242,6 +267,9 @@ export async function POST(request: Request) {
       karmaChange: eo.karmaChange,
       fameChange: eo.fameChange,
       divineEffect: eo.divineEffect,
+      crimeDetected: eo.crimeDetected,
+      guardInvestigation: eo.guardInvestigation,
+      guardConfrontation: eo.guardConfrontation,
     });
   } catch (error: unknown) {
     const errMsg =

@@ -5,6 +5,7 @@ import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
 import { useWorldStore } from "@/stores/world-store";
 import { useKarmaStore } from "@/stores/karma-store";
+import { useCrimeStore } from "@/stores/crime-store";
 import type { ChatMessage as ChatMessageType, DMResponsePayload } from "@/types/game";
 import type { WorldEvent } from "@/types/world";
 import { ChatMessage } from "./chat-message";
@@ -56,6 +57,13 @@ export function GameView() {
     updateCompanionApproval,
   } = useKarmaStore();
 
+  const {
+    crimes,
+    addCrime,
+    updateEvidence,
+    markConfronted,
+  } = useCrimeStore();
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoStartFired = useRef(false);
 
@@ -91,6 +99,7 @@ export function GameView() {
           gameState: { location, questLog, turnCount },
           history,
           worldState: { events, npcs, locations, facts },
+          crimes,
           karmaData: {
             karma: character.karma,
             history: karmaHistory,
@@ -162,6 +171,37 @@ export function GameView() {
         // Handle fame changes
         if (data.fameChange) {
           updateFromGameState({ fameChange: data.fameChange });
+        }
+
+        // Handle crime detection
+        if (data.crimeDetected) {
+          addCrime({
+            type: data.crimeDetected.type as import("@/lib/crimes").CrimeType,
+            turn: turnCount,
+            location: data.crimeDetected.location,
+            description: data.crimeDetected.description,
+          });
+        }
+
+        // Handle guard investigation results
+        if (data.guardInvestigation) {
+          updateEvidence(
+            data.guardInvestigation.crimeId,
+            data.guardInvestigation.newEvidenceLevel as import("@/lib/crimes").EvidenceLevel
+          );
+        }
+
+        // Handle guard confrontation
+        if (data.guardConfrontation) {
+          // Find the matching crime and mark as confronted
+          const matchingCrime = crimes.find(
+            (c) => c.type === data.guardConfrontation!.crimeType &&
+                   c.location === data.guardConfrontation!.crimeLocation &&
+                   !c.confronted
+          );
+          if (matchingCrime) {
+            markConfronted(matchingCrime.id);
+          }
         }
 
         // Apply fact ledger updates
@@ -263,6 +303,10 @@ export function GameView() {
       companions,
       addKarmaEvent,
       updateCompanionApproval,
+      crimes,
+      addCrime,
+      updateEvidence,
+      markConfronted,
     ]
   );
 

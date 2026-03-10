@@ -179,6 +179,12 @@ export function buildEngineContextMessage(
   if (o.travelEncounter) {
     outcomeParts.push(`TRAVEL ENCOUNTER: While traveling, the character encounters ${o.travelEncounter.description}. This is a ${o.travelEncounter.type} encounter. Narrate the journey first — describe the terrain, weather, and distance — then introduce this encounter naturally along the way.`);
   }
+  if (o.guardInvestigation) {
+    outcomeParts.push(`GUARD INVESTIGATION: ${o.guardInvestigation.narrativeHint} Weave this subtly into the scene — the player notices guards talking, wanted posters appearing, or NPCs whispering. Do NOT reveal the exact mechanic.`);
+  }
+  if (o.guardConfrontation) {
+    outcomeParts.push(`GUARD CONFRONTATION: Guards have identified the player for a ${o.guardConfrontation.crimeType} committed at ${o.guardConfrontation.crimeLocation}. They approach the player to confront them. Narrate a tense encounter — guards demand surrender, threaten arrest, or engage in a standoff. The player can fight, flee, or talk their way out.`);
+  }
 
   if (outcomeParts.length > 0) {
     parts.push(`## Engine Outcome (incorporate these EXACTLY)\n${outcomeParts.join("\n")}`);

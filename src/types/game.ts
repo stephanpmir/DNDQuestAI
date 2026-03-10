@@ -77,4 +77,21 @@ export interface DMResponsePayload {
     description: string;
     rollModifier: number;
   };
+  /** Crime detected from player action */
+  crimeDetected?: {
+    type: string;
+    description: string;
+    location: string;
+  };
+  /** Guard investigation result (background check) */
+  guardInvestigation?: {
+    crimeId: string;
+    newEvidenceLevel: string;
+    narrativeHint: string;
+  };
+  /** Guard confrontation triggered */
+  guardConfrontation?: {
+    crimeType: string;
+    crimeLocation: string;
+  };
 }
