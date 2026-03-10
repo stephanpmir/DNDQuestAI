@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCharacterStore } from "@/stores/character-store";
+import { useGameStore } from "@/stores/game-store";
 import { RACES, CLASSES } from "@/types/character";
 import { MAX_NAME_LENGTH } from "@/lib/constants";
 import { AbilityScorePicker } from "./ability-score-picker";
@@ -33,12 +34,14 @@ export function CharacterForm() {
     setAbilityScores,
     finalizeCharacter,
   } = useCharacterStore();
+  const resetGame = useGameStore((s) => s.reset);
 
   const isValid = character.name.trim().length >= 2;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isValid) return;
+    resetGame();
     finalizeCharacter();
     router.push("/game");
   }
