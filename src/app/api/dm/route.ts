@@ -14,19 +14,33 @@ import { computeNpcDisposition } from "@/lib/karma";
 import { runGuardInvestigations, shouldGuardsConfront, buildCrimeContext } from "@/lib/crimes";
 import type { Crime } from "@/lib/crimes";
 
-function getClient(): OpenAI {
-  const apiKey = process.env.CEREBRAS_API_KEY;
+/** Primary: Z.ai (GLM-4), Fallback: Cerebras (Llama 3.1 8B) */
+function getPrimaryClient(): OpenAI {
+  const apiKey = process.env.ZAI_API_KEY;
   if (!apiKey) {
     throw new Error(
-      "CEREBRAS_API_KEY is not set. Add it to your environment variables."
+      "ZAI_API_KEY is not set. Add it to your environment variables."
     );
   }
+  return new OpenAI({
+    baseURL: "https://api.z.ai/api/paas/v4",
+    apiKey,
+    timeout: 30_000,
+  });
+}
+
+function getFallbackClient(): OpenAI | null {
+  const apiKey = process.env.CEREBRAS_API_KEY;
+  if (!apiKey) return null;
   return new OpenAI({
     baseURL: "https://api.cerebras.ai/v1",
     apiKey,
     timeout: 30_000,
   });
 }
+
+const PRIMARY_MODEL = "glm-4";
+const FALLBACK_MODEL = "llama3.1-8b";
 
 interface RequestBody {
   message: string;
@@ -78,17 +92,18 @@ function isRetryableError(error: unknown): boolean {
   return false;
 }
 
-/** Make an LLM call with exponential backoff retry on timeout/network errors */
+/** Make an LLM call with exponential backoff retry, falling back to secondary provider */
 async function callWithRetry(
-  client: OpenAI,
   messages: OpenAI.ChatCompletionMessageParam[]
 ): Promise<string> {
+  // Try primary (Z.ai) first
   let lastError: unknown;
+  const primaryClient = getPrimaryClient();
 
   for (let attempt = 0; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
     try {
-      const response = await client.chat.completions.create({
-        model: "llama3.1-8b",
+      const response = await primaryClient.chat.completions.create({
+        model: PRIMARY_MODEL,
         messages,
         max_tokens: 1024,
       });
@@ -96,14 +111,31 @@ async function callWithRetry(
     } catch (error) {
       lastError = error;
       if (!isRetryableError(error) || attempt >= MAX_RETRY_ATTEMPTS) {
-        throw error;
+        break; // Fall through to fallback
       }
       const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
       console.warn(
-        `[DM API] Retry ${attempt + 1}/${MAX_RETRY_ATTEMPTS} after ${delay}ms`,
+        `[DM API] Primary retry ${attempt + 1}/${MAX_RETRY_ATTEMPTS} after ${delay}ms`,
         error instanceof Error ? error.message : error
       );
       await sleep(delay);
+    }
+  }
+
+  // Try fallback (Cerebras) if primary failed
+  const fallbackClient = getFallbackClient();
+  if (fallbackClient) {
+    console.warn("[DM API] Primary (Z.ai) failed, trying fallback (Cerebras)...");
+    try {
+      const response = await fallbackClient.chat.completions.create({
+        model: FALLBACK_MODEL,
+        messages,
+        max_tokens: 1024,
+      });
+      return response.choices[0]?.message?.content ?? "";
+    } catch (fallbackError) {
+      console.error("[DM API] Fallback also failed:", fallbackError instanceof Error ? fallbackError.message : fallbackError);
+      // Throw the original primary error
     }
   }
 
@@ -146,7 +178,6 @@ export async function POST(request: Request) {
     const preResult = preGenerate(pipelineInput);
 
     // ── PIPELINE STEP 5: LLM Generation ───────────────────────────
-    const client = getClient();
     const systemPrompt = buildSystemPrompt(
       character,
       gameState,
@@ -177,7 +208,7 @@ export async function POST(request: Request) {
         { role: "user", content: message },
       ];
 
-      const rawText = await callWithRetry(client, messages);
+      const rawText = await callWithRetry(messages);
       const parsed = parseDMResponse(rawText);
       narrative = parsed.narrative;
 

@@ -7,7 +7,7 @@ Solo AI-powered D&D 5e game where Claude acts as Dungeon Master.
 - **Framework**: Next.js 15 (App Router)
 - **Language**: TypeScript (strict mode)
 - **Styling**: Tailwind CSS + shadcn/ui
-- **AI**: Cerebras API (Llama 3.1 8B) via OpenAI SDK — all calls server-side only
+- **AI**: Z.ai (GLM-4) primary, Cerebras (Llama 3.1 8B) fallback — via OpenAI SDK, all calls server-side only
 - **Database**: Supabase (Postgres + Auth)
 - **State Management**: Zustand
 - **Deploy**: Vercel
@@ -71,9 +71,10 @@ npm run type-check   # TypeScript check (tsc --noEmit)
 ## Environment Variables
 
 ```
-CEREBRAS_API_KEY=            # Server-side only — never prefix with NEXT_PUBLIC_
-NEXT_PUBLIC_SUPABASE_URL=    # Supabase project URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY= # Supabase anon key
+ZAI_API_KEY=                    # Primary LLM (Z.ai GLM-4) — server-side only
+CEREBRAS_API_KEY=               # Fallback LLM (Cerebras Llama 3.1 8B) — server-side only
+NEXT_PUBLIC_SUPABASE_URL=       # Supabase project URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY=  # Supabase anon key
 ```
 
 ## Phase 1 MVP Scope

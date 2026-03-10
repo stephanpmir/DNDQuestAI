@@ -3,16 +3,24 @@ import OpenAI from "openai";
 import type { BeginnerSurvey } from "@/types/character";
 import { RACES, CLASSES } from "@/types/character";
 
-function getClient(): OpenAI {
-  const apiKey = process.env.CEREBRAS_API_KEY;
-  if (!apiKey) {
-    throw new Error("CEREBRAS_API_KEY is not set.");
+function getClient(): { client: OpenAI; model: string } {
+  // Primary: Z.ai
+  const zaiKey = process.env.ZAI_API_KEY;
+  if (zaiKey) {
+    return {
+      client: new OpenAI({ baseURL: "https://api.z.ai/api/paas/v4", apiKey: zaiKey, timeout: 30_000 }),
+      model: "glm-4",
+    };
   }
-  return new OpenAI({
-    baseURL: "https://api.cerebras.ai/v1",
-    apiKey,
-    timeout: 30_000,
-  });
+  // Fallback: Cerebras
+  const cerebrasKey = process.env.CEREBRAS_API_KEY;
+  if (cerebrasKey) {
+    return {
+      client: new OpenAI({ baseURL: "https://api.cerebras.ai/v1", apiKey: cerebrasKey, timeout: 30_000 }),
+      model: "llama3.1-8b",
+    };
+  }
+  throw new Error("No LLM API key set. Set ZAI_API_KEY or CEREBRAS_API_KEY.");
 }
 
 const MAX_RETRIES = 3;
@@ -130,14 +138,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const client = getClient();
+    const { client, model } = getClient();
     const prompt = buildPrompt(survey, suggestedRace, suggestedClass);
 
     let lastError: unknown;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const response = await client.chat.completions.create({
-          model: "llama3.1-8b",
+          model,
           messages: [{ role: "user", content: prompt }],
           max_tokens: 512,
           temperature: 0.8,
