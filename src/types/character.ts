@@ -69,6 +69,8 @@ export interface Character {
   isDead: boolean;
   /** Karma score: -100 (evil) to +100 (good), starts at 0 */
   karma: number;
+  /** Fame score: 0 (unknown) to 100 (legendary), starts at 0 */
+  fame: number;
   /** Skill proficiencies chosen during creation */
   skillProficiencies: string[];
   /** Known cantrips (casters only) */
@@ -129,6 +131,7 @@ export function createDefaultCharacter(): Character {
     isUnconscious: false,
     isDead: false,
     karma: 0,
+    fame: 0,
     skillProficiencies: [],
     cantrips: [],
     spells: [],

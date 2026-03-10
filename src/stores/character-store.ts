@@ -32,6 +32,7 @@ interface CharacterStore {
     lastRestTurn?: number;
     deathSaveResult?: "nat20" | "nat1" | "success" | "failure";
     karmaChange?: number;
+    fameChange?: number;
   }) => void;
   reset: () => void;
 }
@@ -331,6 +332,11 @@ export const useCharacterStore = create<CharacterStore>()(
           // Karma
           if (updates.karmaChange) {
             c.karma = Math.max(-100, Math.min(100, c.karma + updates.karmaChange));
+          }
+
+          // Fame
+          if (updates.fameChange) {
+            c.fame = Math.max(0, Math.min(100, c.fame + updates.fameChange));
           }
 
           return { character: c };

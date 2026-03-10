@@ -134,6 +134,37 @@ export function CharacterSidebar() {
             ))}
           </div>
 
+          {/* Karma & Fame row */}
+          <div className="flex gap-2">
+            <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Karma</div>
+              <div className={cn(
+                "text-sm font-bold leading-tight",
+                character.karma > 25 ? "text-emerald-400" :
+                character.karma < -25 ? "text-red-400" :
+                "text-gray-400"
+              )}>
+                {alignmentLabel}
+              </div>
+            </div>
+            <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Fame</div>
+              <div className={cn(
+                "text-sm font-bold leading-tight",
+                character.fame >= 75 ? "text-amber-400" :
+                character.fame >= 40 ? "text-sky-400" :
+                character.fame >= 15 ? "text-slate-300" :
+                "text-gray-500"
+              )}>
+                {character.fame >= 75 ? "Legendary" :
+                 character.fame >= 50 ? "Renowned" :
+                 character.fame >= 30 ? "Well-Known" :
+                 character.fame >= 15 ? "Recognized" :
+                 "Unknown"}
+              </div>
+            </div>
+          </div>
+
           {/* Character Sheet button */}
           <button
             type="button"
@@ -141,14 +172,6 @@ export function CharacterSidebar() {
             className="w-full text-center bg-muted/40 rounded-lg py-1.5 border border-border/30 cursor-pointer hover:bg-muted/60 transition-colors"
           >
             <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Character Sheet</div>
-            <div className={cn(
-              "text-sm font-bold leading-tight",
-              character.karma > 25 ? "text-emerald-400" :
-              character.karma < -25 ? "text-red-400" :
-              "text-gray-400"
-            )}>
-              {alignmentLabel}
-            </div>
           </button>
         </div>
 
