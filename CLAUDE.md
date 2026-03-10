@@ -7,7 +7,7 @@ Solo AI-powered D&D 5e game where Claude acts as Dungeon Master.
 - **Framework**: Next.js 15 (App Router)
 - **Language**: TypeScript (strict mode)
 - **Styling**: Tailwind CSS + shadcn/ui
-- **AI**: Cerebras API (Llama 3.3 70B) via OpenAI SDK — all calls server-side only
+- **AI**: Cerebras API (Llama 3.1 8B) via OpenAI SDK — all calls server-side only
 - **Database**: Supabase (Postgres + Auth)
 - **State Management**: Zustand
 - **Deploy**: Vercel

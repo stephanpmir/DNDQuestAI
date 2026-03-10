@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     ];
 
     const response = await client.chat.completions.create({
-      model: "llama-3.3-70b",
+      model: "llama3.1-8b",
       messages,
       max_tokens: 1024,
     });
