@@ -695,6 +695,22 @@ export function resolveAction(
           dmgBonus += rageBonus;
         }
 
+        // Rogue Sneak Attack: extra d6s when using finesse or ranged weapon
+        // In solo play, Sneak Attack applies on every qualifying hit (simplified from advantage/ally rule)
+        let sneakAttackDmg = 0;
+        if (!isSpell && character.class === "Rogue") {
+          const equippedWeapons = character.equipped ?? [];
+          const weaponIsFinesse = equippedWeapons.some((w) => FINESSE_WEAPONS.some((f) => w.toLowerCase().includes(f)));
+          const weaponIsRanged = equippedWeapons.some((w) => RANGED_WEAPONS.some((r) => w.toLowerCase().includes(r)));
+          if (weaponIsFinesse || weaponIsRanged || isRanged) {
+            // Sneak Attack dice: 1d6 at level 1, +1d6 every 2 levels (ceil(level/2) d6)
+            const sneakDice = Math.ceil(character.level / 2);
+            const sneakDiceCount = isCrit ? sneakDice * 2 : sneakDice;
+            const sneakRoll = damageRoll(sneakDiceCount, 6, 0);
+            sneakAttackDmg = sneakRoll.total;
+          }
+        }
+
         // Apply Fighting Style: Dueling (+2 dmg one-handed melee with no offhand weapon)
         if (!isSpell && !isRanged && character.fightingStyle?.includes("Dueling")) {
           const hasTwoHanded = character.equipped?.some((item) => {
@@ -725,7 +741,7 @@ export function resolveAction(
           }
         }
 
-        outcome.damageDealt = Math.max(1, dmg.total);
+        outcome.damageDealt = Math.max(1, dmg.total + sneakAttackDmg);
         outcome.isCriticalHit = isCrit;
         outcome.xpGained = combatXpReward(character.level);
       } else {
