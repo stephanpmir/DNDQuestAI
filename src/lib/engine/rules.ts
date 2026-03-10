@@ -629,7 +629,14 @@ export function resolveAction(
       }
 
       // D&D 5e attack: d20 + ability modifier + proficiency bonus vs enemy AC
-      const isRanged = /\b(shoot|longbow|shortbow|crossbow|bow|arrow)\b/i.test(playerInput);
+      // Check both player input AND equipped weapons for ranged detection
+      const equippedHasRanged = (character.equipped ?? []).some((w) =>
+        RANGED_WEAPONS.some((r) => w.toLowerCase().includes(r))
+      );
+      const inputMentionsRanged = /\b(shoot|longbow|shortbow|crossbow|bow|arrow)\b/i.test(playerInput);
+      const inputMentionsMelee = /\b(swing|slash|stab|strike|sword|axe|mace|hammer|club|dagger|shortsword|rapier|melee|punch|kick)\b/i.test(playerInput);
+      // Use ranged if explicitly mentioned, or if equipped ranged weapon and not explicitly melee
+      const isRanged = inputMentionsRanged || (equippedHasRanged && !inputMentionsMelee);
       const atkAbility = getAttackAbility(character, playerInput, isSpell, isRanged);
       const atkScore = character.abilityScores[atkAbility];
       const atkMod = modifier(atkScore);
