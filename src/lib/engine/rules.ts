@@ -33,6 +33,7 @@ type ActionType =
   | "rage"
   | "bardic_inspiration"
   | "channel_divinity"
+  | "wild_shape"
   | "identify_item"
   | "self_harm"
   | "death_save"
@@ -45,6 +46,7 @@ const ACTION_PATTERNS: [RegExp, ActionType][] = [
   [/\b(rage|enter rage|go into rage|activate rage|start raging)\b/i, "rage"],
   [/\b(bardic inspiration|inspire|play an inspiring|sing an inspiring|encourage with music)\b/i, "bardic_inspiration"],
   [/\b(channel divinity|turn undead|preserve life|destroy undead|radiance of the dawn)\b/i, "channel_divinity"],
+  [/\b(wild shape|shapeshift|shift into|transform into .*(beast|animal|wolf|bear|spider|hawk|cat|rat|panther))\b/i, "wild_shape"],
   [/\b(identify|appraise|examine closely|inspect item|study item)\b/i, "identify_item"],
   [/\b(attack|strike|hit|fight|slash|stab|shoot|swing)\b/i, "attack"],
   [/\b(cast|spell|magic|fireball|heal|cure)\b/i, "cast_spell"],
@@ -460,6 +462,7 @@ function getSpellDamageDice(playerInput: string, level: number): { dice: number;
   if (/eldritch blast/i.test(lower)) return { dice: cantripScale, sides: 10 };
   if (/thorn whip/i.test(lower)) return { dice: cantripScale, sides: 6 };
   if (/produce flame/i.test(lower)) return { dice: cantripScale, sides: 8 };
+  if (/shillelagh/i.test(lower)) return { dice: 1, sides: 8 }; // Buffs weapon to 1d8, doesn't scale
 
   // 1st-level damage spells
   if (/magic missile/i.test(lower)) return { dice: 3, sides: 4 }; // 3d4+3 (auto-hit, no attack roll needed)
@@ -562,13 +565,29 @@ export function resolveAction(
     case "cast_spell": {
       const isSpell = action === "cast_spell";
 
-      // ── Healing spell detection: Cure Wounds, Healing Word, etc. ──
-      if (isSpell && /\b(cure wounds|healing word|heal|lay on hands)\b/i.test(playerInput)) {
+      // ── Healing spell detection: Cure Wounds, Healing Word, Goodberry, etc. ──
+      if (isSpell && /\b(cure wounds|healing word|heal|lay on hands|goodberry)\b/i.test(playerInput)) {
         const isCaster = FULL_CASTERS.includes(character.class) || HALF_CASTERS.includes(character.class);
         if (!isCaster) {
           outcome.actionDenied = {
             reason: `As a ${character.class}, you cannot cast healing spells.`,
             attempted: "cast a healing spell",
+          };
+          break;
+        }
+        // Goodberry: flat 10 HP healing (10 berries × 1 HP each)
+        if (/\bgoodberry\b/i.test(playerInput)) {
+          const healed = Math.min(10, character.maxHp - character.hp);
+          outcome.hpChange = healed;
+          outcome.roll = {
+            type: "check",
+            ability: "wisdom",
+            rolled: 10,
+            modifier: 0,
+            total: 10,
+            dc: 0,
+            success: true,
+            reason: "Goodberry — 10 magical berries, each restoring 1 HP",
           };
           break;
         }
@@ -1065,6 +1084,41 @@ export function resolveAction(
         };
       }
       outcome.xpGained = combatXpReward(character.level);
+      break;
+    }
+
+    case "wild_shape": {
+      // Druid class feature: transform into a beast form
+      if (character.class !== "Druid") {
+        outcome.actionDenied = {
+          reason: `Wild Shape is a Druid class feature. As a ${character.class}, you don't have this ability.`,
+          attempted: "use Wild Shape",
+        };
+        break;
+      }
+      if (character.level < 2) {
+        outcome.actionDenied = {
+          reason: "You haven't yet learned to channel the primal magic of Wild Shape. Druids gain this ability at level 2.",
+          attempted: "use Wild Shape",
+        };
+        break;
+      }
+      // Wild Shape grants temporary HP based on beast form (simulated)
+      // CR scales: L2 = CR 1/4 (~7 HP), L4 = CR 1/2 (~19 HP), L8 = CR 1 (~33 HP)
+      const beastHP = character.level >= 8 ? 33 : character.level >= 4 ? 19 : 7;
+      // Simulate as a heal (temp HP shield) — capped at maxHP
+      const healed = Math.min(beastHP, character.maxHp - character.hp);
+      outcome.hpChange = healed;
+      outcome.roll = {
+        type: "check",
+        ability: "wisdom",
+        rolled: beastHP,
+        modifier: 0,
+        total: beastHP,
+        dc: 0,
+        success: true,
+        reason: `Wild Shape — beast form grants ${beastHP} temporary HP`,
+      };
       break;
     }
 
