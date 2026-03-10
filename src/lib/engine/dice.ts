@@ -23,14 +23,18 @@ export function modifier(score: number): number {
   return Math.floor((score - 10) / 2);
 }
 
-/** Perform an ability check: d20 + modifier vs DC */
+/**
+ * Perform an ability check: d20 + ability modifier + proficiency bonus vs DC
+ * D&D 5e: Total = d20 + ability mod + proficiency (if proficient)
+ */
 export function abilityCheck(
   abilityScore: number,
   dc: number,
-  ability: string
+  ability: string,
+  proficiencyBonus: number = 0
 ): RollResult {
   const rolled = d20();
-  const mod = modifier(abilityScore);
+  const mod = modifier(abilityScore) + proficiencyBonus;
   const total = rolled + mod;
   return {
     type: "check",
@@ -47,10 +51,11 @@ export function abilityCheck(
 export function savingThrow(
   abilityScore: number,
   dc: number,
-  ability: string
+  ability: string,
+  proficiencyBonus: number = 0
 ): RollResult {
   const rolled = d20();
-  const mod = modifier(abilityScore);
+  const mod = modifier(abilityScore) + proficiencyBonus;
   const total = rolled + mod;
   return {
     type: "save",
@@ -63,13 +68,17 @@ export function savingThrow(
   };
 }
 
-/** Attack roll: d20 + modifier vs target AC */
+/**
+ * Attack roll: d20 + ability modifier + proficiency bonus vs target AC
+ * D&D 5e: Natural 20 always hits, Natural 1 always misses
+ */
 export function attackRoll(
   abilityScore: number,
-  targetAC: number
+  targetAC: number,
+  proficiencyBonus: number = 0
 ): RollResult {
   const rolled = d20();
-  const mod = modifier(abilityScore);
+  const mod = modifier(abilityScore) + proficiencyBonus;
   const total = rolled + mod;
   return {
     type: "attack",
@@ -77,14 +86,16 @@ export function attackRoll(
     rolled,
     modifier: mod,
     total,
-    success: total >= targetAC,
+    // D&D 5e: nat 20 always hits, nat 1 always misses
+    success: rolled === 20 || (rolled !== 1 && total >= targetAC),
   };
 }
 
-/** Damage roll: roll dice and return total */
+/** Damage roll: roll dice and return total (minimum 1) */
 export function damageRoll(count: number, sides: number, bonus: number = 0): RollResult {
   const dice = roll(count, sides);
-  const total = dice.reduce((a, b) => a + b, 0) + bonus;
+  const rawTotal = dice.reduce((a, b) => a + b, 0) + bonus;
+  const total = Math.max(1, rawTotal); // Damage is always at least 1
   return {
     type: "damage",
     rolled: dice.reduce((a, b) => a + b, 0),

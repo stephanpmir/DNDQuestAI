@@ -1,6 +1,6 @@
 import type { Character } from "@/types/character";
 import type { EngineOutcome, WorldEvent } from "@/types/world";
-import { abilityCheck, attackRoll, damageRoll, modifier, d20, roll } from "./dice";
+import { abilityCheck, attackRoll, damageRoll, modifier, d20 } from "./dice";
 
 /** Action categories the engine can detect from player input. */
 type ActionType =
@@ -67,10 +67,36 @@ function getSkillAbility(input: string): keyof Character["abilityScores"] {
   return "wisdom";
 }
 
-/** Determine DC based on turn count (scales slightly over time) */
-function scaledDC(baseDC: number, turnCount: number): number {
-  const scaling = Math.floor(turnCount / 15);
-  return Math.min(baseDC + scaling, 25);
+/**
+ * D&D 5e proficiency bonus by level.
+ * Levels 1-4: +2, 5-8: +3, 9-12: +4, 13-16: +5, 17-20: +6
+ */
+function proficiencyBonus(level: number): number {
+  return Math.floor((level - 1) / 4) + 2;
+}
+
+/**
+ * Scale enemy difficulty based on character level.
+ * Returns an object with enemy AC, attack bonus, damage dice, and HP.
+ */
+function scaledEnemy(characterLevel: number) {
+  const prof = proficiencyBonus(characterLevel);
+  // Enemy scales with player level but stays beatable
+  return {
+    ac: 10 + prof,                           // 12 at L1, 13 at L5, 14 at L9, etc.
+    attackBonus: prof + 1,                    // +3 at L1, +4 at L5, etc.
+    damageDice: { count: 1, sides: 6 },      // 1d6 base
+    damageBonus: Math.floor(characterLevel / 4), // +0 at L1, +1 at L4, etc.
+  };
+}
+
+/**
+ * Scale DC based on character level — keeps checks fair at all levels.
+ * Base DCs: Easy 8, Medium 12, Hard 15
+ */
+function levelScaledDC(baseDC: number, characterLevel: number): number {
+  // Add half proficiency bonus to keep DCs challenging but fair
+  return baseDC + Math.floor(proficiencyBonus(characterLevel) / 2);
 }
 
 /**
@@ -97,8 +123,7 @@ function detectLocationChange(playerInput: string): string | undefined {
 
 /**
  * D&D 5e XP rewards scaled for solo play.
- * These are designed so it takes roughly 10-15 combats per level at low levels,
- * scaling up for higher levels.
+ * Designed so it takes roughly 10-15 combats per level at low levels.
  */
 function combatXpReward(characterLevel: number): number {
   const baseXp = [25, 50, 75, 100, 150, 200, 250, 350, 450, 550,
@@ -156,11 +181,9 @@ export function resolveAction(
       outcome.roll = result;
 
       if (rolled === 20) {
-        // Natural 20: regain 1 HP and consciousness
         outcome.hpChange = 1;
         outcome.deathSaveResult = "nat20";
       } else if (rolled === 1) {
-        // Natural 1: counts as 2 failures
         outcome.deathSaveResult = "nat1";
       } else if (rolled >= 10) {
         outcome.deathSaveResult = "success";
@@ -171,16 +194,11 @@ export function resolveAction(
     }
 
     case "self_harm": {
-      // Self-harm: player takes damage from their own action
       // CON save DC 12 to resist, take 1d6+2 on failure, half on success
       const conSave = abilityCheck(character.abilityScores.constitution, 12, "constitution");
-      outcome.roll = {
-        ...conSave,
-        type: "save",
-      };
+      outcome.roll = { ...conSave, type: "save" };
       const dmg = damageRoll(1, 6, 2);
       if (conSave.success) {
-        // Half damage on successful save
         outcome.hpChange = -Math.max(1, Math.floor(dmg.total / 2));
       } else {
         outcome.hpChange = -dmg.total;
@@ -190,11 +208,15 @@ export function resolveAction(
 
     case "attack":
     case "cast_spell": {
-      // Player attacks — roll to hit vs a scaled enemy AC
-      const enemyAC = scaledDC(12, gameState.turnCount);
+      // D&D 5e attack: d20 + ability modifier + proficiency bonus vs enemy AC
       const atkAbility = action === "cast_spell" ? "intelligence" : "strength";
       const atkScore = character.abilityScores[atkAbility];
-      const hit = attackRoll(atkScore, enemyAC);
+      const atkMod = modifier(atkScore);
+      const prof = proficiencyBonus(character.level);
+      const totalAtkBonus = atkMod + prof;
+
+      const enemy = scaledEnemy(character.level);
+      const hit = attackRoll(atkScore, enemy.ac, prof);
       outcome.roll = hit;
 
       if (hit.success) {
@@ -203,19 +225,19 @@ export function resolveAction(
         const baseDiceCount = action === "cast_spell" ? 2 : 1;
         const diceSides = action === "cast_spell" ? 6 : 8;
         const diceCount = isCrit ? baseDiceCount * 2 : baseDiceCount;
-        const abilityMod = modifier(atkScore);
-        const dmg = damageRoll(diceCount, diceSides, abilityMod);
-        // Store damage info in the outcome for display
-        outcome.damageDealt = dmg.total;
+        const dmg = damageRoll(diceCount, diceSides, atkMod);
+        // Minimum 1 damage on a hit
+        outcome.damageDealt = Math.max(1, dmg.total);
         outcome.isCriticalHit = isCrit;
         outcome.xpGained = combatXpReward(character.level);
       } else {
-        // Enemy counterattack — roll enemy attack vs player AC
-        const enemyAtk = attackRoll(12, character.ac);
-        if (enemyAtk.success) {
-          const enemyDmg = damageRoll(1, 6, 1);
-          outcome.hpChange = -enemyDmg.total;
-          outcome.damageTaken = enemyDmg.total;
+        // Enemy counterattack — enemy uses their attack bonus vs player AC
+        const enemyRoll = d20();
+        const enemyTotal = enemyRoll + enemy.attackBonus;
+        if (enemyTotal >= character.ac) {
+          const enemyDmg = damageRoll(enemy.damageDice.count, enemy.damageDice.sides, enemy.damageBonus);
+          outcome.hpChange = -Math.max(1, enemyDmg.total);
+          outcome.damageTaken = Math.max(1, enemyDmg.total);
         }
       }
       break;
@@ -223,8 +245,9 @@ export function resolveAction(
 
     case "skill_check": {
       const ability = getSkillAbility(playerInput);
-      const dc = scaledDC(13, gameState.turnCount);
-      const result = abilityCheck(character.abilityScores[ability], dc, ability);
+      const dc = levelScaledDC(12, character.level);
+      const prof = proficiencyBonus(character.level);
+      const result = abilityCheck(character.abilityScores[ability], dc, ability, prof);
       outcome.roll = result;
       if (result.success) {
         outcome.xpGained = skillCheckXpReward(character.level);
@@ -234,8 +257,9 @@ export function resolveAction(
 
     case "explore": {
       // Perception check to find interesting things
-      const percDC = scaledDC(10, gameState.turnCount);
-      const perc = abilityCheck(character.abilityScores.wisdom, percDC, "wisdom");
+      const dc = levelScaledDC(10, character.level);
+      const prof = proficiencyBonus(character.level);
+      const perc = abilityCheck(character.abilityScores.wisdom, dc, "wisdom", prof);
       outcome.roll = perc;
       if (perc.success) {
         outcome.xpGained = explorationXpReward(character.level);
@@ -244,6 +268,12 @@ export function resolveAction(
     }
 
     case "rest": {
+      // Can't rest while unconscious
+      if (character.isUnconscious) {
+        outcome.restDenied = true;
+        break;
+      }
+
       // Rest abuse prevention: minimum turns between rests
       const turnsSinceLastRest = character.lastRestTurn >= 0
         ? gameState.turnCount - character.lastRestTurn
@@ -254,7 +284,7 @@ export function resolveAction(
         break;
       }
 
-      // Short rest: recover some HP
+      // Short rest: recover some HP (minimum 1 HP healed if not at max)
       const conMod = modifier(character.abilityScores.constitution);
       const healed = Math.max(1, Math.floor(character.maxHp * 0.25) + conMod);
       outcome.hpChange = Math.min(healed, character.maxHp - character.hp);
@@ -275,7 +305,6 @@ export function resolveAction(
       );
       if (matchedItem) {
         const itemLower = matchedItem.toLowerCase();
-        // Consumables get removed
         const consumables = ["potion", "rations", "scroll", "elixir", "antidote"];
         if (consumables.some((c) => itemLower.includes(c))) {
           outcome.itemsLost = [matchedItem];
@@ -294,22 +323,24 @@ export function resolveAction(
           }
         }
       } else {
-        // Player tried to use something they don't have
         outcome.itemNotFound = true;
       }
       break;
     }
 
     case "talk": {
-      // Social interaction: charisma check for persuasion/deception/intimidation
-      const socialAbility = getSkillAbility(playerInput);
-      // Only roll if it's a social skill, otherwise default to charisma
-      const talkAbility = ["charisma"].includes(socialAbility) ? socialAbility : "charisma";
-      const socialDC = scaledDC(12, gameState.turnCount);
+      // Social interaction: CHA check with proficiency
+      // getSkillAbility returns "charisma" for persuade/deceive/intimidate
+      // For generic "talk" it returns "wisdom" — override to charisma for social
+      const detectedAbility = getSkillAbility(playerInput);
+      const socialAbility = detectedAbility === "charisma" ? "charisma" : "charisma";
+      const dc = levelScaledDC(11, character.level);
+      const prof = proficiencyBonus(character.level);
       const socialResult = abilityCheck(
-        character.abilityScores[talkAbility],
-        socialDC,
-        talkAbility
+        character.abilityScores[socialAbility],
+        dc,
+        "charisma",
+        prof
       );
       outcome.roll = socialResult;
       if (socialResult.success) {

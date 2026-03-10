@@ -194,6 +194,13 @@ export const useCharacterStore = create<CharacterStore>()(
             if (c.deathSaves.failures >= 3) {
               c.isDead = true;
             }
+
+            // 3 successes = stabilized, regain 1 HP and wake up
+            if (c.deathSaves.successes >= 3) {
+              c.deathSaves = { successes: 0, failures: 0 };
+              c.hp = 1;
+              c.isUnconscious = false;
+            }
           }
 
           // XP and level-up
