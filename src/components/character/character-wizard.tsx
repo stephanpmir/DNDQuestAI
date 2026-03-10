@@ -20,6 +20,7 @@ import { StepSkills } from "./step-skills";
 import { StepReview } from "./step-review";
 import { StepSurvey } from "./step-survey";
 import { CharacterAvatar } from "./character-avatar";
+import { recommend } from "@/lib/survey-recommend";
 
 const STEP_LABELS = [
   "Welcome",
@@ -256,6 +257,9 @@ export function CharacterWizard() {
           <StepSurvey
             onComplete={(survey) => {
               setBeginnerSurvey(survey);
+              const rec = recommend(survey);
+              setRace(rec.race);
+              setClass(rec.characterClass);
               setShowSurvey(false);
               setStep(1);
             }}
