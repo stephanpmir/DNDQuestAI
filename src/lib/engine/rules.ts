@@ -744,6 +744,14 @@ export function resolveAction(
         outcome.damageDealt = Math.max(1, dmg.total + sneakAttackDmg);
         outcome.isCriticalHit = isCrit;
         outcome.xpGained = combatXpReward(character.level);
+
+        // Warlock (The Fiend) Dark One's Blessing: gain temp HP on defeating an enemy
+        // Temp HP = CHA mod + warlock level (simplified: added as healing since we don't track temp HP)
+        if (character.class === "Warlock") {
+          const chaBonus = modifier(character.abilityScores.charisma);
+          const darkBlessing = Math.max(1, chaBonus + character.level);
+          outcome.hpChange += darkBlessing;
+        }
       } else {
         // Enemy counterattack — enemy uses their attack bonus vs player AC
         const enemyRoll = d20();
