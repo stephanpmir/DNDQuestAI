@@ -34,6 +34,7 @@ type ActionType =
   | "bardic_inspiration"
   | "channel_divinity"
   | "wild_shape"
+  | "flurry_of_blows"
   | "identify_item"
   | "self_harm"
   | "death_save"
@@ -47,6 +48,7 @@ const ACTION_PATTERNS: [RegExp, ActionType][] = [
   [/\b(bardic inspiration|inspire|play an inspiring|sing an inspiring|encourage with music)\b/i, "bardic_inspiration"],
   [/\b(channel divinity|turn undead|preserve life|destroy undead|radiance of the dawn)\b/i, "channel_divinity"],
   [/\b(wild shape|shapeshift|shift into|transform into .*(beast|animal|wolf|bear|spider|hawk|cat|rat|panther))\b/i, "wild_shape"],
+  [/\b(flurry of blows|ki strike|ki attack|stunning strike|patient defense|step of the wind)\b/i, "flurry_of_blows"],
   [/\b(identify|appraise|examine closely|inspect item|study item)\b/i, "identify_item"],
   [/\b(attack|strike|hit|fight|slash|stab|shoot|swing)\b/i, "attack"],
   [/\b(cast|spell|magic|fireball|heal|cure)\b/i, "cast_spell"],
@@ -438,6 +440,12 @@ function getAttackAbility(
       ? "dexterity" : "strength";
   }
 
+  // Monk Martial Arts: can use DEX instead of STR for unarmed and monk weapons
+  if (character.class === "Monk") {
+    return character.abilityScores.dexterity >= character.abilityScores.strength
+      ? "dexterity" : "strength";
+  }
+
   return "strength";
 }
 
@@ -648,6 +656,17 @@ export function resolveAction(
           const weaponDmg = getWeaponDamage(character.equipped ?? []);
           baseDiceCount = weaponDmg.dice;
           diceSides = weaponDmg.sides;
+
+          // Monk Martial Arts: unarmed strikes or monk weapons use Martial Arts die if higher
+          if (character.class === "Monk") {
+            const martialArtsDie = character.level >= 17 ? 10 : character.level >= 11 ? 8 : character.level >= 5 ? 6 : 4;
+            // Use Martial Arts die if it's better than the weapon (or if unarmed/punch/kick)
+            const isUnarmed = /\b(punch|kick|unarmed|strike|fist|elbow|knee|headbutt)\b/i.test(playerInput);
+            if (isUnarmed || martialArtsDie > diceSides) {
+              baseDiceCount = 1;
+              diceSides = martialArtsDie;
+            }
+          }
         }
         let diceCount = isCrit ? baseDiceCount * 2 : baseDiceCount;
 
@@ -1119,6 +1138,88 @@ export function resolveAction(
         success: true,
         reason: `Wild Shape — beast form grants ${beastHP} temporary HP`,
       };
+      break;
+    }
+
+    case "flurry_of_blows": {
+      // Monk class feature: spend Ki for extra unarmed strikes or defensive abilities
+      if (character.class !== "Monk") {
+        outcome.actionDenied = {
+          reason: `Flurry of Blows is a Monk class feature. As a ${character.class}, you don't have this ability.`,
+          attempted: "use Ki abilities",
+        };
+        break;
+      }
+      if (character.level < 2) {
+        outcome.actionDenied = {
+          reason: "You haven't yet learned to harness your Ki. Monks gain Ki at level 2.",
+          attempted: "use Ki abilities",
+        };
+        break;
+      }
+      const lower = playerInput.toLowerCase();
+      if (/patient defense/i.test(lower)) {
+        // Patient Defense: Dodge action as bonus action (narrative — improves AC situationally)
+        outcome.roll = {
+          type: "check",
+          ability: "dexterity",
+          rolled: 0,
+          modifier: 0,
+          total: 0,
+          dc: 0,
+          success: true,
+          reason: "Patient Defense — you focus your Ki into a defensive stance",
+        };
+        break;
+      }
+      if (/step of the wind/i.test(lower)) {
+        // Step of the Wind: Disengage or Dash as bonus action
+        outcome.roll = {
+          type: "check",
+          ability: "dexterity",
+          rolled: 0,
+          modifier: 0,
+          total: 0,
+          dc: 0,
+          success: true,
+          reason: "Step of the Wind — your Ki carries you with supernatural speed",
+        };
+        break;
+      }
+      // Flurry of Blows / Ki Strike: two unarmed strikes (Martial Arts die)
+      const martialDie = character.level >= 17 ? 10 : character.level >= 11 ? 8 : character.level >= 5 ? 6 : 4;
+      const atkAbilityMonk: keyof typeof character.abilityScores =
+        character.abilityScores.dexterity >= character.abilityScores.strength ? "dexterity" : "strength";
+      const atkScoreMonk = character.abilityScores[atkAbilityMonk];
+      const profMonk = proficiencyBonus(character.level);
+      const enemy = scaledEnemy(character.level);
+      const hit = attackRoll(atkScoreMonk, enemy.ac, profMonk, lucky);
+      outcome.roll = { ...hit, reason: "Flurry of Blows — rapid unarmed strikes" };
+      if (hit.success) {
+        const isCrit = hit.rolled === 20;
+        // Two strikes with Martial Arts die
+        const diceCount = isCrit ? 4 : 2;
+        const atkMod = modifier(atkScoreMonk);
+        const dmg = damageRoll(diceCount, martialDie, atkMod);
+        outcome.damageDealt = Math.max(1, dmg.total);
+        outcome.isCriticalHit = isCrit;
+        outcome.xpGained = combatXpReward(character.level);
+
+        // Stunning Strike at level 5+: enemy must CON save or be stunned
+        if (character.level >= 5 && /stunning strike/i.test(lower)) {
+          const stunDC = 8 + profMonk + modifier(character.abilityScores.wisdom);
+          outcome.roll = { ...outcome.roll, reason: `Stunning Strike — DC ${stunDC} CON save or stunned` };
+        }
+      } else {
+        // Counterattack
+        const enemyRoll = d20();
+        const enemyTotal = enemyRoll + enemy.attackBonus;
+        if (enemyTotal >= character.ac) {
+          const enemyDmg = damageRoll(enemy.damageDice.count, enemy.damageDice.sides, enemy.damageBonus);
+          outcome.hpChange = -Math.max(1, enemyDmg.total);
+          outcome.damageTaken = Math.max(1, enemyDmg.total);
+        }
+      }
       break;
     }
 
