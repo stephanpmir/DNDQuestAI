@@ -85,6 +85,8 @@ export interface EngineOutcome {
   itemNotFound?: boolean;
   /** Karma change from this action */
   karmaChange?: { type: string; amount: number; description: string };
+  /** Fame change from this action */
+  fameChange?: number;
   /** Divine intervention effect */
   divineEffect?: {
     source: "good_god" | "evil_god";

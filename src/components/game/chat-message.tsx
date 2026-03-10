@@ -26,6 +26,9 @@ export function ChatMessage({ message }: Props) {
     );
   }
 
+  const hasKarmaChange = message.karmaChange !== undefined && message.karmaChange !== 0;
+  const hasFameChange = message.fameChange !== undefined && message.fameChange !== 0;
+
   return (
     <div className="space-y-0">
       {message.rollResult && <DiceRollDisplay roll={message.rollResult} />}
@@ -37,6 +40,28 @@ export function ChatMessage({ message }: Props) {
           <TypewriterText text={message.narrative} />
         </div>
       </div>
+      {(hasKarmaChange || hasFameChange) && (
+        <div className="flex gap-2 ml-11 mt-1">
+          {hasKarmaChange && (
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+              message.karmaChange! > 0
+                ? "bg-emerald-950/60 text-emerald-400 border border-emerald-700/30"
+                : "bg-red-950/60 text-red-400 border border-red-700/30"
+            }`}>
+              {message.karmaChange! > 0 ? "+" : ""}{message.karmaChange} karma
+            </span>
+          )}
+          {hasFameChange && (
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+              message.fameChange! > 0
+                ? "bg-sky-950/60 text-sky-400 border border-sky-700/30"
+                : "bg-orange-950/60 text-orange-400 border border-orange-700/30"
+            }`}>
+              {message.fameChange! > 0 ? "+" : ""}{message.fameChange} fame
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

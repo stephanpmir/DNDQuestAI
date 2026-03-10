@@ -158,6 +158,11 @@ export function GameView() {
           updateCompanionApproval(data.karmaChange.type);
         }
 
+        // Handle fame changes
+        if (data.fameChange) {
+          updateFromGameState({ fameChange: data.fameChange });
+        }
+
         // Apply fact ledger updates
         if (data.factUpdates) {
           if (data.factUpdates.newFacts.length > 0) {
@@ -198,13 +203,15 @@ export function GameView() {
         };
         addEvent(worldEvent);
 
-        // Add DM message with roll result
+        // Add DM message with roll result and karma/fame indicators
         const dmMsg: ChatMessageType = {
           id: generateId(),
           role: "assistant",
           narrative: data.narrative,
           timestamp: Date.now(),
           rollResult: data.engineOutcome?.roll,
+          karmaChange: data.karmaChange?.amount,
+          fameChange: data.fameChange,
         };
         addMessage(dmMsg);
       } catch (err) {

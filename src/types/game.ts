@@ -17,6 +17,10 @@ export interface ChatMessage {
   timestamp: number;
   /** Dice roll result to display inline */
   rollResult?: RollResult;
+  /** Karma change to display as floating indicator */
+  karmaChange?: number;
+  /** Fame change to display as floating indicator */
+  fameChange?: number;
 }
 
 /** The structured JSON the API returns. */
@@ -56,6 +60,8 @@ export interface DMResponsePayload {
   contradictions?: number;
   /** Karma change from this action */
   karmaChange?: { type: string; amount: number; description: string };
+  /** Fame change from this action */
+  fameChange?: number;
   /** Divine intervention that occurred */
   divineEffect?: {
     source: "good_god" | "evil_god";

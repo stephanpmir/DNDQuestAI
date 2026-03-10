@@ -232,6 +232,7 @@ export async function POST(request: Request) {
         ? postResult.contradictions.length
         : undefined,
       karmaChange: eo.karmaChange,
+      fameChange: eo.fameChange,
       divineEffect: eo.divineEffect,
     });
   } catch (error: unknown) {

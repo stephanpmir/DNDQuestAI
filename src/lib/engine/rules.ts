@@ -657,6 +657,17 @@ export function resolveAction(
       amount: karmaAction.amount,
       description: playerInput.slice(0, 80),
     };
+    // Notable actions (good or evil) increase fame — doing things gets you noticed
+    const fameGain = Math.max(1, Math.floor(Math.abs(karmaAction.amount) / 2));
+    outcome.fameChange = (outcome.fameChange ?? 0) + fameGain;
+  }
+
+  // Combat victories and quest completions also increase fame
+  if (outcome.damageDealt && outcome.damageDealt > 0) {
+    outcome.fameChange = (outcome.fameChange ?? 0) + 1;
+  }
+  if (outcome.completeQuest) {
+    outcome.fameChange = (outcome.fameChange ?? 0) + 3;
   }
 
   // ── Divine Intervention ──────────────────────────────────────
