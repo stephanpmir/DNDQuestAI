@@ -71,7 +71,7 @@ function getStartingEquipment(cls: CharacterClass): string[] {
 }
 
 /** Calculate AC based on equipped armor and class features */
-function computeAC(cls: CharacterClass, dexScore: number, conScore: number, wisScore: number, equipped: string[]): number {
+function computeAC(cls: CharacterClass, dexScore: number, conScore: number, wisScore: number, equipped: string[], fightingStyle?: string): number {
   const dexMod = computeModifier(dexScore);
   const conMod = computeModifier(conScore);
   const wisMod = computeModifier(wisScore);
@@ -115,8 +115,11 @@ function computeAC(cls: CharacterClass, dexScore: number, conScore: number, wisS
     if (armorAC !== null) break;
   }
 
+  // Defense fighting style: +1 AC while wearing armor
+  const defenseBonus = (armorAC !== null && fightingStyle?.includes("Defense")) ? 1 : 0;
+
   if (armorAC !== null) {
-    return armorAC + shieldBonus;
+    return armorAC + shieldBonus + defenseBonus;
   }
 
   // No armor — use unarmored defense
@@ -239,6 +242,13 @@ export const useCharacterStore = create<CharacterStore>()(
 
           const racialTraits = RACIAL_DATA[c.race]?.traits ?? [];
 
+          // Add racial cantrips
+          const cantrips = [...c.cantrips];
+          // Tiefling Infernal Legacy: Thaumaturgy cantrip
+          if (c.race === "Tiefling" && !cantrips.includes("Thaumaturgy")) {
+            cantrips.push("Thaumaturgy");
+          }
+
           // Add racial skill proficiencies
           const skillProfs = [...c.skillProficiencies];
           // Elf: Perception proficiency
@@ -265,6 +275,7 @@ export const useCharacterStore = create<CharacterStore>()(
               ...c,
               abilityScores,
               racialTraits,
+              cantrips,
               skillProficiencies: skillProfs,
               hp,
               maxHp: hp,
@@ -290,7 +301,7 @@ export const useCharacterStore = create<CharacterStore>()(
           const ac = computeAC(
             s.character.class, s.character.abilityScores.dexterity,
             s.character.abilityScores.constitution, s.character.abilityScores.wisdom,
-            newEquipped
+            newEquipped, s.character.fightingStyle
           );
           return { character: { ...s.character, equipped: newEquipped, ac } };
         }),
@@ -301,7 +312,7 @@ export const useCharacterStore = create<CharacterStore>()(
           const ac = computeAC(
             s.character.class, s.character.abilityScores.dexterity,
             s.character.abilityScores.constitution, s.character.abilityScores.wisdom,
-            newEquipped
+            newEquipped, s.character.fightingStyle
           );
           return { character: { ...s.character, equipped: newEquipped, ac } };
         }),
@@ -357,7 +368,7 @@ export const useCharacterStore = create<CharacterStore>()(
               (item) => !updates.removeItems!.includes(item)
             );
             if (c.equipped.length !== oldEquipped.length) {
-              c.ac = computeAC(c.class, c.abilityScores.dexterity, c.abilityScores.constitution, c.abilityScores.wisdom, c.equipped);
+              c.ac = computeAC(c.class, c.abilityScores.dexterity, c.abilityScores.constitution, c.abilityScores.wisdom, c.equipped, c.fightingStyle);
             }
           }
 

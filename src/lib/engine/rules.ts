@@ -31,6 +31,7 @@ type ActionType =
   | "second_wind"
   | "breath_weapon"
   | "rage"
+  | "bardic_inspiration"
   | "identify_item"
   | "self_harm"
   | "death_save"
@@ -41,6 +42,7 @@ const ACTION_PATTERNS: [RegExp, ActionType][] = [
   [/\b(second wind)\b/i, "second_wind"],
   [/\b(breath weapon|breathe fire|breathe ice|breathe lightning|breathe acid|breathe poison|use breath|dragon breath)\b/i, "breath_weapon"],
   [/\b(rage|enter rage|go into rage|activate rage|start raging)\b/i, "rage"],
+  [/\b(bardic inspiration|inspire|play an inspiring|sing an inspiring|encourage with music)\b/i, "bardic_inspiration"],
   [/\b(identify|appraise|examine closely|inspect item|study item)\b/i, "identify_item"],
   [/\b(attack|strike|hit|fight|slash|stab|shoot|swing)\b/i, "attack"],
   [/\b(cast|spell|magic|fireball|heal|cure)\b/i, "cast_spell"],
@@ -436,6 +438,43 @@ function getAttackAbility(
 }
 
 /**
+ * Get damage dice for a spell or cantrip based on the spell name and character level.
+ * Cantrips scale at levels 5, 11, and 17. Leveled spells use fixed dice.
+ */
+function getSpellDamageDice(playerInput: string, level: number): { dice: number; sides: number } {
+  const lower = playerInput.toLowerCase();
+  // Cantrip scaling: 1 die at L1, 2 at L5, 3 at L11, 4 at L17
+  const cantripScale = level >= 17 ? 4 : level >= 11 ? 3 : level >= 5 ? 2 : 1;
+
+  // Cantrips
+  if (/vicious mockery/i.test(lower)) return { dice: cantripScale, sides: 4 };
+  if (/fire bolt/i.test(lower)) return { dice: cantripScale, sides: 10 };
+  if (/ray of frost/i.test(lower)) return { dice: cantripScale, sides: 8 };
+  if (/sacred flame/i.test(lower)) return { dice: cantripScale, sides: 8 };
+  if (/chill touch/i.test(lower)) return { dice: cantripScale, sides: 8 };
+  if (/shocking grasp/i.test(lower)) return { dice: cantripScale, sides: 8 };
+  if (/acid splash/i.test(lower)) return { dice: cantripScale, sides: 6 };
+  if (/poison spray/i.test(lower)) return { dice: cantripScale, sides: 12 };
+  if (/eldritch blast/i.test(lower)) return { dice: cantripScale, sides: 10 };
+  if (/thorn whip/i.test(lower)) return { dice: cantripScale, sides: 6 };
+  if (/produce flame/i.test(lower)) return { dice: cantripScale, sides: 8 };
+
+  // 1st-level damage spells
+  if (/magic missile/i.test(lower)) return { dice: 3, sides: 4 }; // 3d4+3 (auto-hit, no attack roll needed)
+  if (/burning hands/i.test(lower)) return { dice: 3, sides: 6 };
+  if (/thunderwave/i.test(lower)) return { dice: 2, sides: 8 };
+  if (/chromatic orb/i.test(lower)) return { dice: 3, sides: 8 };
+  if (/witch bolt/i.test(lower)) return { dice: 1, sides: 12 };
+  if (/guiding bolt/i.test(lower)) return { dice: 4, sides: 6 };
+  if (/inflict wounds/i.test(lower)) return { dice: 3, sides: 10 };
+  if (/ray of sickness/i.test(lower)) return { dice: 2, sides: 8 };
+  if (/hellish rebuke/i.test(lower)) return { dice: 2, sides: 10 };
+
+  // Default: generic spell damage (2d6)
+  return { dice: 2, sides: 6 };
+}
+
+/**
  * The Rules Engine. Given a player action and game state, it produces
  * deterministic outcomes. The LLM only narrates what happened.
  */
@@ -519,8 +558,43 @@ export function resolveAction(
 
     case "attack":
     case "cast_spell": {
-      // D&D 5e attack: d20 + ability modifier + proficiency bonus vs enemy AC
       const isSpell = action === "cast_spell";
+
+      // ── Healing spell detection: Cure Wounds, Healing Word, etc. ──
+      if (isSpell && /\b(cure wounds|healing word|heal|lay on hands)\b/i.test(playerInput)) {
+        const isCaster = FULL_CASTERS.includes(character.class) || HALF_CASTERS.includes(character.class);
+        if (!isCaster) {
+          outcome.actionDenied = {
+            reason: `As a ${character.class}, you cannot cast healing spells.`,
+            attempted: "cast a healing spell",
+          };
+          break;
+        }
+        // Cure Wounds: 1d8 + spellcasting ability modifier
+        // Healing Word: 1d4 + spellcasting ability modifier (bonus action, ranged)
+        const isHealingWord = /\bhealing word\b/i.test(playerInput);
+        const healDice = isHealingWord ? 4 : 8;
+        const spellAbility = ["Wizard"].includes(character.class) ? "intelligence"
+          : ["Cleric", "Druid", "Ranger"].includes(character.class) ? "wisdom"
+          : "charisma";
+        const spellMod = modifier(character.abilityScores[spellAbility as keyof typeof character.abilityScores]);
+        const healAmount = damageRoll(1, healDice, spellMod);
+        const healed = Math.min(Math.max(1, healAmount.total), character.maxHp - character.hp);
+        outcome.hpChange = healed;
+        outcome.roll = {
+          type: "check",
+          ability: spellAbility,
+          rolled: healAmount.rolled,
+          modifier: spellMod,
+          total: healAmount.total,
+          dc: 0,
+          success: true,
+          reason: isHealingWord ? "Healing Word — magical words mend your wounds" : "Cure Wounds — healing energy flows through your hands",
+        };
+        break;
+      }
+
+      // D&D 5e attack: d20 + ability modifier + proficiency bonus vs enemy AC
       const isRanged = /\b(shoot|longbow|shortbow|crossbow|bow|arrow)\b/i.test(playerInput);
       const atkAbility = getAttackAbility(character, playerInput, isSpell, isRanged);
       const atkScore = character.abilityScores[atkAbility];
@@ -544,8 +618,10 @@ export function resolveAction(
         let baseDiceCount: number;
         let diceSides: number;
         if (isSpell) {
-          baseDiceCount = 2;
-          diceSides = 6;
+          // Use correct damage dice based on spell/cantrip
+          const spellDmg = getSpellDamageDice(playerInput, character.level);
+          baseDiceCount = spellDmg.dice;
+          diceSides = spellDmg.sides;
         } else {
           // Use actual weapon damage dice from equipped weapon
           const weaponDmg = getWeaponDamage(character.equipped ?? []);
@@ -915,6 +991,32 @@ export function resolveAction(
         reason: `Breath Weapon — ${breathDice}d6 elemental damage`,
       };
       outcome.xpGained = combatXpReward(character.level);
+      break;
+    }
+
+    case "bardic_inspiration": {
+      // Bard class feature: inspire self or allies with a d6 (scales at higher levels)
+      if (character.class !== "Bard") {
+        outcome.actionDenied = {
+          reason: `Bardic Inspiration is a Bard class feature. As a ${character.class}, you don't have this ability.`,
+          attempted: "use Bardic Inspiration",
+        };
+        break;
+      }
+      // Inspiration die scales: d6 at L1, d8 at L5, d10 at L9, d12 at L15
+      const inspireDie = character.level >= 15 ? 12 : character.level >= 9 ? 10 : character.level >= 5 ? 8 : 6;
+      const inspireRoll = d(inspireDie);
+      outcome.roll = {
+        type: "check",
+        ability: "charisma",
+        rolled: inspireRoll,
+        modifier: 0,
+        total: inspireRoll,
+        dc: 0,
+        success: true,
+        reason: `Bardic Inspiration — a d${inspireDie} of musical encouragement`,
+      };
+      outcome.xpGained = skillCheckXpReward(character.level);
       break;
     }
 
