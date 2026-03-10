@@ -7,7 +7,7 @@ import { useGameStore } from "@/stores/game-store";
 import { useWorldStore } from "@/stores/world-store";
 import { useKarmaStore } from "@/stores/karma-store";
 import type { CharacterClass, Race } from "@/types/character";
-import { RACES, CLASSES } from "@/types/character";
+import { RACES, CLASSES, HAIR_STYLES, HAIR_COLORS, SKIN_TONES, BODY_BUILDS, HEIGHT_OPTIONS } from "@/types/character";
 import { CLASS_DATA, FIGHTING_STYLES } from "@/lib/classes";
 import { generateRandomName } from "@/lib/descriptions";
 import { Progress } from "@/components/ui/progress";
@@ -55,6 +55,7 @@ export function CharacterWizard() {
     setSpells,
     setFightingStyle,
     setHalfElfBonuses,
+    setAvatar,
     finalizeCharacter,
   } = useCharacterStore();
   const resetGame = useGameStore((s) => s.reset);
@@ -202,6 +203,15 @@ export function CharacterWizard() {
       setHalfElfBonuses([picked[0], picked[1]]);
     }
 
+    // Random avatar customization
+    setAvatar({
+      hairStyle: pickRandom(HAIR_STYLES),
+      hairColor: pickRandom(HAIR_COLORS).value,
+      skinTone: pickRandom(SKIN_TONES).value,
+      bodyBuild: pickRandom(BODY_BUILDS),
+      height: pickRandom(HEIGHT_OPTIONS),
+    });
+
     resetGame();
     resetWorld();
     resetKarma();
@@ -319,6 +329,8 @@ export function CharacterWizard() {
               race={character.race}
               characterClass={character.class}
               gender={character.gender}
+              avatar={character.avatar}
+              onAvatarChange={setAvatar}
             />
           </div>
         </div>

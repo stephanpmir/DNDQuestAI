@@ -1,6 +1,6 @@
 "use client";
 
-import type { Race, CharacterClass, Gender } from "@/types/character";
+import type { Race, CharacterClass, Gender, AvatarCustomization, BodyBuild, HeightOption, HairStyle } from "@/types/character";
 
 /**
  * Race body-type groupings for the silhouette base shape.
@@ -40,42 +40,102 @@ interface Props {
   race: Race;
   characterClass: CharacterClass;
   gender: Gender;
+  avatar?: AvatarCustomization;
+}
+
+/* ─── Body config helpers ─── */
+
+interface BodyConfig {
+  headY: number;
+  headR: number;
+  shoulderW: number;
+  hipW: number;
+  torsoH: number;
+  legH: number;
+  armLen: number;
+}
+
+/** Build multipliers for shoulder/hip width */
+const BUILD_SCALE: Record<BodyBuild, { shoulder: number; hip: number; armW: number }> = {
+  slim:     { shoulder: 0.85, hip: 0.85, armW: 0.8 },
+  average:  { shoulder: 1.0,  hip: 1.0,  armW: 1.0 },
+  muscular: { shoulder: 1.15, hip: 1.05, armW: 1.3 },
+  heavy:    { shoulder: 1.1,  hip: 1.2,  armW: 1.2 },
+};
+
+/** Height offsets: shifts headY up/down and scales torso+legs */
+const HEIGHT_SCALE: Record<HeightOption, { yOffset: number; torsoMul: number; legMul: number }> = {
+  short:   { yOffset: 15, torsoMul: 0.88, legMul: 0.85 },
+  average: { yOffset: 0,  torsoMul: 1.0,  legMul: 1.0 },
+  tall:    { yOffset: -8, torsoMul: 1.08, legMul: 1.1 },
+};
+
+function getBodyConfig(
+  body: BodyType,
+  gender: Gender,
+  build: BodyBuild,
+  height: HeightOption,
+): BodyConfig {
+  const isFemale = gender === "Female";
+
+  const base = {
+    standard: { headY: 55, headR: 28, shoulderW: 40, hipW: isFemale ? 36 : 32, torsoH: 70, legH: 90, armLen: 85 },
+    tall:     { headY: 45, headR: 26, shoulderW: 38, hipW: isFemale ? 32 : 28, torsoH: 80, legH: 100, armLen: 95 },
+    short:    { headY: 85, headR: 26, shoulderW: 34, hipW: isFemale ? 32 : 28, torsoH: 55, legH: 60, armLen: 60 },
+    stocky:   { headY: 75, headR: 28, shoulderW: 46, hipW: isFemale ? 40 : 38, torsoH: 60, legH: 65, armLen: 65 },
+    large:    { headY: 50, headR: 30, shoulderW: 48, hipW: isFemale ? 40 : 38, torsoH: 75, legH: 90, armLen: 90 },
+  }[body];
+
+  const bs = BUILD_SCALE[build];
+  const hs = HEIGHT_SCALE[height];
+
+  return {
+    headY: base.headY + hs.yOffset,
+    headR: base.headR,
+    shoulderW: Math.round(base.shoulderW * bs.shoulder),
+    hipW: Math.round(base.hipW * bs.hip),
+    torsoH: Math.round(base.torsoH * hs.torsoMul),
+    legH: Math.round(base.legH * hs.legMul),
+    armLen: Math.round(base.armLen * hs.legMul),
+  };
 }
 
 /* ─── SVG sub-components (all draw inside a 200×320 viewBox) ─── */
 
-function BaseTorso({ body, gender }: { body: BodyType; gender: Gender }) {
+function BaseTorso({
+  cfg,
+  gender,
+  skinTone,
+  buildArmW,
+}: {
+  cfg: BodyConfig;
+  gender: Gender;
+  skinTone: string;
+  buildArmW: number;
+}) {
   const isFemale = gender === "Female";
-
-  // Scale factors by body type
-  const cfg = {
-    standard: { headY: 55, headR: 28, shoulderW: 40, hipW: isFemale ? 36 : 32, torsoH: 70, legH: 90, armLen: 85, scale: 1 },
-    tall:     { headY: 45, headR: 26, shoulderW: 38, hipW: isFemale ? 32 : 28, torsoH: 80, legH: 100, armLen: 95, scale: 1 },
-    short:    { headY: 85, headR: 26, shoulderW: 34, hipW: isFemale ? 32 : 28, torsoH: 55, legH: 60, armLen: 60, scale: 1 },
-    stocky:   { headY: 75, headR: 28, shoulderW: 46, hipW: isFemale ? 40 : 38, torsoH: 60, legH: 65, armLen: 65, scale: 1 },
-    large:    { headY: 50, headR: 30, shoulderW: 48, hipW: isFemale ? 40 : 38, torsoH: 75, legH: 90, armLen: 90, scale: 1 },
-  }[body];
-
   const cx = 100;
   const { headY, headR, shoulderW, hipW, torsoH, legH, armLen } = cfg;
-  const neckY = headY + headR + 4;
-  const shoulderY = neckY + 8;
+  const shoulderY = headY + headR + 4 + 8;
   const hipY = shoulderY + torsoH;
   const feetY = hipY + legH;
 
-  // Waist pinch for female silhouette
   const waistW = isFemale ? shoulderW - 10 : shoulderW - 4;
   const waistY = shoulderY + torsoH * 0.45;
 
+  // Arm thickness scales with build
+  const armSpread = Math.round(14 * buildArmW);
+  const armInner = Math.round(10 * buildArmW);
+
   return (
-    <g className="fill-current">
+    <g fill={skinTone}>
       {/* Head */}
       <ellipse cx={cx} cy={headY} rx={headR} ry={headR + 2} />
 
       {/* Neck */}
       <rect x={cx - 8} y={headY + headR} width={16} height={10} rx={3} />
 
-      {/* Torso – built as a path for waist shaping */}
+      {/* Torso */}
       <path
         d={`
           M ${cx - shoulderW} ${shoulderY}
@@ -90,9 +150,9 @@ function BaseTorso({ body, gender }: { body: BodyType; gender: Gender }) {
       <path
         d={`
           M ${cx - shoulderW} ${shoulderY}
-          Q ${cx - shoulderW - 14} ${shoulderY + armLen * 0.5}, ${cx - shoulderW - 6} ${shoulderY + armLen}
+          Q ${cx - shoulderW - armSpread} ${shoulderY + armLen * 0.5}, ${cx - shoulderW - 6} ${shoulderY + armLen}
           L ${cx - shoulderW + 4} ${shoulderY + armLen}
-          Q ${cx - shoulderW - 4} ${shoulderY + armLen * 0.5}, ${cx - shoulderW + 10} ${shoulderY}
+          Q ${cx - shoulderW - 4} ${shoulderY + armLen * 0.5}, ${cx - shoulderW + armInner} ${shoulderY}
           Z
         `}
       />
@@ -101,9 +161,9 @@ function BaseTorso({ body, gender }: { body: BodyType; gender: Gender }) {
       <path
         d={`
           M ${cx + shoulderW} ${shoulderY}
-          Q ${cx + shoulderW + 14} ${shoulderY + armLen * 0.5}, ${cx + shoulderW + 6} ${shoulderY + armLen}
+          Q ${cx + shoulderW + armSpread} ${shoulderY + armLen * 0.5}, ${cx + shoulderW + 6} ${shoulderY + armLen}
           L ${cx + shoulderW - 4} ${shoulderY + armLen}
-          Q ${cx + shoulderW + 4} ${shoulderY + armLen * 0.5}, ${cx + shoulderW - 10} ${shoulderY}
+          Q ${cx + shoulderW + 4} ${shoulderY + armLen * 0.5}, ${cx + shoulderW - armInner} ${shoulderY}
           Z
         `}
       />
@@ -130,91 +190,124 @@ function BaseTorso({ body, gender }: { body: BodyType; gender: Gender }) {
         `}
       />
 
-      {/* Boots */}
-      <ellipse cx={cx - hipW / 2 - 2} cy={feetY + 3} rx={hipW / 2 + 4} ry={5} />
-      <ellipse cx={cx + hipW / 2 + 2} cy={feetY + 3} rx={hipW / 2 + 4} ry={5} />
+      {/* Boots — slightly darker than skin */}
+      <ellipse cx={cx - hipW / 2 - 2} cy={feetY + 3} rx={hipW / 2 + 4} ry={5} fill="#3d3224" />
+      <ellipse cx={cx + hipW / 2 + 2} cy={feetY + 3} rx={hipW / 2 + 4} ry={5} fill="#3d3224" />
     </g>
   );
 }
 
-function RacialFeatures({ race, headY, headR }: { race: Race; headY: number; headR: number }) {
+function HairLayer({
+  hairStyle,
+  hairColor,
+  headY,
+  headR,
+}: {
+  hairStyle: HairStyle;
+  hairColor: string;
+  headY: number;
+  headR: number;
+}) {
   const cx = 100;
 
-  switch (race) {
-    case "Elf":
-    case "Half-Elf":
-      // Pointed ears
+  if (hairStyle === "bald") return null;
+
+  switch (hairStyle) {
+    case "short":
       return (
-        <g className="fill-current">
-          <polygon points={`${cx - headR - 2},${headY - 2} ${cx - headR - 18},${headY - 16} ${cx - headR + 2},${headY + 8}`} />
-          <polygon points={`${cx + headR + 2},${headY - 2} ${cx + headR + 18},${headY - 16} ${cx + headR - 2},${headY + 8}`} />
+        <g fill={hairColor}>
+          {/* Cap-like short hair */}
+          <ellipse cx={cx} cy={headY - 6} rx={headR + 2} ry={headR - 6} />
+          {/* Slight side coverage */}
+          <rect x={cx - headR - 1} y={headY - 10} width={4} height={14} rx={2} />
+          <rect x={cx + headR - 3} y={headY - 10} width={4} height={14} rx={2} />
         </g>
       );
 
-    case "Dwarf":
-      // Beard
+    case "long":
       return (
-        <g className="fill-current opacity-70">
-          <path d={`M ${cx - 16} ${headY + 10} Q ${cx - 20} ${headY + 40}, ${cx} ${headY + 48} Q ${cx + 20} ${headY + 40}, ${cx + 16} ${headY + 10}`} />
+        <g fill={hairColor}>
+          {/* Top volume */}
+          <ellipse cx={cx} cy={headY - 8} rx={headR + 4} ry={headR - 4} />
+          {/* Left drape */}
+          <path
+            d={`M ${cx - headR - 3} ${headY - 6}
+                Q ${cx - headR - 8} ${headY + 30}, ${cx - headR + 2} ${headY + 56}
+                L ${cx - headR + 8} ${headY + 50}
+                Q ${cx - headR - 2} ${headY + 20}, ${cx - headR + 2} ${headY - 2}
+                Z`}
+          />
+          {/* Right drape */}
+          <path
+            d={`M ${cx + headR + 3} ${headY - 6}
+                Q ${cx + headR + 8} ${headY + 30}, ${cx + headR - 2} ${headY + 56}
+                L ${cx + headR - 8} ${headY + 50}
+                Q ${cx + headR + 2} ${headY + 20}, ${cx + headR - 2} ${headY - 2}
+                Z`}
+          />
         </g>
       );
 
-    case "Half-Orc":
-      // Tusks + broader jaw
+    case "ponytail":
       return (
-        <g className="fill-current">
-          <rect x={cx - 18} y={headY + headR - 8} width={5} height={12} rx={2} className="opacity-80" />
-          <rect x={cx + 13} y={headY + headR - 8} width={5} height={12} rx={2} className="opacity-80" />
+        <g fill={hairColor}>
+          {/* Cap */}
+          <ellipse cx={cx} cy={headY - 6} rx={headR + 2} ry={headR - 6} />
+          {/* Ponytail going back-right */}
+          <path
+            d={`M ${cx + 6} ${headY - headR + 6}
+                Q ${cx + 28} ${headY - headR - 4}, ${cx + 30} ${headY + 10}
+                Q ${cx + 32} ${headY + 30}, ${cx + 24} ${headY + 44}
+                L ${cx + 18} ${headY + 40}
+                Q ${cx + 24} ${headY + 24}, ${cx + 22} ${headY + 8}
+                Q ${cx + 20} ${headY - headR + 4}, ${cx + 4} ${headY - headR + 8}
+                Z`}
+          />
         </g>
       );
 
-    case "Tiefling":
-      // Horns + tail
+    case "mohawk":
       return (
-        <g className="fill-current">
-          {/* Left horn */}
-          <path d={`M ${cx - 14} ${headY - headR + 4} Q ${cx - 26} ${headY - headR - 20}, ${cx - 30} ${headY - headR - 30}`}
-            fill="none" className="stroke-current" strokeWidth={4} strokeLinecap="round" />
-          {/* Right horn */}
-          <path d={`M ${cx + 14} ${headY - headR + 4} Q ${cx + 26} ${headY - headR - 20}, ${cx + 30} ${headY - headR - 30}`}
-            fill="none" className="stroke-current" strokeWidth={4} strokeLinecap="round" />
-          {/* Tail */}
-          <path d={`M ${cx + 30} 230 Q ${cx + 55} 260, ${cx + 50} 290 Q ${cx + 45} 310, ${cx + 60} 300`}
-            fill="none" className="stroke-current" strokeWidth={3} strokeLinecap="round" />
+        <g fill={hairColor}>
+          {/* Central ridge */}
+          <path
+            d={`M ${cx - 6} ${headY + 4}
+                Q ${cx - 8} ${headY - headR - 4}, ${cx} ${headY - headR - 18}
+                Q ${cx + 8} ${headY - headR - 4}, ${cx + 6} ${headY + 4}
+                Z`}
+          />
         </g>
       );
 
-    case "Dragonborn":
-      // Snout + ridges
+    case "braids":
       return (
-        <g className="fill-current">
-          {/* Snout */}
-          <path d={`M ${cx - 10} ${headY + 4} L ${cx} ${headY + 18} L ${cx + 10} ${headY + 4}`} className="opacity-70" />
-          {/* Head ridges */}
-          <path d={`M ${cx - 8} ${headY - headR} L ${cx - 4} ${headY - headR - 14}`}
-            fill="none" className="stroke-current" strokeWidth={3} strokeLinecap="round" />
-          <path d={`M ${cx} ${headY - headR} L ${cx} ${headY - headR - 16}`}
-            fill="none" className="stroke-current" strokeWidth={3} strokeLinecap="round" />
-          <path d={`M ${cx + 8} ${headY - headR} L ${cx + 4} ${headY - headR - 14}`}
-            fill="none" className="stroke-current" strokeWidth={3} strokeLinecap="round" />
-        </g>
-      );
-
-    case "Gnome":
-      // Large pointy hat silhouette (classic gnome)
-      return (
-        <g className="fill-current opacity-60">
-          <polygon points={`${cx - headR + 2},${headY - headR + 4} ${cx},${headY - headR - 28} ${cx + headR - 2},${headY - headR + 4}`} />
-        </g>
-      );
-
-    case "Halfling":
-      // Curly hair puff
-      return (
-        <g className="fill-current opacity-50">
-          <circle cx={cx - 12} cy={headY - headR + 2} r={10} />
-          <circle cx={cx} cy={headY - headR - 2} r={10} />
-          <circle cx={cx + 12} cy={headY - headR + 2} r={10} />
+        <g fill={hairColor}>
+          {/* Top volume */}
+          <ellipse cx={cx} cy={headY - 6} rx={headR + 2} ry={headR - 6} />
+          {/* Left braid */}
+          <path
+            d={`M ${cx - headR} ${headY}
+                L ${cx - headR - 4} ${headY + 16}
+                L ${cx - headR} ${headY + 30}
+                L ${cx - headR - 4} ${headY + 44}
+                L ${cx - headR + 2} ${headY + 50}
+                L ${cx - headR + 4} ${headY + 44}
+                L ${cx - headR} ${headY + 30}
+                L ${cx - headR + 4} ${headY + 16}
+                Z`}
+          />
+          {/* Right braid */}
+          <path
+            d={`M ${cx + headR} ${headY}
+                L ${cx + headR + 4} ${headY + 16}
+                L ${cx + headR} ${headY + 30}
+                L ${cx + headR + 4} ${headY + 44}
+                L ${cx + headR - 2} ${headY + 50}
+                L ${cx + headR - 4} ${headY + 44}
+                L ${cx + headR} ${headY + 30}
+                L ${cx + headR - 4} ${headY + 16}
+                Z`}
+          />
         </g>
       );
 
@@ -223,14 +316,80 @@ function RacialFeatures({ race, headY, headR }: { race: Race; headY: number; hea
   }
 }
 
+function RacialFeatures({ race, headY, headR, skinTone }: { race: Race; headY: number; headR: number; skinTone: string }) {
+  const cx = 100;
+
+  switch (race) {
+    case "Elf":
+    case "Half-Elf":
+      return (
+        <g fill={skinTone}>
+          <polygon points={`${cx - headR - 2},${headY - 2} ${cx - headR - 18},${headY - 16} ${cx - headR + 2},${headY + 8}`} />
+          <polygon points={`${cx + headR + 2},${headY - 2} ${cx + headR + 18},${headY - 16} ${cx + headR - 2},${headY + 8}`} />
+        </g>
+      );
+
+    case "Dwarf":
+      return (
+        <g fill={skinTone} opacity={0.7}>
+          <path d={`M ${cx - 16} ${headY + 10} Q ${cx - 20} ${headY + 40}, ${cx} ${headY + 48} Q ${cx + 20} ${headY + 40}, ${cx + 16} ${headY + 10}`} />
+        </g>
+      );
+
+    case "Half-Orc":
+      return (
+        <g fill="#e8e0d0">
+          <rect x={cx - 18} y={headY + headR - 8} width={5} height={12} rx={2} opacity={0.8} />
+          <rect x={cx + 13} y={headY + headR - 8} width={5} height={12} rx={2} opacity={0.8} />
+        </g>
+      );
+
+    case "Tiefling":
+      return (
+        <g>
+          <path d={`M ${cx - 14} ${headY - headR + 4} Q ${cx - 26} ${headY - headR - 20}, ${cx - 30} ${headY - headR - 30}`}
+            fill="none" stroke="#5c1a1a" strokeWidth={4} strokeLinecap="round" />
+          <path d={`M ${cx + 14} ${headY - headR + 4} Q ${cx + 26} ${headY - headR - 20}, ${cx + 30} ${headY - headR - 30}`}
+            fill="none" stroke="#5c1a1a" strokeWidth={4} strokeLinecap="round" />
+          <path d={`M ${cx + 30} 230 Q ${cx + 55} 260, ${cx + 50} 290 Q ${cx + 45} 310, ${cx + 60} 300`}
+            fill="none" stroke={skinTone} strokeWidth={3} strokeLinecap="round" />
+        </g>
+      );
+
+    case "Dragonborn":
+      return (
+        <g fill={skinTone}>
+          <path d={`M ${cx - 10} ${headY + 4} L ${cx} ${headY + 18} L ${cx + 10} ${headY + 4}`} opacity={0.7} />
+          <path d={`M ${cx - 8} ${headY - headR} L ${cx - 4} ${headY - headR - 14}`}
+            fill="none" stroke={skinTone} strokeWidth={3} strokeLinecap="round" />
+          <path d={`M ${cx} ${headY - headR} L ${cx} ${headY - headR - 16}`}
+            fill="none" stroke={skinTone} strokeWidth={3} strokeLinecap="round" />
+          <path d={`M ${cx + 8} ${headY - headR} L ${cx + 4} ${headY - headR - 14}`}
+            fill="none" stroke={skinTone} strokeWidth={3} strokeLinecap="round" />
+        </g>
+      );
+
+    case "Gnome":
+      return (
+        <g fill={skinTone} opacity={0.6}>
+          <polygon points={`${cx - headR + 2},${headY - headR + 4} ${cx},${headY - headR - 28} ${cx + headR - 2},${headY - headR + 4}`} />
+        </g>
+      );
+
+    case "Halfling":
+      return null; // Hair handles the curls
+
+    default:
+      return null;
+  }
+}
+
 function ClassAccessory({ characterClass, accent }: { characterClass: CharacterClass; accent: string }) {
-  // Positioned relative to the right hand area (~155, 170)
   const hx = 152;
   const hy = 165;
 
   switch (characterClass) {
     case "Barbarian":
-      // Large two-handed axe
       return (
         <g>
           <line x1={hx} y1={hy - 10} x2={hx + 8} y2={hy + 60} stroke={accent} strokeWidth={3} strokeLinecap="round" />
@@ -240,7 +399,6 @@ function ClassAccessory({ characterClass, accent }: { characterClass: CharacterC
 
     case "Fighter":
     case "Paladin":
-      // Sword
       return (
         <g>
           <line x1={hx + 2} y1={hy - 20} x2={hx + 6} y2={hy + 40} stroke={accent} strokeWidth={2.5} strokeLinecap="round" />
@@ -252,7 +410,6 @@ function ClassAccessory({ characterClass, accent }: { characterClass: CharacterC
       );
 
     case "Rogue":
-      // Twin daggers
       return (
         <g>
           <line x1={hx} y1={hy - 5} x2={hx + 4} y2={hy + 20} stroke={accent} strokeWidth={2} strokeLinecap="round" />
@@ -261,7 +418,6 @@ function ClassAccessory({ characterClass, accent }: { characterClass: CharacterC
       );
 
     case "Ranger":
-      // Bow
       return (
         <g>
           <path d={`M ${hx + 6} ${hy - 30} Q ${hx + 24} ${hy}, ${hx + 6} ${hy + 30}`}
@@ -271,7 +427,6 @@ function ClassAccessory({ characterClass, accent }: { characterClass: CharacterC
       );
 
     case "Wizard":
-      // Staff with orb
       return (
         <g>
           <line x1={hx + 4} y1={hy - 40} x2={hx + 8} y2={hy + 50} stroke={accent} strokeWidth={3} strokeLinecap="round" opacity={0.7} />
@@ -281,7 +436,6 @@ function ClassAccessory({ characterClass, accent }: { characterClass: CharacterC
       );
 
     case "Sorcerer":
-      // Glowing orb in hand
       return (
         <g>
           <circle cx={hx + 6} cy={hy + 6} r={14} fill={accent} opacity={0.15} />
@@ -291,7 +445,6 @@ function ClassAccessory({ characterClass, accent }: { characterClass: CharacterC
       );
 
     case "Warlock":
-      // Dark tendrils / eldritch energy
       return (
         <g>
           <path d={`M ${hx + 4} ${hy} Q ${hx + 20} ${hy - 15}, ${hx + 10} ${hy - 30}`}
@@ -303,7 +456,6 @@ function ClassAccessory({ characterClass, accent }: { characterClass: CharacterC
       );
 
     case "Cleric":
-      // Shield with holy symbol
       return (
         <g>
           <path d={`M ${hx - 2} ${hy - 12} L ${hx + 16} ${hy - 12} L ${hx + 14} ${hy + 12} L ${hx + 7} ${hy + 20} L ${hx} ${hy + 12} Z`}
@@ -314,7 +466,6 @@ function ClassAccessory({ characterClass, accent }: { characterClass: CharacterC
       );
 
     case "Druid":
-      // Staff with leaves
       return (
         <g>
           <line x1={hx + 4} y1={hy - 35} x2={hx + 8} y2={hy + 50} stroke={accent} strokeWidth={3} strokeLinecap="round" opacity={0.7} />
@@ -324,7 +475,6 @@ function ClassAccessory({ characterClass, accent }: { characterClass: CharacterC
       );
 
     case "Bard":
-      // Lute shape
       return (
         <g>
           <ellipse cx={hx + 8} cy={hy + 8} rx={10} ry={14} fill={accent} opacity={0.3} />
@@ -334,7 +484,6 @@ function ClassAccessory({ characterClass, accent }: { characterClass: CharacterC
       );
 
     case "Monk":
-      // Wrapped fists glow
       return (
         <g>
           <circle cx={48} cy={hy + 6} r={8} fill={accent} opacity={0.25} />
@@ -349,22 +498,20 @@ function ClassAccessory({ characterClass, accent }: { characterClass: CharacterC
   }
 }
 
-/** Get head position by body type for racial feature placement */
-function getHeadPos(body: BodyType): { headY: number; headR: number } {
-  const map: Record<BodyType, { headY: number; headR: number }> = {
-    standard: { headY: 55, headR: 28 },
-    tall: { headY: 45, headR: 26 },
-    short: { headY: 85, headR: 26 },
-    stocky: { headY: 75, headR: 28 },
-    large: { headY: 50, headR: 30 },
-  };
-  return map[body];
-}
+const DEFAULT_AVATAR: AvatarCustomization = {
+  hairStyle: "short",
+  hairColor: "#5c3a1e",
+  skinTone: "#f5d0a9",
+  bodyBuild: "average",
+  height: "average",
+};
 
-export function AvatarSilhouette({ race, characterClass, gender }: Props) {
+export function AvatarSilhouette({ race, characterClass, gender, avatar }: Props) {
+  const a = avatar ?? DEFAULT_AVATAR;
   const body = RACE_BODY[race];
   const accent = CLASS_ACCENT[characterClass];
-  const { headY, headR } = getHeadPos(body);
+  const cfg = getBodyConfig(body, gender, a.bodyBuild, a.height);
+  const buildArmW = BUILD_SCALE[a.bodyBuild].armW;
 
   return (
     <svg
@@ -384,11 +531,23 @@ export function AvatarSilhouette({ race, characterClass, gender }: Props) {
       {/* Ground shadow */}
       <ellipse cx={100} cy={305} rx={50} ry={8} className="fill-current opacity-10" />
 
-      {/* Body */}
-      <g className="text-muted-foreground/70">
-        <BaseTorso body={body} gender={gender} />
-        <RacialFeatures race={race} headY={headY} headR={headR} />
-      </g>
+      {/* Body with skin tone */}
+      <BaseTorso cfg={cfg} gender={gender} skinTone={a.skinTone} buildArmW={buildArmW} />
+
+      {/* Racial features */}
+      <RacialFeatures race={race} headY={cfg.headY} headR={cfg.headR} skinTone={a.skinTone} />
+
+      {/* Hair */}
+      <HairLayer
+        hairStyle={a.hairStyle}
+        hairColor={a.hairColor}
+        headY={cfg.headY}
+        headR={cfg.headR}
+      />
+
+      {/* Eyes — simple dots */}
+      <circle cx={90} cy={cfg.headY + 2} r={2.5} fill="#1a1a2e" />
+      <circle cx={110} cy={cfg.headY + 2} r={2.5} fill="#1a1a2e" />
 
       {/* Class weapon / accessory */}
       <ClassAccessory characterClass={characterClass} accent={accent} />

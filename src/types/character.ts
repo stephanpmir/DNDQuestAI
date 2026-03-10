@@ -32,6 +32,45 @@ export const CLASSES = [
 
 export type CharacterClass = (typeof CLASSES)[number];
 
+export const HAIR_STYLES = ["short", "long", "ponytail", "mohawk", "bald", "braids"] as const;
+export type HairStyle = (typeof HAIR_STYLES)[number];
+
+export const HAIR_COLORS = [
+  { name: "Black", value: "#1a1a2e" },
+  { name: "Brown", value: "#5c3a1e" },
+  { name: "Auburn", value: "#8b3a2a" },
+  { name: "Blonde", value: "#d4a843" },
+  { name: "Red", value: "#c0392b" },
+  { name: "White", value: "#dcdcdc" },
+  { name: "Blue", value: "#3b82f6" },
+  { name: "Green", value: "#22c55e" },
+] as const;
+
+export const SKIN_TONES = [
+  { name: "Pale", value: "#fde8d0" },
+  { name: "Light", value: "#f5d0a9" },
+  { name: "Medium", value: "#d4a574" },
+  { name: "Tan", value: "#b8804a" },
+  { name: "Brown", value: "#8d5524" },
+  { name: "Dark", value: "#5c3310" },
+  { name: "Ashen", value: "#8a8a9a" },
+  { name: "Green", value: "#6b8e5a" },
+] as const;
+
+export const BODY_BUILDS = ["slim", "average", "muscular", "heavy"] as const;
+export type BodyBuild = (typeof BODY_BUILDS)[number];
+
+export const HEIGHT_OPTIONS = ["short", "average", "tall"] as const;
+export type HeightOption = (typeof HEIGHT_OPTIONS)[number];
+
+export interface AvatarCustomization {
+  hairStyle: HairStyle;
+  hairColor: string;
+  skinTone: string;
+  bodyBuild: BodyBuild;
+  height: HeightOption;
+}
+
 export interface AbilityScores {
   strength: number;
   dexterity: number;
@@ -87,6 +126,8 @@ export interface Character {
   campaignTheme?: string;
   /** Selected campaign template ID */
   campaignId?: string;
+  /** Avatar appearance customization */
+  avatar: AvatarCustomization;
 }
 
 /** D&D 5e XP thresholds for levels 1-20 */
@@ -136,5 +177,12 @@ export function createDefaultCharacter(): Character {
     cantrips: [],
     spells: [],
     racialTraits: [],
+    avatar: {
+      hairStyle: "short",
+      hairColor: "#5c3a1e",
+      skinTone: "#f5d0a9",
+      bodyBuild: "average",
+      height: "average",
+    },
   };
 }

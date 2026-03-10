@@ -1,15 +1,18 @@
 "use client";
 
-import type { Race, CharacterClass, Gender } from "@/types/character";
+import type { Race, CharacterClass, Gender, AvatarCustomization } from "@/types/character";
 import { CLASS_SUMMARIES, RACE_SUMMARIES } from "@/lib/descriptions";
 import { CLASS_ACCENT } from "./avatar-silhouette";
 import { AvatarSilhouette } from "./avatar-silhouette";
+import { AvatarCustomizer } from "./avatar-customizer";
 
 interface CharacterAvatarProps {
   name: string;
   race: Race;
   characterClass: CharacterClass;
   gender: Gender;
+  avatar: AvatarCustomization;
+  onAvatarChange: (updates: Partial<AvatarCustomization>) => void;
 }
 
 export function CharacterAvatar({
@@ -17,11 +20,13 @@ export function CharacterAvatar({
   race,
   characterClass,
   gender,
+  avatar,
+  onAvatarChange,
 }: CharacterAvatarProps) {
   const accent = CLASS_ACCENT[characterClass];
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center gap-3">
       {/* Avatar container with subtle border */}
       <div
         className="relative w-48 h-64 rounded-xl border border-border/30 bg-muted/10 overflow-hidden"
@@ -31,6 +36,7 @@ export function CharacterAvatar({
           race={race}
           characterClass={characterClass}
           gender={gender}
+          avatar={avatar}
         />
       </div>
 
@@ -62,6 +68,11 @@ export function CharacterAvatar({
             {CLASS_SUMMARIES[characterClass].tagline}
           </span>
         </span>
+      </div>
+
+      {/* Customization controls */}
+      <div className="w-full border-t border-border/20 pt-3">
+        <AvatarCustomizer avatar={avatar} onChange={onAvatarChange} />
       </div>
     </div>
   );
