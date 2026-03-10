@@ -75,6 +75,8 @@ ${karmaSection}${companionSection}${campaignSection}
 13. When companions are present, weave them into the scene. They speak, react, and have opinions about the player's choices. Use their personality traits.
 14. Reflect the player's karma alignment in how NPCs react, how the world responds, and in the tone of narration. Evil players face distrust and hostility from good NPCs. Good players receive warmth and aid.
 15. When divine intervention occurs, describe it vividly — divine blessings as radiant warmth, divine punishment as cold dread, dark temptation as shadowy whispers.
+16. NEVER allow impossible actions. If the engine marks an action as DENIED, narrate the failure vividly. A Fighter cannot fly, summon creatures, or cast spells. A level 1 Wizard cannot teleport. No one can destroy cities, become gods, or gain infinite power. The world has rules — enforce them through narration.
+17. When the player claims to do something their class/level cannot do, describe the attempt failing naturally: they jump but gravity wins, they wave their hands but no magic answers, they shout commands but nothing obeys.
 
 ## Response Format
 Respond with valid JSON containing ONLY this field:
@@ -168,6 +170,9 @@ export function buildEngineContextMessage(
   }
   if (o.divineEffect) {
     outcomeParts.push(`DIVINE INTERVENTION: ${o.divineEffect.description} (${o.divineEffect.type} from ${o.divineEffect.source === "good_god" ? "the gods of light" : "dark powers"}, roll modifier ${o.divineEffect.rollModifier > 0 ? "+" : ""}${o.divineEffect.rollModifier})`);
+  }
+  if (o.actionDenied) {
+    outcomeParts.push(`ACTION DENIED: The player attempted to "${o.actionDenied.attempted}" but this is impossible. Reason: ${o.actionDenied.reason}. Narrate the FAILURE — describe the character attempting the action and it not working. Do NOT let the action succeed under any circumstances. Be descriptive about why it fails in-world (no magic ability, physical impossibility, etc.).`);
   }
   if (o.travelEncounter) {
     outcomeParts.push(`TRAVEL ENCOUNTER: While traveling, the character encounters ${o.travelEncounter.description}. This is a ${o.travelEncounter.type} encounter. Narrate the journey first — describe the terrain, weather, and distance — then introduce this encounter naturally along the way.`);

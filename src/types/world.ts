@@ -97,6 +97,11 @@ export interface EngineOutcome {
     type: "combat" | "social" | "environmental" | "discovery";
     description: string;
   };
+  /** Action was denied — player attempted something impossible */
+  actionDenied?: {
+    reason: string;
+    attempted: string;
+  };
 }
 
 /** What the LLM receives to narrate — it does NOT decide outcomes. */

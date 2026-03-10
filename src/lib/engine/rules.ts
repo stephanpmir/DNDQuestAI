@@ -140,6 +140,139 @@ function explorationXpReward(characterLevel: number): number {
   return Math.max(3, Math.floor(combatXpReward(characterLevel) / 10));
 }
 
+// ── Classes that can cast spells ──────────────────────────────────
+
+const FULL_CASTERS: string[] = ["Bard", "Cleric", "Druid", "Sorcerer", "Warlock", "Wizard"];
+const HALF_CASTERS: string[] = ["Paladin", "Ranger"];
+const NON_CASTERS: string[] = ["Barbarian", "Fighter", "Monk", "Rogue"];
+
+/** Abilities that require magic — only casters can do these */
+const MAGIC_ACTION_PATTERNS: [RegExp, string][] = [
+  [/\b(?:summon|conjure|call forth|invoke)\s+(?:a\s+)?(?:creature|beast|demon|angel|elemental|familiar|spirit|griffon|dragon|phoenix|golem|undead|skeleton)/i, "summon a creature"],
+  [/\b(?:teleport|plane shift|dimension door|misty step|blink)\b/i, "teleport"],
+  [/\b(?:fly|levitate|soar|take flight|take to the air)\b/i, "fly magically"],
+  [/\b(?:turn invisible|go invisible|become invisible|vanish|disappear)\b/i, "turn invisible"],
+  [/\b(?:transform|polymorph|shapeshift|shape-shift|change form)\b/i, "transform"],
+  [/\b(?:create|conjure|summon)\s+(?:a\s+)?(?:wall|barrier|shield|dome|forcefield|force field)\s+(?:of\s+)?(?:fire|ice|stone|force|light|energy)/i, "create a magical barrier"],
+  [/\b(?:raise|resurrect|revive)\s+(?:the\s+)?(?:dead|corpse|body|fallen)/i, "raise the dead"],
+  [/\b(?:read|detect)\s+(?:minds?|thoughts?)/i, "read minds"],
+  [/\b(?:control|dominate|charm|enchant|bewitch)\s+(?:the\s+)?(?:mind|person|creature|monster|NPC|guard|enemy)/i, "control minds"],
+  [/\b(?:breathe?\s+(?:fire|ice|lightning|acid|poison))\b/i, "breathe elemental energy"],
+  [/\b(?:shoot|blast|hurl|throw)\s+(?:a\s+)?(?:fireball|lightning|ice|acid|energy|magic)/i, "cast offensive magic"],
+];
+
+/** Physical impossibilities — no class can do these */
+const IMPOSSIBLE_PATTERNS: [RegExp, string][] = [
+  [/\b(?:destroy|blow up|level|demolish|annihilate)\s+(?:the\s+)?(?:entire|whole)?\s*(?:city|town|village|kingdom|world|continent|planet|mountain)/i, "destroy a location"],
+  [/\b(?:become|turn into|transform into)\s+(?:a\s+)?(?:god|deity|demigod|immortal|all-powerful)/i, "become a god"],
+  [/\b(?:instantly|immediately)\s+(?:kill|destroy|defeat|slay)\s+(?:everyone|all|everything|every creature)/i, "instantly kill everything"],
+  [/\b(?:time travel|go back in time|reverse time|stop time)\b/i, "manipulate time"],
+  [/\b(?:create|build|make)\s+(?:a\s+)?(?:universe|world|dimension|plane of existence)/i, "create a world"],
+  [/\b(?:infinite|unlimited|endless)\s+(?:gold|money|wealth|power|health|HP|hit points)/i, "gain infinite resources"],
+  [/\b(?:level up|gain.*levels?|become level)\s+(?:to\s+)?\d+/i, "force level up"],
+];
+
+/**
+ * Validate player actions against D&D 5e rules and physical possibility.
+ * Returns a denial object if the action is impossible, null if it's allowed.
+ */
+function validateAction(
+  playerInput: string,
+  character: Character,
+  _action: ActionType
+): { reason: string; attempted: string } | null {
+  const lower = playerInput.toLowerCase();
+  const cls = character.class;
+  const isCaster = FULL_CASTERS.includes(cls) || HALF_CASTERS.includes(cls);
+
+  // Check for absolute impossibilities first
+  for (const [pattern, attempted] of IMPOSSIBLE_PATTERNS) {
+    if (pattern.test(lower)) {
+      return {
+        reason: `That action is beyond any mortal's ability. Even the most powerful adventurers cannot ${attempted}.`,
+        attempted,
+      };
+    }
+  }
+
+  // Check for magical actions by non-casters
+  for (const [pattern, attempted] of MAGIC_ACTION_PATTERNS) {
+    if (pattern.test(lower)) {
+      // Flying: only allowed with Fly spell (casters level 5+) or racial features
+      if (attempted === "fly magically") {
+        if (!isCaster) {
+          return {
+            reason: `As a ${cls}, you have no magical ability to fly. You'd need wings, a flying mount, or magic to take to the air.`,
+            attempted: "fly",
+          };
+        }
+        // Casters can fly at level 5+ (Fly is a 3rd-level spell)
+        if (character.level < 5) {
+          return {
+            reason: `You haven't mastered the Fly spell yet. That requires at least 3rd-level spell slots (character level 5+).`,
+            attempted: "fly",
+          };
+        }
+        continue; // Allowed for high-level casters
+      }
+
+      // Summoning: requires specific spells and level
+      if (attempted === "summon a creature") {
+        if (!isCaster) {
+          return {
+            reason: `As a ${cls}, you cannot summon creatures through magic. You'd need to find and befriend an animal through Animal Handling, or hire a companion.`,
+            attempted: "summon",
+          };
+        }
+        // Summoning spells are typically 3rd level+ (character level 5+)
+        if (character.level < 5) {
+          return {
+            reason: `You don't yet have the magical power to summon creatures. Summoning spells require at least 3rd-level spell slots (character level 5+).`,
+            attempted: "summon",
+          };
+        }
+        continue; // Allowed for high-level casters
+      }
+
+      // Teleportation: requires high-level magic
+      if (attempted === "teleport") {
+        if (!isCaster) {
+          return {
+            reason: `As a ${cls}, you cannot teleport. That requires powerful magic you don't possess.`,
+            attempted: "teleport",
+          };
+        }
+        // Misty Step is 2nd level (level 3+), Dimension Door is 4th level (level 7+), Teleport is 7th level (level 13+)
+        if (character.level < 3) {
+          return {
+            reason: `You haven't mastered teleportation magic yet. The simplest version (Misty Step) requires at least 2nd-level spell slots.`,
+            attempted: "teleport",
+          };
+        }
+        continue;
+      }
+
+      // General magic actions
+      if (NON_CASTERS.includes(cls)) {
+        return {
+          reason: `As a ${cls}, you don't have the magical ability to ${attempted}. That requires spellcasting which your class doesn't possess.`,
+          attempted,
+        };
+      }
+
+      // Half-casters have limited magic
+      if (HALF_CASTERS.includes(cls) && character.level < 2) {
+        return {
+          reason: `You haven't developed your magical abilities yet. ${cls}s gain spellcasting at level 2.`,
+          attempted,
+        };
+      }
+    }
+  }
+
+  return null; // Action is allowed
+}
+
 /** Travel encounter types scaled by level */
 function getRandomTravelEncounter(level: number): { type: "combat" | "social" | "environmental" | "discovery"; description: string } {
   const lowLevelEncounters = [
@@ -214,6 +347,17 @@ export function resolveAction(
   const destination = detectLocationChange(playerInput);
   if (destination) {
     outcome.locationChange = destination;
+  }
+
+  // ── Action validation — reject impossible/unrealistic actions ──
+  const denial = validateAction(playerInput, character, action);
+  if (denial) {
+    outcome.actionDenied = denial;
+    // Clear location change if the action itself is denied
+    if (denial.attempted.includes("fly") || denial.attempted.includes("teleport")) {
+      outcome.locationChange = undefined;
+    }
+    return outcome;
   }
 
   switch (action) {
