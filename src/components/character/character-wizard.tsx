@@ -18,6 +18,7 @@ import { StepClass } from "./step-class";
 import { StepAbilities } from "./step-abilities";
 import { StepSkills } from "./step-skills";
 import { StepReview } from "./step-review";
+import { StepSurvey } from "./step-survey";
 import { CharacterAvatar } from "./character-avatar";
 
 const STEP_LABELS = [
@@ -56,6 +57,7 @@ export function CharacterWizard() {
     setFightingStyle,
     setHalfElfBonuses,
     setAvatar,
+    setBeginnerSurvey,
     finalizeCharacter,
   } = useCharacterStore();
   const resetGame = useGameStore((s) => s.reset);
@@ -63,6 +65,7 @@ export function CharacterWizard() {
   const resetKarma = useKarmaStore((s) => s.reset);
 
   const [step, setStep] = useState(0);
+  const [showSurvey, setShowSurvey] = useState(false);
 
   // Local UI state for selections
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
@@ -224,7 +227,7 @@ export function CharacterWizard() {
 
   const progress = Math.round((step / (STEP_LABELS.length - 1)) * 100);
 
-  const showAvatar = step >= 1;
+  const showAvatar = step >= 1 || showSurvey;
 
   return (
     <div className="flex justify-center gap-8 max-w-4xl mx-auto">
@@ -242,10 +245,21 @@ export function CharacterWizard() {
         )}
 
         {/* Steps */}
-        {step === 0 && (
+        {step === 0 && !showSurvey && (
           <StepWelcome
             onNext={() => setStep(1)}
             onQuickStart={handleQuickStart}
+            onSurvey={() => setShowSurvey(true)}
+          />
+        )}
+        {step === 0 && showSurvey && (
+          <StepSurvey
+            onComplete={(survey) => {
+              setBeginnerSurvey(survey);
+              setShowSurvey(false);
+              setStep(1);
+            }}
+            onBack={() => setShowSurvey(false)}
           />
         )}
         {step === 1 && (

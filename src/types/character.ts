@@ -71,6 +71,14 @@ export interface AvatarCustomization {
   height: HeightOption;
 }
 
+export interface BeginnerSurvey {
+  playstyle: "fighting" | "sneaking" | "magic" | "talking";
+  teamRole: "lone-wolf" | "team-player" | "leader";
+  riskStyle: "cautious" | "balanced" | "reckless";
+  theme: "nature" | "holy" | "arcane" | "shadow" | "martial";
+  complexity: "simple" | "moderate" | "complex";
+}
+
 export interface AbilityScores {
   strength: number;
   dexterity: number;
@@ -128,6 +136,8 @@ export interface Character {
   campaignId?: string;
   /** Avatar appearance customization */
   avatar: AvatarCustomization;
+  /** Beginner survey answers (undefined if skipped) */
+  beginnerSurvey?: BeginnerSurvey;
 }
 
 /** D&D 5e XP thresholds for levels 1-20 */

@@ -12,9 +12,10 @@ import {
 interface StepWelcomeProps {
   onNext: () => void;
   onQuickStart: () => void;
+  onSurvey: () => void;
 }
 
-export function StepWelcome({ onNext, onQuickStart }: StepWelcomeProps) {
+export function StepWelcome({ onNext, onQuickStart, onSurvey }: StepWelcomeProps) {
   return (
     <Card>
       <CardHeader className="text-center">
@@ -45,12 +46,21 @@ export function StepWelcome({ onNext, onQuickStart }: StepWelcomeProps) {
             variant="outline"
             size="lg"
             className="w-full"
+            onClick={onSurvey}
+          >
+            I&apos;m New — Help Me Choose
+          </Button>
+          <Button
+            variant="ghost"
+            size="lg"
+            className="w-full"
             onClick={onQuickStart}
           >
             Quick Start — Surprise Me!
           </Button>
           <p className="text-[11px] text-muted-foreground text-center">
-            Quick Start generates a random character so you can jump right in.
+            &quot;Help Me Choose&quot; asks a few quick questions to suggest a
+            character. Quick Start generates one randomly.
           </p>
         </div>
       </CardContent>

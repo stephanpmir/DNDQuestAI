@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Character, Gender, Race, CharacterClass, AbilityScores, AvatarCustomization } from "@/types/character";
+import type { Character, Gender, Race, CharacterClass, AbilityScores, AvatarCustomization, BeginnerSurvey } from "@/types/character";
 import { createDefaultCharacter, getXpToNextLevel } from "@/types/character";
 import { getDefaultEquipped, getItemInfo } from "@/lib/items";
 import { RACIAL_DATA, applyRacialBonuses } from "@/lib/races";
@@ -20,6 +20,7 @@ interface CharacterStore {
   setFightingStyle: (style: string) => void;
   setHalfElfBonuses: (bonuses: [string, string]) => void;
   setAvatar: (avatar: Partial<AvatarCustomization>) => void;
+  setBeginnerSurvey: (survey: BeginnerSurvey) => void;
   finalizeCharacter: () => void;
   equipItem: (item: string) => void;
   unequipItem: (item: string) => void;
@@ -148,6 +149,9 @@ export const useCharacterStore = create<CharacterStore>()(
             avatar: { ...s.character.avatar, ...avatar },
           },
         })),
+
+      setBeginnerSurvey: (survey) =>
+        set((s) => ({ character: { ...s.character, beginnerSurvey: survey } })),
 
       finalizeCharacter: () =>
         set((s) => {
