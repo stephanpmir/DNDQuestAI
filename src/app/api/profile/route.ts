@@ -1,14 +1,26 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { HttpsProxyAgent } from "https-proxy-agent";
+import nodeFetch from "node-fetch";
 import type { BeginnerSurvey } from "@/types/character";
 import { RACES, CLASSES } from "@/types/character";
 
+function getProxyFetch(): typeof fetch | undefined {
+  const proxy = process.env.https_proxy || process.env.HTTPS_PROXY;
+  if (!proxy) return undefined;
+  const agent = new HttpsProxyAgent(proxy);
+  return ((url: string, init?: RequestInit) =>
+    nodeFetch(url, { ...init, agent } as Parameters<typeof nodeFetch>[1])
+  ) as unknown as typeof fetch;
+}
+
 function getClient(): { client: OpenAI; model: string } {
+  const proxyFetch = getProxyFetch();
   // Primary: Z.ai
   const zaiKey = process.env.ZAI_API_KEY;
   if (zaiKey) {
     return {
-      client: new OpenAI({ baseURL: "https://api.z.ai/api/paas/v4", apiKey: zaiKey, timeout: 30_000 }),
+      client: new OpenAI({ baseURL: "https://api.z.ai/api/paas/v4", apiKey: zaiKey, timeout: 30_000, fetch: proxyFetch }),
       model: "glm-4",
     };
   }
@@ -16,7 +28,7 @@ function getClient(): { client: OpenAI; model: string } {
   const cerebrasKey = process.env.CEREBRAS_API_KEY;
   if (cerebrasKey) {
     return {
-      client: new OpenAI({ baseURL: "https://api.cerebras.ai/v1", apiKey: cerebrasKey, timeout: 30_000 }),
+      client: new OpenAI({ baseURL: "https://api.cerebras.ai/v1", apiKey: cerebrasKey, timeout: 30_000, fetch: proxyFetch }),
       model: "llama3.1-8b",
     };
   }

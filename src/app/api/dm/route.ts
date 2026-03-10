@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { HttpsProxyAgent } from "https-proxy-agent";
+import nodeFetch from "node-fetch";
 import { buildSystemPrompt, buildEngineContextMessage } from "@/lib/ai/dm-prompt";
 import { parseDMResponse } from "@/lib/ai/parse-response";
 import { preGenerate, postGenerate } from "@/lib/engine/pipeline";
@@ -15,16 +17,36 @@ import { runGuardInvestigations, shouldGuardsConfront, buildCrimeContext } from 
 import type { Crime } from "@/lib/crimes";
 
 /**
+ * Create a proxy-aware fetch function.
+ * The OpenAI SDK v6 uses native fetch which ignores https_proxy.
+ * We use node-fetch + HttpsProxyAgent as a workaround.
+ */
+function getProxyFetch(): typeof fetch | undefined {
+  const proxy = process.env.https_proxy || process.env.HTTPS_PROXY;
+  if (!proxy) return undefined;
+  const agent = new HttpsProxyAgent(proxy);
+  return ((url: string, init?: RequestInit) =>
+    nodeFetch(url, { ...init, agent } as Parameters<typeof nodeFetch>[1])
+  ) as unknown as typeof fetch;
+}
+
+/**
  * LLM client setup.
- * Primary: Cerebras (Llama 3.1 8B) — fast, reliable
- * Optional upgrade: Z.ai (GLM-4) — used when ZAI_API_KEY is set AND reachable
+ * Primary: Z.ai (GLM-4) when ZAI_API_KEY is set
+ * Default: Cerebras (Llama 3.1 8B)
  */
 function getClient(): { client: OpenAI; model: string } {
+  const proxyFetch = getProxyFetch();
   // Try Z.ai first if key is available
   const zaiKey = process.env.ZAI_API_KEY;
   if (zaiKey) {
     return {
-      client: new OpenAI({ baseURL: "https://api.z.ai/api/paas/v4", apiKey: zaiKey, timeout: 15_000 }),
+      client: new OpenAI({
+        baseURL: "https://api.z.ai/api/paas/v4",
+        apiKey: zaiKey,
+        timeout: 30_000,
+        fetch: proxyFetch,
+      }),
       model: "glm-4",
     };
   }
@@ -34,7 +56,12 @@ function getClient(): { client: OpenAI; model: string } {
     throw new Error("No LLM API key set. Set CEREBRAS_API_KEY (or ZAI_API_KEY).");
   }
   return {
-    client: new OpenAI({ baseURL: "https://api.cerebras.ai/v1", apiKey: cerebrasKey, timeout: 30_000 }),
+    client: new OpenAI({
+      baseURL: "https://api.cerebras.ai/v1",
+      apiKey: cerebrasKey,
+      timeout: 30_000,
+      fetch: proxyFetch,
+    }),
     model: "llama3.1-8b",
   };
 }
@@ -43,8 +70,14 @@ function getClient(): { client: OpenAI; model: string } {
 function getCerebrasClient(): { client: OpenAI; model: string } | null {
   const apiKey = process.env.CEREBRAS_API_KEY;
   if (!apiKey) return null;
+  const proxyFetch = getProxyFetch();
   return {
-    client: new OpenAI({ baseURL: "https://api.cerebras.ai/v1", apiKey, timeout: 30_000 }),
+    client: new OpenAI({
+      baseURL: "https://api.cerebras.ai/v1",
+      apiKey,
+      timeout: 30_000,
+      fetch: proxyFetch,
+    }),
     model: "llama3.1-8b",
   };
 }
