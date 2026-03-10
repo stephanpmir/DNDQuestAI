@@ -524,7 +524,7 @@ export function CharacterSheet({ onClose }: Props) {
               <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Features & Traits</div>
               <div className="text-[10px] text-muted-foreground uppercase mb-1">{character.race} Traits</div>
               <ul className="space-y-0.5 mb-3">
-                {racialTraits.map((trait) => (
+                {(character.racialTraits?.length > 0 ? character.racialTraits : racialTraits).map((trait) => (
                   <li key={trait} className="text-[11px]">{trait}</li>
                 ))}
               </ul>
@@ -532,8 +532,38 @@ export function CharacterSheet({ onClose }: Props) {
               <ul className="space-y-0.5">
                 <li className="text-[11px]">Hit Die: {hitDie}</li>
                 <li className="text-[11px]">Save Prof: {classSaves.join(", ")}</li>
+                {character.fightingStyle && (
+                  <li className="text-[11px]">Fighting Style: {character.fightingStyle}</li>
+                )}
               </ul>
             </div>
+
+            {/* Cantrips & Spells */}
+            {(character.cantrips?.length > 0 || character.spells?.length > 0) && (
+              <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Spellcasting</div>
+                {character.cantrips?.length > 0 && (
+                  <>
+                    <div className="text-[10px] text-purple-400 uppercase mb-1">Cantrips</div>
+                    <ul className="space-y-0.5 mb-2">
+                      {character.cantrips.map((c) => (
+                        <li key={c} className="text-[11px]">{c}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {character.spells?.length > 0 && (
+                  <>
+                    <div className="text-[10px] text-blue-400 uppercase mb-1">1st Level</div>
+                    <ul className="space-y-0.5">
+                      {character.spells.map((s) => (
+                        <li key={s} className="text-[11px]">{s}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Location */}
             <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
@@ -549,10 +579,14 @@ export function CharacterSheet({ onClose }: Props) {
               <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 text-center">Skills</div>
               {SKILLS.map(([skill, ability]) => {
                 const val = abilityMap[ability];
-                const skillMod = abilityMod(val);
+                const isProficient = (character.skillProficiencies ?? []).includes(skill);
+                const skillMod = abilityMod(val) + (isProficient ? profBonus : 0);
                 return (
                   <div key={skill} className="flex items-center gap-1.5 text-[11px] py-0.5">
-                    <span className="w-2 h-2 rounded-full border border-muted-foreground/40 flex-shrink-0" />
+                    <span className={cn(
+                      "w-2 h-2 rounded-full border flex-shrink-0",
+                      isProficient ? "bg-primary border-primary" : "border-muted-foreground/40"
+                    )} />
                     <span className="font-mono w-6 text-right font-semibold">{fmtMod(skillMod)}</span>
                     <span className="text-muted-foreground truncate">
                       {skill} <span className="text-[9px]">({ability})</span>

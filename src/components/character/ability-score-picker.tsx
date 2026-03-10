@@ -13,6 +13,15 @@ const ABILITY_NAMES: (keyof AbilityScores)[] = [
   "charisma",
 ];
 
+const ABILITY_LABELS: Record<string, string> = {
+  strength: "STR",
+  dexterity: "DEX",
+  constitution: "CON",
+  wisdom: "WIS",
+  intelligence: "INT",
+  charisma: "CHA",
+};
+
 interface DiceRoll {
   dice: [number, number, number, number];
   droppedIndex: number;
@@ -47,13 +56,17 @@ function getTotalModifier(rolls: DiceRoll[]): number {
 interface Props {
   scores: AbilityScores;
   onChange: (scores: AbilityScores) => void;
+  /** Racial ability score bonuses to display */
+  racialBonuses?: Partial<Record<string, number>>;
+  /** Half-Elf selected bonus abilities */
+  halfElfBonuses?: string[];
 }
 
 /** D&D 5e re-roll limits: 1 full re-roll + 2 individual re-rolls */
 const MAX_FULL_REROLLS = 1;
 const MAX_INDIVIDUAL_REROLLS = 2;
 
-export function AbilityScorePicker({ onChange }: Props) {
+export function AbilityScorePicker({ onChange, racialBonuses, halfElfBonuses }: Props) {
   const [rolls, setRolls] = useState<DiceRoll[]>(() => rollFullSet());
   const [hasRolled, setHasRolled] = useState(false);
   const [fullRerollsUsed, setFullRerollsUsed] = useState(0);
@@ -99,6 +112,16 @@ export function AbilityScorePicker({ onChange }: Props) {
   const totalMod = getTotalModifier(rolls);
   const avgScore = rolls.reduce((s, r) => s + r.total, 0) / 6;
 
+  // Calculate racial bonus for each ability
+  function getRacialBonus(ability: string): number {
+    let bonus = racialBonuses?.[ability] ?? 0;
+    // Half-Elf bonus abilities
+    if (halfElfBonuses?.includes(ability)) {
+      bonus += 1;
+    }
+    return bonus;
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
@@ -120,18 +143,23 @@ export function AbilityScorePicker({ onChange }: Props) {
           <div className="grid grid-cols-2 gap-3">
             {ABILITY_NAMES.map((ability, i) => {
               const roll = rolls[i];
-              const mod = Math.floor((roll.total - 10) / 2);
+              const racialBonus = getRacialBonus(ability);
+              const finalScore = roll.total + racialBonus;
+              const mod = Math.floor((finalScore - 10) / 2);
               return (
                 <div key={ability} className="border rounded-lg p-3 space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="capitalize text-sm font-medium">
-                      {ability}
+                    <span className="text-sm font-medium">
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider mr-1">{ABILITY_LABELS[ability]}</span>
+                      <span className="capitalize">{ability}</span>
                     </span>
                     <span className="text-lg font-bold">
-                      {roll.total}{" "}
-                      <span className="text-xs text-muted-foreground">
-                        ({mod >= 0 ? "+" : ""}
-                        {mod})
+                      {roll.total}
+                      {racialBonus > 0 && (
+                        <span className="text-xs text-emerald-400 font-semibold ml-1">+{racialBonus}</span>
+                      )}
+                      <span className="text-xs text-muted-foreground ml-1">
+                        = {finalScore} ({mod >= 0 ? "+" : ""}{mod})
                       </span>
                     </span>
                   </div>
@@ -169,6 +197,11 @@ export function AbilityScorePicker({ onChange }: Props) {
             <p>
               Each ability rolls 4d6, dropping the lowest die (crossed out).
               You get <strong>1 full re-roll</strong> and <strong>2 individual re-rolls</strong> — choose wisely!
+              {racialBonuses && Object.keys(racialBonuses).length > 0 && (
+                <span className="text-emerald-400 ml-1">
+                  Green bonuses are from your race.
+                </span>
+              )}
             </p>
           </div>
         </>

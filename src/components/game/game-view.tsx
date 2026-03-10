@@ -84,26 +84,38 @@ export function GameView() {
           content: m.narrative,
         }));
 
-        const res = await fetch("/api/dm", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message,
-            character,
-            gameState: { location, questLog, turnCount },
-            history,
-            worldState: { events, npcs, locations, facts },
-            karmaData: {
-              karma: character.karma,
-              history: karmaHistory,
-              companions,
-            },
-          }),
+        const requestBody = JSON.stringify({
+          message,
+          character,
+          gameState: { location, questLog, turnCount },
+          history,
+          worldState: { events, npcs, locations, facts },
+          karmaData: {
+            karma: character.karma,
+            history: karmaHistory,
+            companions,
+          },
         });
 
-        if (!res.ok) {
-          const errorBody = await res.json().catch(() => null);
-          const detail = errorBody?.error ?? `HTTP ${res.status}`;
+        // Retry logic for transient errors (502, 503, 504)
+        let res: Response | null = null;
+        const MAX_RETRIES = 2;
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          res = await fetch("/api/dm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: requestBody,
+          });
+
+          if (res.ok || (res.status < 500 && res.status !== 429)) break;
+          if (attempt < MAX_RETRIES) {
+            await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+          }
+        }
+
+        if (!res || !res.ok) {
+          const errorBody = await res?.json().catch(() => null);
+          const detail = errorBody?.error ?? `HTTP ${res?.status ?? "unknown"}`;
           throw new Error(detail);
         }
 
@@ -202,7 +214,7 @@ export function GameView() {
         addMessage({
           id: generateId(),
           role: "assistant",
-          narrative: `**Error:** ${errorMessage}\n\n*Check that CEREBRAS_API_KEY is set in your environment variables and the /api/dm endpoint is deployed correctly.*`,
+          narrative: "The Dungeon Master pauses briefly... Something went wrong behind the scenes. Please try your action again.",
           timestamp: Date.now(),
         });
       } finally {

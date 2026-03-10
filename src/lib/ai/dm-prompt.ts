@@ -52,6 +52,8 @@ export function buildSystemPrompt(
 - STR ${character.abilityScores.strength} DEX ${character.abilityScores.dexterity} CON ${character.abilityScores.constitution} WIS ${character.abilityScores.wisdom} INT ${character.abilityScores.intelligence} CHA ${character.abilityScores.charisma}
 - Inventory: ${character.inventory.length > 0 ? character.inventory.join(", ") : "empty"}
 - Gold: ${character.gold}
+- Skill Proficiencies: ${character.skillProficiencies?.length > 0 ? character.skillProficiencies.join(", ") : "none"}${character.cantrips?.length > 0 ? `\n- Cantrips: ${character.cantrips.join(", ")}` : ""}${character.spells?.length > 0 ? `\n- Spells: ${character.spells.join(", ")}` : ""}${character.fightingStyle ? `\n- Fighting Style: ${character.fightingStyle}` : ""}
+- Racial Traits: ${character.racialTraits?.length > 0 ? character.racialTraits.join(", ") : character.race + " traits"}
 
 ## Current State
 - Location: ${gameState.location || "Unknown"}

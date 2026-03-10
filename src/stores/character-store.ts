@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import type { Character, Gender, Race, CharacterClass, AbilityScores } from "@/types/character";
 import { createDefaultCharacter, getXpToNextLevel } from "@/types/character";
 import { getDefaultEquipped, getItemInfo } from "@/lib/items";
+import { RACIAL_DATA, applyRacialBonuses } from "@/lib/races";
 
 interface CharacterStore {
   character: Character;
@@ -13,6 +14,11 @@ interface CharacterStore {
   setClass: (cls: CharacterClass) => void;
   setAbilityScores: (scores: AbilityScores) => void;
   setCampaignTheme: (theme: string) => void;
+  setSkillProficiencies: (skills: string[]) => void;
+  setCantrips: (cantrips: string[]) => void;
+  setSpells: (spells: string[]) => void;
+  setFightingStyle: (style: string) => void;
+  setHalfElfBonuses: (bonuses: [string, string]) => void;
   finalizeCharacter: () => void;
   equipItem: (item: string) => void;
   unequipItem: (item: string) => void;
@@ -118,24 +124,73 @@ export const useCharacterStore = create<CharacterStore>()(
       setCampaignTheme: (theme) =>
         set((s) => ({ character: { ...s.character, campaignTheme: theme } })),
 
+      setSkillProficiencies: (skills) =>
+        set((s) => ({ character: { ...s.character, skillProficiencies: skills } })),
+
+      setCantrips: (cantrips) =>
+        set((s) => ({ character: { ...s.character, cantrips } })),
+
+      setSpells: (spells) =>
+        set((s) => ({ character: { ...s.character, spells } })),
+
+      setFightingStyle: (style) =>
+        set((s) => ({ character: { ...s.character, fightingStyle: style } })),
+
+      setHalfElfBonuses: (bonuses) =>
+        set((s) => ({ character: { ...s.character, halfElfBonuses: bonuses } })),
+
       finalizeCharacter: () =>
         set((s) => {
-          const hp = computeStartingHp(
-            s.character.class,
-            s.character.abilityScores.constitution
-          );
-          const ac = computeStartingAC(s.character.class, s.character.abilityScores.dexterity, s.character.abilityScores.constitution);
-          const inventory = getStartingEquipment(s.character.class);
+          const c = s.character;
+
+          // Apply racial ability score bonuses
+          const baseScores: Record<string, number> = {
+            strength: c.abilityScores.strength,
+            dexterity: c.abilityScores.dexterity,
+            constitution: c.abilityScores.constitution,
+            intelligence: c.abilityScores.intelligence,
+            wisdom: c.abilityScores.wisdom,
+            charisma: c.abilityScores.charisma,
+          };
+          const finalScores = applyRacialBonuses(baseScores, c.race, c.halfElfBonuses);
+          const abilityScores: AbilityScores = {
+            strength: finalScores.strength,
+            dexterity: finalScores.dexterity,
+            constitution: finalScores.constitution,
+            intelligence: finalScores.intelligence,
+            wisdom: finalScores.wisdom,
+            charisma: finalScores.charisma,
+          };
+
+          const racialTraits = RACIAL_DATA[c.race]?.traits ?? [];
+
+          // Add racial skill proficiencies
+          const skillProfs = [...c.skillProficiencies];
+          // Elf: Perception proficiency
+          if (c.race === "Elf" && !skillProfs.includes("Perception")) {
+            skillProfs.push("Perception");
+          }
+          // Half-Orc: Intimidation proficiency
+          if (c.race === "Half-Orc" && !skillProfs.includes("Intimidation")) {
+            skillProfs.push("Intimidation");
+          }
+
+          const hp = computeStartingHp(c.class, abilityScores.constitution);
+          const ac = computeStartingAC(c.class, abilityScores.dexterity, abilityScores.constitution);
+          const inventory = getStartingEquipment(c.class);
           const equipped = getDefaultEquipped(inventory);
-          // Starting items are auto-identified
           const identifiedItems = inventory.filter((item) => {
             const info = getItemInfo(item);
             return info?.isMagical;
           });
+
           return {
             isCreated: true,
             character: {
-              ...s.character,
+              ...c,
+              abilityScores,
+              racialTraits,
+              skillProficiencies: skillProfs,
               hp,
               maxHp: hp,
               ac,

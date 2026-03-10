@@ -69,6 +69,18 @@ export interface Character {
   isDead: boolean;
   /** Karma score: -100 (evil) to +100 (good), starts at 0 */
   karma: number;
+  /** Skill proficiencies chosen during creation */
+  skillProficiencies: string[];
+  /** Known cantrips (casters only) */
+  cantrips: string[];
+  /** Known/prepared spells (casters only) */
+  spells: string[];
+  /** Fighting style (Fighter/Paladin/Ranger) */
+  fightingStyle?: string;
+  /** Racial traits active on this character */
+  racialTraits: string[];
+  /** Half-Elf bonus ability choices */
+  halfElfBonuses?: [string, string];
   /** Selected campaign theme */
   campaignTheme?: string;
   /** Selected campaign template ID */
@@ -117,5 +129,9 @@ export function createDefaultCharacter(): Character {
     isUnconscious: false,
     isDead: false,
     karma: 0,
+    skillProficiencies: [],
+    cantrips: [],
+    spells: [],
+    racialTraits: [],
   };
 }
