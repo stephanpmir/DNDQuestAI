@@ -160,8 +160,8 @@ export function GameView() {
       </aside>
 
       {/* Chat area */}
-      <div className="flex flex-col flex-1 min-w-0">
-        <ScrollArea className="flex-1 pr-4" ref={scrollRef}>
+      <div className="flex flex-col flex-1 min-w-0 min-h-0">
+        <ScrollArea className="flex-1 min-h-0 pr-4" ref={scrollRef}>
           <div className="space-y-4 py-4">
             {messages.map((msg) => (
               <ChatMessage key={msg.id} message={msg} />

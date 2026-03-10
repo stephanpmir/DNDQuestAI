@@ -20,7 +20,7 @@ export function CharacterSidebar() {
     : 100;
 
   return (
-    <Card className="h-full">
+    <Card className="h-full overflow-y-auto">
       <CardHeader className="pb-3">
         <CardTitle className="text-lg">{character.name}</CardTitle>
         <p className="text-sm text-muted-foreground">
