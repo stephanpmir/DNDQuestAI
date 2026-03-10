@@ -32,6 +32,7 @@ export function GameView() {
   } = useGameStore();
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const autoStartFired = useRef(false);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -138,16 +139,18 @@ export function GameView() {
     [callDMApi]
   );
 
-  // Auto-start campaign — DM intro fires without showing a user message
+  // Auto-start campaign — DM intro fires exactly once
   useEffect(() => {
-    if (!campaignStarted && character.name) {
+    if (!campaignStarted && character.name && !autoStartFired.current) {
+      autoStartFired.current = true;
       setCampaignStarted(true);
       callDMApi(
         `I am ${character.name}, a ${character.race} ${character.class}. Begin my adventure! Set the scene and give me my first quest.`,
         false
       );
     }
-  }, [campaignStarted, character.name, character.race, character.class, setCampaignStarted, callDMApi]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignStarted, character.name]);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] gap-4 p-4">
