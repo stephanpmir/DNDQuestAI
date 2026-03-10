@@ -1,7 +1,11 @@
 import type { Character } from "@/types/character";
 import type { GameState } from "@/types/game";
-import type { NarrationContext, EngineOutcome, NPC, WorldEvent, LocationRecord } from "@/types/world";
+import type { EngineOutcome } from "@/types/world";
 
+/**
+ * System prompt — defines the LLM's role as NARRATOR only.
+ * Character stats and world state are injected separately by the context assembler.
+ */
 export function buildSystemPrompt(
   character: Character,
   gameState: Pick<GameState, "location" | "questLog" | "turnCount">
@@ -29,11 +33,11 @@ export function buildSystemPrompt(
 2. When given an engine outcome (roll results, HP changes, items), you MUST incorporate those EXACT results into your narrative. Do not contradict them.
 3. If the engine says a roll failed, describe the failure. If it succeeded, describe success. Never override the engine.
 4. Do NOT invent mechanical effects (no "you gain 50 gold" or "you find a sword" unless the engine says so).
-5. Be vivid and engaging. Describe scenes, NPCs, and combat with flair.
-6. Present 2-3 meaningful choices to the player at the end of each response.
-7. Keep responses under 250 words.
-8. Reference established NPCs by name when they're present.
-9. Maintain consistency with previous events provided in context.
+5. NEVER contradict the "Permanent Facts" section. These are absolute truth.
+6. Reference established NPCs by name when they're present.
+7. Be vivid and engaging. Describe scenes, NPCs, and combat with flair.
+8. Present 2-3 meaningful choices to the player at the end of each response.
+9. Keep responses under 250 words.
 
 ## Response Format
 Respond with valid JSON:
@@ -49,17 +53,28 @@ Always include "narrative". Other fields are optional.`;
 }
 
 /**
- * Build the narration context message that tells the LLM what the engine decided.
- * This is injected as a system message right before the user's action.
+ * Build the engine context message — tells the LLM what the engine decided
+ * AND provides the structured context window (anchors + retrieved facts).
  */
-export function buildEngineContextMessage(ctx: NarrationContext): string {
+export function buildEngineContextMessage(
+  playerAction: string,
+  engineOutcome: EngineOutcome,
+  formattedContext: string,
+  contradictionHint?: string
+): string {
   const parts: string[] = [];
 
-  parts.push(`## Player Action\n"${ctx.playerAction}"`);
+  // Structured context (anchors + sliding window + retrieved)
+  if (formattedContext) {
+    parts.push(formattedContext);
+  }
+
+  // Player action
+  parts.push(`## Player Action\n"${playerAction}"`);
 
   // Engine outcome
-  const o = ctx.engineOutcome;
   const outcomeParts: string[] = [];
+  const o = engineOutcome;
 
   if (o.roll) {
     const rollDesc = o.roll.success ? "SUCCESS" : "FAILURE";
@@ -103,25 +118,9 @@ export function buildEngineContextMessage(ctx: NarrationContext): string {
     parts.push(`## MANDATORY ESCALATION\n${o.escalationHint}`);
   }
 
-  // Recent context
-  if (ctx.recentEvents.length > 0) {
-    const eventSummaries = ctx.recentEvents.slice(-5).map(
-      (e) => `- Turn ${e.turn}: [${e.type}] ${e.summary} (${e.location})`
-    );
-    parts.push(`## Recent History\n${eventSummaries.join("\n")}`);
-  }
-
-  // NPCs in scene
-  if (ctx.relevantNpcs.length > 0) {
-    const npcDescs = ctx.relevantNpcs.map(
-      (n) => `- ${n.name}: ${n.disposition}, first met turn ${n.firstMetTurn}`
-    );
-    parts.push(`## NPCs Present\n${npcDescs.join("\n")}`);
-  }
-
-  // Current location context
-  if (ctx.currentLocation) {
-    parts.push(`## Current Location: ${ctx.currentLocation.name}\n${ctx.currentLocation.description || "No description yet."}`);
+  // Contradiction corrections (if regenerating)
+  if (contradictionHint) {
+    parts.push(contradictionHint);
   }
 
   return parts.join("\n\n");

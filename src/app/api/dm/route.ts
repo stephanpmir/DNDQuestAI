@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { buildSystemPrompt, buildEngineContextMessage } from "@/lib/ai/dm-prompt";
 import { parseDMResponse } from "@/lib/ai/parse-response";
-import { resolveAction } from "@/lib/engine/rules";
-import { checkEscalation } from "@/lib/engine/escalation";
-import { validateNarrative } from "@/lib/engine/guardrails";
+import { preGenerate, postGenerate } from "@/lib/engine/pipeline";
+import type { PipelineInput } from "@/lib/engine/pipeline";
 import type { Character } from "@/types/character";
 import type { GameState } from "@/types/game";
-import type { WorldEvent, NPC, LocationRecord, EngineOutcome, NarrationContext } from "@/types/world";
+import type { WorldEvent, NPC, LocationRecord } from "@/types/world";
+import type { Fact } from "@/lib/engine/fact-ledger";
 
 function getClient(): OpenAI {
   const apiKey = process.env.CEREBRAS_API_KEY;
@@ -27,13 +27,15 @@ interface RequestBody {
   character: Character;
   gameState: Pick<GameState, "location" | "questLog" | "turnCount">;
   history: { role: "user" | "assistant"; content: string }[];
-  /** Structured world state from client */
   worldState?: {
     events: WorldEvent[];
     npcs: NPC[];
     locations: LocationRecord[];
+    facts: Fact[];
   };
 }
+
+const MAX_REGENERATION_ATTEMPTS = 1;
 
 export async function POST(request: Request) {
   try {
@@ -47,95 +49,104 @@ export async function POST(request: Request) {
       );
     }
 
-    const events = worldState?.events ?? [];
-    const npcs = worldState?.npcs ?? [];
-    const locations = worldState?.locations ?? [];
-
-    // ── TRACK 1: Rules Engine (deterministic) ──────────────────────
-    const engineOutcome = resolveAction(message, character, gameState, events);
-
-    // Check for escalation (loop prevention)
-    const escalation = checkEscalation(events, gameState.location);
-    if (escalation) {
-      engineOutcome.escalationHint = escalation;
-    }
-
-    // Build narration context for the LLM
-    const relevantNpcs = npcs.filter(
-      (n) => n.location.toLowerCase() === gameState.location.toLowerCase()
-    );
-    const currentLocation = locations.find(
-      (l) => l.name.toLowerCase() === gameState.location.toLowerCase()
-    ) ?? null;
-
-    const narrationCtx: NarrationContext = {
+    // ── PIPELINE STEPS 1-4: Pre-generation ────────────────────────
+    const pipelineInput: PipelineInput = {
       playerAction: message,
-      engineOutcome,
-      recentEvents: events.slice(-5),
-      relevantNpcs,
-      currentLocation,
+      character,
+      gameState,
+      chatHistory: history ?? [],
+      facts: worldState?.facts ?? [],
+      events: worldState?.events ?? [],
+      npcs: worldState?.npcs ?? [],
+      locations: worldState?.locations ?? [],
     };
 
-    // ── TRACK 2: LLM Narration ────────────────────────────────────
+    const preResult = preGenerate(pipelineInput);
+
+    // ── PIPELINE STEP 5: LLM Generation ───────────────────────────
     const client = getClient();
     const systemPrompt = buildSystemPrompt(character, gameState);
-    const engineContext = buildEngineContextMessage(narrationCtx);
 
-    const messages: OpenAI.ChatCompletionMessageParam[] = [
-      { role: "system", content: systemPrompt },
-      ...history.slice(-16).map((h) => ({
-        role: h.role as "user" | "assistant",
-        content: h.content,
-      })),
-      // Inject engine context as a system message before the user action
-      { role: "system", content: engineContext },
-      { role: "user", content: message },
-    ];
+    let narrative = "";
+    let postResult = null;
+    let contradictionHint: string | undefined;
 
-    const response = await client.chat.completions.create({
-      model: "llama3.1-8b",
-      messages,
-      max_tokens: 1024,
-    });
+    for (let attempt = 0; attempt <= MAX_REGENERATION_ATTEMPTS; attempt++) {
+      const engineContext = buildEngineContextMessage(
+        message,
+        preResult.engineOutcome,
+        preResult.formattedContext,
+        contradictionHint
+      );
 
-    const rawText = response.choices[0]?.message?.content ?? "";
-    const parsed = parseDMResponse(rawText);
+      const messages: OpenAI.ChatCompletionMessageParam[] = [
+        { role: "system", content: systemPrompt },
+        ...history.slice(-10).map((h) => ({
+          role: h.role as "user" | "assistant",
+          content: h.content,
+        })),
+        { role: "system", content: engineContext },
+        { role: "user", content: message },
+      ];
 
-    // ── GUARDRAILS: Validate LLM output ───────────────────────────
-    const validated = validateNarrative(
-      parsed.narrative,
-      character,
-      npcs,
-      events,
-      gameState.location
-    );
+      const response = await client.chat.completions.create({
+        model: "llama3.1-8b",
+        messages,
+        max_tokens: 1024,
+      });
 
-    // Merge engine-decided newNpcs with guardrail-detected newNpcs
-    const allNewNpcs = [
-      ...engineOutcome.newNpcs,
-      ...validated.newNpcs,
-    ];
+      const rawText = response.choices[0]?.message?.content ?? "";
+      const parsed = parseDMResponse(rawText);
+      narrative = parsed.narrative;
 
-    // Build the response: engine outcomes are authoritative, LLM provides narrative
+      // ── PIPELINE STEPS 6-7: Validate + Update ───────────────────
+      postResult = postGenerate(narrative, pipelineInput, preResult);
+
+      if (!postResult.needsRegeneration || attempt >= MAX_REGENERATION_ATTEMPTS) {
+        break;
+      }
+
+      // Contradiction found — regenerate with correction hint
+      contradictionHint = postResult.regenerationHint;
+      console.warn(
+        `[Pipeline] Regenerating due to ${postResult.contradictions.length} contradiction(s)`,
+        postResult.contradictions.map((c) => c.factContent)
+      );
+    }
+
+    if (!postResult) {
+      throw new Error("Pipeline failed to produce a result");
+    }
+
+    // ── PIPELINE STEP 8: Deliver ──────────────────────────────────
+    const eo = preResult.engineOutcome;
+
     return NextResponse.json({
-      narrative: validated.narrative,
+      narrative: postResult.narrative,
       gameStateUpdate: {
-        hpChange: engineOutcome.hpChange || undefined,
-        newItems: engineOutcome.itemsGained.length > 0 ? engineOutcome.itemsGained : undefined,
-        removeItems: engineOutcome.itemsLost.length > 0 ? engineOutcome.itemsLost : undefined,
-        goldChange: engineOutcome.goldChange || undefined,
-        locationChange: engineOutcome.locationChange,
-        newQuest: engineOutcome.newQuest,
-        completeQuest: engineOutcome.completeQuest,
-        xpGained: engineOutcome.xpGained || undefined,
+        hpChange: eo.hpChange || undefined,
+        newItems: eo.itemsGained.length > 0 ? eo.itemsGained : undefined,
+        removeItems: eo.itemsLost.length > 0 ? eo.itemsLost : undefined,
+        goldChange: eo.goldChange || undefined,
+        locationChange: eo.locationChange,
+        newQuest: eo.newQuest,
+        completeQuest: eo.completeQuest,
+        xpGained: eo.xpGained || undefined,
       },
-      // New fields for the enhanced client
       engineOutcome: {
-        roll: engineOutcome.roll,
-        escalationHint: engineOutcome.escalationHint ? true : undefined,
+        roll: eo.roll,
+        escalationHint: eo.escalationHint ? true : undefined,
       },
-      newNpcs: allNewNpcs.length > 0 ? allNewNpcs : undefined,
-      warnings: validated.warnings.length > 0 ? validated.warnings : undefined,
+      // Fact ledger updates for the client
+      factUpdates: {
+        newFacts: postResult.newFacts,
+        bumpedFactIds: postResult.bumpedFactIds,
+        promotedAnchors: postResult.promotedAnchors,
+      },
+      newNpcs: postResult.newNpcs.length > 0 ? postResult.newNpcs : undefined,
+      contradictions: postResult.contradictions.length > 0
+        ? postResult.contradictions.length
+        : undefined,
     });
   } catch (error: unknown) {
     const errMsg =

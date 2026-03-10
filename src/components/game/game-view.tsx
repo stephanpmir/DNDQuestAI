@@ -37,9 +37,14 @@ export function GameView() {
     events,
     npcs,
     locations,
+    facts,
     addEvent,
     registerNpc,
     visitLocation,
+    addFacts,
+    bumpFactReferences,
+    promoteToAnchor,
+    initializeAnchors,
   } = useWorldStore();
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -68,7 +73,7 @@ export function GameView() {
       incrementTurn();
 
       try {
-        const history = messages.slice(-16).map((m) => ({
+        const history = messages.slice(-10).map((m) => ({
           role: m.role,
           content: m.narrative,
         }));
@@ -81,7 +86,7 @@ export function GameView() {
             character,
             gameState: { location, questLog, turnCount },
             history,
-            worldState: { events, npcs, locations },
+            worldState: { events, npcs, locations, facts },
           }),
         });
 
@@ -111,7 +116,20 @@ export function GameView() {
           if (u.completeQuest) completeQuest(u.completeQuest);
         }
 
-        // Register new NPCs detected by guardrails
+        // Apply fact ledger updates
+        if (data.factUpdates) {
+          if (data.factUpdates.newFacts.length > 0) {
+            addFacts(data.factUpdates.newFacts);
+          }
+          if (data.factUpdates.bumpedFactIds.length > 0) {
+            bumpFactReferences(data.factUpdates.bumpedFactIds);
+          }
+          if (data.factUpdates.promotedAnchors.length > 0) {
+            promoteToAnchor(data.factUpdates.promotedAnchors);
+          }
+        }
+
+        // Register new NPCs
         if (data.newNpcs) {
           for (const npcName of data.newNpcs) {
             registerNpc(npcName, turnCount, location);
@@ -170,6 +188,7 @@ export function GameView() {
       events,
       npcs,
       locations,
+      facts,
       addMessage,
       incrementTurn,
       setLoading,
@@ -178,6 +197,9 @@ export function GameView() {
       addQuest,
       completeQuest,
       addEvent,
+      addFacts,
+      bumpFactReferences,
+      promoteToAnchor,
       registerNpc,
       visitLocation,
     ]
@@ -193,6 +215,8 @@ export function GameView() {
     if (!campaignStarted && character.name && !autoStartFired.current) {
       autoStartFired.current = true;
       setCampaignStarted(true);
+      // Initialize character identity anchors in the fact ledger
+      initializeAnchors(character.name, character.race, character.class);
       callDMApi(
         `I am ${character.name}, a ${character.race} ${character.class}. Begin my adventure! Set the scene and give me my first quest.`,
         false

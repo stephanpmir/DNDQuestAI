@@ -1,24 +1,46 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { WorldEvent, NPC, LocationRecord } from "@/types/world";
+import type { Fact } from "@/lib/engine/fact-ledger";
+import { createFact, shouldPromoteToAnchor, getAnchors } from "@/lib/engine/fact-ledger";
 
 interface WorldStore {
-  /** Structured event log — the source of truth for "what happened" */
+  /** Structured event log */
   events: WorldEvent[];
-  /** All NPCs the player has encountered */
+  /** All NPCs encountered */
   npcs: NPC[];
-  /** All locations the player has visited */
+  /** All locations visited */
   locations: LocationRecord[];
+  /** Append-only fact ledger — the source of truth */
+  facts: Fact[];
 
+  // ── Events ──
   addEvent: (event: WorldEvent) => void;
+
+  // ── NPCs ──
   registerNpc: (name: string, turn: number, location: string) => void;
   updateNpcDisposition: (name: string, disposition: NPC["disposition"]) => void;
+
+  // ── Locations ──
   visitLocation: (name: string, turn: number, description?: string) => void;
+
+  // ── Fact Ledger ──
+  addFact: (fact: Fact) => void;
+  addFacts: (facts: Fact[]) => void;
+  bumpFactReferences: (factIds: string[]) => void;
+  promoteToAnchor: (factIds: string[]) => void;
+  supersedeFact: (factId: string, newFactId: string) => void;
+
+  // ── Queries ──
   getEventsAtLocation: (location: string) => WorldEvent[];
   getRecentEvents: (count: number) => WorldEvent[];
   getNpc: (name: string) => NPC | undefined;
   getLocation: (name: string) => LocationRecord | undefined;
+
+  // ── Lifecycle ──
   reset: () => void;
+  /** Initialize character identity anchors (called once on game start) */
+  initializeAnchors: (charName: string, race: string, cls: string) => void;
 }
 
 export const useWorldStore = create<WorldStore>()(
@@ -27,10 +49,13 @@ export const useWorldStore = create<WorldStore>()(
       events: [],
       npcs: [],
       locations: [],
+      facts: [],
 
+      // ── Events ──
       addEvent: (event) =>
         set((s) => ({ events: [...s.events, event] })),
 
+      // ── NPCs ──
       registerNpc: (name, turn, location) =>
         set((s) => {
           const existing = s.npcs.find(
@@ -69,6 +94,7 @@ export const useWorldStore = create<WorldStore>()(
           ),
         })),
 
+      // ── Locations ──
       visitLocation: (name, turn, description) =>
         set((s) => {
           const existing = s.locations.find(
@@ -78,7 +104,7 @@ export const useWorldStore = create<WorldStore>()(
             return {
               locations: s.locations.map((l) =>
                 l.name.toLowerCase() === name.toLowerCase()
-                  ? { ...l, lastVisitTurn: turn }
+                  ? { ...l, lastVisitTurn: turn, description: description || l.description }
                   : l
               ),
             };
@@ -98,6 +124,49 @@ export const useWorldStore = create<WorldStore>()(
           };
         }),
 
+      // ── Fact Ledger ──
+      addFact: (fact) =>
+        set((s) => ({ facts: [...s.facts, fact] })),
+
+      addFacts: (newFacts) =>
+        set((s) => ({ facts: [...s.facts, ...newFacts] })),
+
+      bumpFactReferences: (factIds) =>
+        set((s) => {
+          const idSet = new Set(factIds);
+          const updatedFacts = s.facts.map((f) =>
+            idSet.has(f.id) ? { ...f, referenceCount: f.referenceCount + 1 } : f
+          );
+          // Check for auto-promotions after bumping
+          const currentAnchorCount = getAnchors(updatedFacts).length;
+          return {
+            facts: updatedFacts.map((f) => {
+              if (idSet.has(f.id) && shouldPromoteToAnchor(f, currentAnchorCount)) {
+                return { ...f, isAnchor: true };
+              }
+              return f;
+            }),
+          };
+        }),
+
+      promoteToAnchor: (factIds) =>
+        set((s) => {
+          const idSet = new Set(factIds);
+          return {
+            facts: s.facts.map((f) =>
+              idSet.has(f.id) ? { ...f, isAnchor: true } : f
+            ),
+          };
+        }),
+
+      supersedeFact: (factId, newFactId) =>
+        set((s) => ({
+          facts: s.facts.map((f) =>
+            f.id === factId ? { ...f, supersededBy: newFactId } : f
+          ),
+        })),
+
+      // ── Queries ──
       getEventsAtLocation: (location) =>
         get().events.filter(
           (e) => e.location.toLowerCase() === location.toLowerCase()
@@ -115,7 +184,20 @@ export const useWorldStore = create<WorldStore>()(
           (l) => l.name.toLowerCase() === name.toLowerCase()
         ),
 
-      reset: () => set({ events: [], npcs: [], locations: [] }),
+      // ── Lifecycle ──
+      reset: () => set({ events: [], npcs: [], locations: [], facts: [] }),
+
+      initializeAnchors: (charName, race, cls) =>
+        set((s) => {
+          // Only initialize if no character anchors exist yet
+          if (s.facts.some((f) => f.category === "character" && f.isAnchor)) {
+            return {};
+          }
+          const anchors: Fact[] = [
+            createFact("anchor_identity", 0, "character", `The player is ${charName}, a ${race} ${cls}`, [charName.toLowerCase(), race.toLowerCase(), cls.toLowerCase()], { isAnchor: true }),
+          ];
+          return { facts: [...s.facts, ...anchors] };
+        }),
     }),
     {
       name: "dndquest-world",
@@ -123,6 +205,7 @@ export const useWorldStore = create<WorldStore>()(
         events: s.events,
         npcs: s.npcs,
         locations: s.locations,
+        facts: s.facts,
       }),
     }
   )

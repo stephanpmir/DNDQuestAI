@@ -1,5 +1,6 @@
 import type { Character } from "./character";
 import type { RollResult } from "./world";
+import type { Fact } from "@/lib/engine/fact-ledger";
 
 export interface GameState {
   character: Character;
@@ -18,7 +19,7 @@ export interface ChatMessage {
   rollResult?: RollResult;
 }
 
-/** The structured JSON the AI DM returns alongside narrative text. */
+/** The structured JSON the API returns. */
 export interface DMResponsePayload {
   narrative: string;
   gameStateUpdate: {
@@ -31,13 +32,19 @@ export interface DMResponsePayload {
     completeQuest?: string;
     xpGained?: number;
   };
-  /** Engine outcome details (roll results, etc.) */
+  /** Engine outcome details */
   engineOutcome?: {
     roll?: RollResult;
     escalationHint?: boolean;
   };
-  /** New NPCs detected by guardrails */
+  /** Fact ledger updates */
+  factUpdates?: {
+    newFacts: Fact[];
+    bumpedFactIds: string[];
+    promotedAnchors: string[];
+  };
+  /** New NPCs detected */
   newNpcs?: string[];
-  /** Validation warnings */
-  warnings?: string[];
+  /** Number of contradictions caught */
+  contradictions?: number;
 }
