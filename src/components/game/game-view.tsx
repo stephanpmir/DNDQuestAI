@@ -356,7 +356,7 @@ export function GameView() {
         <div className="flex-1 min-h-0 overflow-y-auto pr-4">
           <div className="space-y-4 py-4">
             {messages.map((msg) => (
-              <ChatMessage key={msg.id} message={msg} />
+              <ChatMessage key={msg.id} message={msg} avatarUrl={character.avatarUrl} />
             ))}
             {isLoading && (
               <div className="flex gap-3">

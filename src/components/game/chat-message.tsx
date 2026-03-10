@@ -6,9 +6,10 @@ import { DiceRollDisplay } from "./dice-roll-display";
 
 interface Props {
   message: ChatMessageType;
+  avatarUrl?: string;
 }
 
-export function ChatMessage({ message }: Props) {
+export function ChatMessage({ message, avatarUrl }: Props) {
   const isUser = message.role === "user";
 
   if (isUser) {
@@ -18,9 +19,17 @@ export function ChatMessage({ message }: Props) {
           <div className="max-w-[80%] rounded-lg px-4 py-3 text-sm leading-relaxed bg-primary text-primary-foreground">
             <div className="whitespace-pre-wrap">{message.narrative}</div>
           </div>
-          <div className="w-8 h-8 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center text-sm font-bold shrink-0">
-            You
-          </div>
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt="You"
+              className="w-8 h-8 rounded-full object-cover object-top shrink-0"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center text-sm font-bold shrink-0">
+              You
+            </div>
+          )}
         </div>
       </div>
     );
