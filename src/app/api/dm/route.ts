@@ -32,54 +32,56 @@ function getProxyFetch(): typeof fetch | undefined {
 
 /**
  * LLM client setup.
- * Primary: Z.ai (GLM-4) when ZAI_API_KEY is set
- * Default: Cerebras (Llama 3.1 8B)
+ * Primary: Cerebras (Llama 3.1 8B) — fast and reliable
+ * Fallback: Z.ai (GLM-4) — used only when Cerebras key is missing
  */
 function getClient(): { client: OpenAI; model: string } {
   const proxyFetch = getProxyFetch();
-  // Try Z.ai first if key is available
+  // Prefer Cerebras — fast inference, reliable
+  const cerebrasKey = process.env.CEREBRAS_API_KEY;
+  if (cerebrasKey) {
+    return {
+      client: new OpenAI({
+        baseURL: "https://api.cerebras.ai/v1",
+        apiKey: cerebrasKey,
+        timeout: 15_000,
+        fetch: proxyFetch,
+      }),
+      model: "llama3.1-8b",
+    };
+  }
+  // Fallback: Z.ai
   const zaiKey = process.env.ZAI_API_KEY;
   if (zaiKey) {
     return {
       client: new OpenAI({
         baseURL: "https://api.z.ai/api/paas/v4",
         apiKey: zaiKey,
-        timeout: 30_000,
+        timeout: 15_000,
         fetch: proxyFetch,
       }),
       model: "glm-4",
     };
   }
-  // Default: Cerebras
-  const cerebrasKey = process.env.CEREBRAS_API_KEY;
-  if (!cerebrasKey) {
-    throw new Error("No LLM API key set. Set CEREBRAS_API_KEY (or ZAI_API_KEY).");
-  }
-  return {
-    client: new OpenAI({
-      baseURL: "https://api.cerebras.ai/v1",
-      apiKey: cerebrasKey,
-      timeout: 30_000,
-      fetch: proxyFetch,
-    }),
-    model: "llama3.1-8b",
-  };
+  throw new Error("No LLM API key set. Set CEREBRAS_API_KEY or ZAI_API_KEY.");
 }
 
-/** Get Cerebras as explicit fallback (when Z.ai is primary but fails) */
-function getCerebrasClient(): { client: OpenAI; model: string } | null {
-  const apiKey = process.env.CEREBRAS_API_KEY;
-  if (!apiKey) return null;
+/** Get Z.ai as explicit fallback (when Cerebras is primary but fails) */
+function getFallbackClient(): { client: OpenAI; model: string } | null {
   const proxyFetch = getProxyFetch();
-  return {
-    client: new OpenAI({
-      baseURL: "https://api.cerebras.ai/v1",
-      apiKey,
-      timeout: 30_000,
-      fetch: proxyFetch,
-    }),
-    model: "llama3.1-8b",
-  };
+  // If Cerebras is primary, try Z.ai as fallback
+  if (process.env.CEREBRAS_API_KEY && process.env.ZAI_API_KEY) {
+    return {
+      client: new OpenAI({
+        baseURL: "https://api.z.ai/api/paas/v4",
+        apiKey: process.env.ZAI_API_KEY,
+        timeout: 15_000,
+        fetch: proxyFetch,
+      }),
+      model: "glm-4",
+    };
+  }
+  return null;
 }
 
 interface RequestBody {
@@ -104,8 +106,8 @@ interface RequestBody {
 }
 
 const MAX_REGENERATION_ATTEMPTS = 1;
-const MAX_RETRY_ATTEMPTS = 4;
-const RETRY_BASE_DELAY_MS = 2000;
+const MAX_RETRY_ATTEMPTS = 1;
+const RETRY_BASE_DELAY_MS = 1000;
 
 /** Sleep for the given number of milliseconds */
 function sleep(ms: number): Promise<void> {
@@ -161,21 +163,19 @@ async function callWithRetry(
     }
   }
 
-  // If primary was Z.ai and it failed, try Cerebras fallback
-  if (process.env.ZAI_API_KEY) {
-    const fallback = getCerebrasClient();
-    if (fallback) {
-      console.warn("[DM API] Z.ai failed, falling back to Cerebras...");
-      try {
-        const response = await fallback.client.chat.completions.create({
-          model: fallback.model,
-          messages,
-          max_tokens: 1024,
-        });
-        return response.choices[0]?.message?.content ?? "";
-      } catch (fallbackError) {
-        console.error("[DM API] Fallback also failed:", fallbackError instanceof Error ? fallbackError.message : fallbackError);
-      }
+  // Try fallback LLM provider
+  const fallback = getFallbackClient();
+  if (fallback) {
+    console.warn("[DM API] Primary failed, trying fallback...");
+    try {
+      const response = await fallback.client.chat.completions.create({
+        model: fallback.model,
+        messages,
+        max_tokens: 1024,
+      });
+      return response.choices[0]?.message?.content ?? "";
+    } catch (fallbackError) {
+      console.error("[DM API] Fallback also failed:", fallbackError instanceof Error ? fallbackError.message : fallbackError);
     }
   }
 
