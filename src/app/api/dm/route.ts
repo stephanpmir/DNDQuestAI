@@ -38,14 +38,18 @@ interface LLMProvider {
 
 /**
  * Build a prioritized list of available LLM providers.
- * Order: Cerebras > Z.ai > Moonshot
+ * Order by best cost/performance (all-free first, then capped-free, then paid):
+ *   1. Cerebras  — FREE (1M tokens/day, 8K context), 2246 TPS
+ *   2. Z.ai      — FREE (GLM-4.7-Flash, $0 unlimited, no daily cap)
+ *   3. Groq      — FREE tier (~30k TPM, rate-limited), 840 TPS
+ *   4. Moonshot   — PAID ($0.20/$2.00 per M tokens, last resort)
  * All use the OpenAI SDK interface.
  */
 function getProviders(): LLMProvider[] {
   const proxyFetch = getProxyFetch();
   const providers: LLMProvider[] = [];
 
-  // 1. Cerebras — fast inference, free tier
+  // 1. Cerebras — FREE (1M tokens/day), fastest inference (2246 TPS)
   const cerebrasKey = process.env.CEREBRAS_API_KEY;
   if (cerebrasKey) {
     providers.push({
@@ -60,7 +64,7 @@ function getProviders(): LLMProvider[] {
     });
   }
 
-  // 2. Z.ai — GLM-4
+  // 2. Z.ai — FREE (GLM-4.7-Flash: $0 input + output, unlimited)
   const zaiKey = process.env.ZAI_API_KEY;
   if (zaiKey) {
     providers.push({
@@ -70,12 +74,27 @@ function getProviders(): LLMProvider[] {
         timeout: 30_000,
         fetch: proxyFetch,
       }),
-      model: "glm-4",
+      model: "GLM-4.7-Flash",
       name: "Z.ai",
     });
   }
 
-  // 3. Moonshot — cheapest model (moonshot-v1-8k: $0.20/M in, $2.00/M out)
+  // 3. Groq — FREE tier (rate-limited ~30k TPM for 8B model)
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    providers.push({
+      client: new OpenAI({
+        baseURL: "https://api.groq.com/openai/v1",
+        apiKey: groqKey,
+        timeout: 30_000,
+        fetch: proxyFetch,
+      }),
+      model: "llama-3.1-8b-instant",
+      name: "Groq",
+    });
+  }
+
+  // 4. Moonshot — PAID last resort (moonshot-v1-8k: $0.20/M in, $2.00/M out)
   const moonshotKey = process.env.MOONSHOT_API_KEY;
   if (moonshotKey) {
     providers.push({
@@ -91,7 +110,7 @@ function getProviders(): LLMProvider[] {
   }
 
   if (providers.length === 0) {
-    throw new Error("No LLM API key set. Set CEREBRAS_API_KEY, ZAI_API_KEY, or MOONSHOT_API_KEY.");
+    throw new Error("No LLM API key set. Set CEREBRAS_API_KEY, ZAI_API_KEY, GROQ_API_KEY, or MOONSHOT_API_KEY.");
   }
 
   return providers;
