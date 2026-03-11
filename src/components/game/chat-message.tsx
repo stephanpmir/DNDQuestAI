@@ -76,9 +76,9 @@ export function ChatMessage({ message, avatarUrl }: Props) {
 }
 
 /**
- * Typewriter effect — reveals text letter-by-letter at ~1200 WPM
+ * Typewriter effect — reveals text letter-by-letter at ~1600 WPM
  * using direct DOM manipulation to avoid React re-render batching.
- * 1200 WPM ≈ 6000 chars/min ≈ 10ms per character.
+ * 1600 WPM ≈ 8000 chars/min ≈ 7.5ms per character.
  */
 function TypewriterText({ text }: { text: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -113,7 +113,7 @@ function TypewriterText({ text }: { text: string }) {
     el.textContent = "";
     cursor.style.display = "";
 
-    // 1200 WPM ≈ 10ms per character
+    // 1600 WPM ≈ 7.5ms per character
     const timer = setInterval(() => {
       if (charIndex < text.length) {
         el.textContent += text[charIndex];
@@ -136,7 +136,7 @@ function TypewriterText({ text }: { text: string }) {
           scrollParent.scrollTop = scrollParent.scrollHeight;
         }
       }
-    }, 10);
+    }, 7.5);
 
     return () => {
       clearInterval(timer);
