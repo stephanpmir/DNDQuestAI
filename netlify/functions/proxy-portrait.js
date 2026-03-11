@@ -11,6 +11,7 @@ exports.handler = async (event) => {
   const prompt = params.prompt;
 
   if (!prompt) {
+    console.warn("[proxy-portrait] Request missing prompt parameter");
     return { statusCode: 400, body: "Missing prompt parameter" };
   }
 
@@ -30,23 +31,63 @@ exports.handler = async (event) => {
   const token = process.env.POLLINATIONS_API_KEY;
   if (token) upstream.searchParams.set("token", token);
 
+  const upstreamUrl = upstream.toString();
+  console.log("[proxy-portrait] Prompt received:", prompt.substring(0, 120));
+  console.log("[proxy-portrait] Upstream URL:", upstreamUrl.substring(0, 200));
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
   try {
-    const res = await fetch(upstream.toString(), {
-      signal: AbortSignal.timeout(60000),
+    const res = await fetch(upstreamUrl, {
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
+
+    const contentType = res.headers.get("content-type") || "";
+    console.log("[proxy-portrait] Response status:", res.status, res.statusText);
+    console.log("[proxy-portrait] Content-Type:", contentType);
 
     if (!res.ok) {
-      console.error("[proxy-portrait] Pollinations error:", res.status, res.statusText);
-      return { statusCode: 502, body: `Upstream error: ${res.statusText}` };
+      let errorBody = "";
+      try { errorBody = await res.text(); } catch { /* ignore */ }
+      console.error("[proxy-portrait] Pollinations HTTP error:", res.status, res.statusText, errorBody.substring(0, 500));
+      return {
+        statusCode: 502,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: `Upstream error ${res.status}: ${res.statusText}`,
+      };
+    }
+
+    // Verify we got an image back, not HTML/JSON/text
+    if (!contentType.startsWith("image/")) {
+      let textBody = "";
+      try { textBody = await res.text(); } catch { /* ignore */ }
+      console.error("[proxy-portrait] Non-image content-type:", contentType, "body:", textBody.substring(0, 1000));
+      return {
+        statusCode: 502,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: `Upstream returned non-image content-type: ${contentType}`,
+      };
     }
 
     const arrayBuf = await res.arrayBuffer();
     const buffer = Buffer.from(arrayBuf);
+    console.log("[proxy-portrait] Image received, buffer size:", buffer.length, "bytes");
+
+    if (buffer.length === 0) {
+      console.error("[proxy-portrait] Empty image buffer returned from Pollinations");
+      return {
+        statusCode: 502,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: "Upstream returned empty image",
+      };
+    }
 
     return {
       statusCode: 200,
       headers: {
-        "Content-Type": "image/jpeg",
+        "Content-Type": contentType,
         "Cache-Control": "public, max-age=31536000, immutable",
         "Access-Control-Allow-Origin": "*",
       },
@@ -54,8 +95,14 @@ exports.handler = async (event) => {
       isBase64Encoded: true,
     };
   } catch (error) {
+    clearTimeout(timeoutId);
     const msg = error instanceof Error ? error.message : "Unknown error";
-    console.error("[proxy-portrait] Fetch error:", msg);
-    return { statusCode: 502, body: `Proxy fetch failed: ${msg}` };
+    const isAbort = error instanceof Error && error.name === "AbortError";
+    console.error("[proxy-portrait] Fetch error:", isAbort ? "Request timed out after 30s" : msg);
+    return {
+      statusCode: 502,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      body: isAbort ? "Proxy fetch timed out after 30s" : `Proxy fetch failed: ${msg}`,
+    };
   }
 };

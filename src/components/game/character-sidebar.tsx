@@ -50,6 +50,7 @@ export function CharacterSidebar() {
         <div className="px-4 pt-4 pb-2 bg-gradient-to-b from-muted/80 to-transparent">
           <div className="flex items-center gap-3">
             {character.avatarUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={character.avatarUrl}
                 alt={`${character.name} portrait`}
@@ -57,8 +58,10 @@ export function CharacterSidebar() {
               />
             ) : (
               <div className="w-12 h-12 rounded-full bg-gradient-to-b from-primary/30 to-primary/10 border-2 border-primary/40 flex items-center justify-center shrink-0">
-                <span className="text-xl font-black text-primary/70">
-                  {character.name ? character.name.charAt(0).toUpperCase() : "?"}
+                <span className="text-lg font-black text-primary/70">
+                  {character.name
+                    ? character.name.split(/\s+/).map((w) => w.charAt(0).toUpperCase()).slice(0, 2).join("")
+                    : "?"}
                 </span>
               </div>
             )}

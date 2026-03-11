@@ -58,10 +58,27 @@ export function PortraitLoading({ character, customPrompt, onComplete }: Portrai
   // Safety timeout: proceed after 20s with fallback if image fails
   useEffect(() => {
     const timeout = setTimeout(() => {
-      if (!loaded) onComplete("/images/default-avatar.svg");
+      if (!loaded) onComplete(null);
     }, 20000);
     return () => clearTimeout(timeout);
   }, [loaded, onComplete]);
+
+  /** Convert the current proxy URL image to a data URL for persistence */
+  async function convertToDataUrl(url: string): Promise<string | null> {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => resolve("");
+        reader.readAsDataURL(blob);
+      }) || null;
+    } catch {
+      return null;
+    }
+  }
 
   function handleReroll() {
     const next = rerollCount + 1;
@@ -137,7 +154,10 @@ export function PortraitLoading({ character, customPrompt, onComplete }: Portrai
               Reroll Portrait
             </button>
             <button
-              onClick={() => onComplete(imageUrl)}
+              onClick={async () => {
+                const dataUrl = await convertToDataUrl(imageUrl);
+                onComplete(dataUrl || imageUrl);
+              }}
               className="relative group px-10 py-3 font-cinzel text-base tracking-widest uppercase text-amber-100 bg-gradient-to-b from-amber-900/80 to-red-950/80 border border-amber-500/40 rounded-sm cursor-pointer transition-all duration-300 hover:border-amber-400/70 hover:from-amber-800/90 hover:to-red-900/90 animate-glow-pulse"
             >
               <span className="absolute inset-0 rounded-sm bg-amber-400/0 group-hover:bg-amber-400/5 transition-colors duration-300" />

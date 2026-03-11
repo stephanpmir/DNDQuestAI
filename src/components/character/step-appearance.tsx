@@ -11,13 +11,6 @@ interface StepAppearanceProps {
   onBack: () => void;
 }
 
-const SUGGESTION_CHIPS = [
-  { label: "Add hair details", text: "with flowing dark hair " },
-  { label: "Add eye color", text: "with piercing green eyes " },
-  { label: "Add scars or markings", text: "bearing a jagged scar across one cheek " },
-  { label: "Add clothing or armor", text: "clad in worn leather armor " },
-];
-
 export function StepAppearance({
   description,
   onDescriptionChange,
@@ -26,10 +19,6 @@ export function StepAppearance({
   onBack,
 }: StepAppearanceProps) {
   const [focused, setFocused] = useState(false);
-
-  function appendSuggestion(text: string) {
-    onDescriptionChange(description + text);
-  }
 
   return (
     <div
@@ -53,31 +42,22 @@ export function StepAppearance({
         </p>
       </div>
       <div className="px-6 pb-6 space-y-4">
-        <textarea
-          value={description}
-          onChange={(e) => onDescriptionChange(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          rows={5}
-          placeholder="e.g. A tall woman with braided silver hair, amber eyes, a scar across her left cheek, and sun-darkened skin from years on the road…"
-          className={`w-full resize-none rounded-lg p-3 text-sm text-white placeholder:text-[#555] bg-[#0f0f0f] border transition-colors focus:outline-none ${
-            focused ? "border-[#c9a227]" : "border-[#333]"
-          }`}
-          style={focused ? { boxShadow: "0 0 8px rgba(201,162,39,0.15)" } : undefined}
-        />
-
-        {/* Suggestion chips */}
-        <div className="flex flex-wrap gap-2">
-          {SUGGESTION_CHIPS.map((chip) => (
-            <button
-              key={chip.label}
-              type="button"
-              onClick={() => appendSuggestion(chip.text)}
-              className="text-xs px-3 py-1.5 rounded-full border border-[#c9a227]/50 text-[#c9a227] bg-[#1a1a1a] hover:bg-[#6b0000] hover:text-white hover:border-[#c9a227] transition-colors cursor-pointer"
-            >
-              + {chip.label}
-            </button>
-          ))}
+        <div>
+          <textarea
+            value={description}
+            onChange={(e) => onDescriptionChange(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            rows={5}
+            placeholder="e.g. A tall woman with braided silver hair, amber eyes, a scar across her left cheek, and sun-darkened skin from years on the road…"
+            className={`w-full resize-none rounded-lg p-3 text-sm text-white placeholder:text-[#555] bg-[#0f0f0f] border transition-colors focus:outline-none ${
+              focused ? "border-[#c9a227]" : "border-[#333]"
+            }`}
+            style={focused ? { boxShadow: "0 0 8px rgba(201,162,39,0.15)" } : undefined}
+          />
+          <p className="text-xs italic text-[#c9a227]/60 mt-1.5">
+            Consider describing: hair color and style, eye color, skin tone, build, height, scars or markings, clothing or armor
+          </p>
         </div>
 
         <div className="space-y-2 pt-2">
