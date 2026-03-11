@@ -24,7 +24,7 @@ export async function GET() {
           messages: [{ role: "user", content: "Say hi in 3 words" }],
           max_tokens: 20,
         }),
-        signal: AbortSignal.timeout(15_000),
+        signal: AbortSignal.timeout(25_000),
       });
       const body = await res.text();
       results.zai = {
@@ -54,7 +54,7 @@ export async function GET() {
           messages: [{ role: "user", content: "Say hi in 3 words" }],
           max_tokens: 20,
         }),
-        signal: AbortSignal.timeout(15_000),
+        signal: AbortSignal.timeout(25_000),
       });
       const body = await res.text();
       results.cerebras = {

@@ -44,7 +44,7 @@ function getClient(): { client: OpenAI; model: string } {
       client: new OpenAI({
         baseURL: "https://api.cerebras.ai/v1",
         apiKey: cerebrasKey,
-        timeout: 15_000,
+        timeout: 30_000,
         fetch: proxyFetch,
       }),
       model: "llama3.1-8b",
@@ -57,7 +57,7 @@ function getClient(): { client: OpenAI; model: string } {
       client: new OpenAI({
         baseURL: "https://api.z.ai/api/paas/v4",
         apiKey: zaiKey,
-        timeout: 15_000,
+        timeout: 30_000,
         fetch: proxyFetch,
       }),
       model: "glm-4",
@@ -75,7 +75,7 @@ function getFallbackClient(): { client: OpenAI; model: string } | null {
       client: new OpenAI({
         baseURL: "https://api.z.ai/api/paas/v4",
         apiKey: process.env.ZAI_API_KEY,
-        timeout: 15_000,
+        timeout: 30_000,
         fetch: proxyFetch,
       }),
       model: "glm-4",
@@ -106,8 +106,8 @@ interface RequestBody {
 }
 
 const MAX_REGENERATION_ATTEMPTS = 1;
-const MAX_RETRY_ATTEMPTS = 1;
-const RETRY_BASE_DELAY_MS = 1000;
+const MAX_RETRY_ATTEMPTS = 2;
+const RETRY_BASE_DELAY_MS = 1500;
 
 /** Sleep for the given number of milliseconds */
 function sleep(ms: number): Promise<void> {
