@@ -6,6 +6,39 @@ import type { KarmaEvent } from "@/lib/karma";
 import { buildKarmaContext } from "@/lib/karma";
 import { buildCompanionContext } from "@/types/companion";
 import { getThemeNarrationProfile, type CampaignTheme } from "@/lib/campaigns";
+import type { ResourcePool } from "@/lib/resources";
+
+/**
+ * Format character resources into a concise string for the system prompt.
+ * Groups spell slots together and lists class features separately.
+ */
+function formatResourcesForPrompt(resources?: ResourcePool): string {
+  if (!resources || resources.length === 0) return "";
+
+  const spellSlots: string[] = [];
+  const classFeatures: string[] = [];
+
+  for (const r of resources) {
+    if (r.key === "hit_dice") continue; // Not useful for narration
+    if (r.key.startsWith("spell_slot_") || r.key === "pact_slots") {
+      if (r.current > 0 || r.max > 0) {
+        spellSlots.push(`${r.label}: ${r.current}/${r.max}`);
+      }
+    } else {
+      const maxStr = r.max === Infinity ? "unlimited" : String(r.max);
+      classFeatures.push(`${r.label}: ${r.current}/${maxStr}`);
+    }
+  }
+
+  const parts: string[] = [];
+  if (spellSlots.length > 0) {
+    parts.push(`- Spell Slots: ${spellSlots.join(", ")}`);
+  }
+  if (classFeatures.length > 0) {
+    parts.push(`- Class Resources: ${classFeatures.join(", ")}`);
+  }
+  return parts.length > 0 ? parts.join("\n") + "\n" : "";
+}
 
 /**
  * System prompt — defines the LLM's role as NARRATOR only.
@@ -54,7 +87,7 @@ export function buildSystemPrompt(
 - Gold: ${character.gold}
 - Skill Proficiencies: ${character.skillProficiencies?.length > 0 ? character.skillProficiencies.join(", ") : "none"}${character.cantrips?.length > 0 ? `\n- Cantrips: ${character.cantrips.join(", ")}` : ""}${character.spells?.length > 0 ? `\n- Spells: ${character.spells.join(", ")}` : ""}${character.fightingStyle ? `\n- Fighting Style: ${character.fightingStyle}` : ""}
 - Racial Traits: ${character.racialTraits?.length > 0 ? character.racialTraits.join(", ") : character.race + " traits"}
-
+${formatResourcesForPrompt(character.resources)}
 ## Current State
 - Location: ${gameState.location || "Unknown"}
 - Turn: ${gameState.turnCount}
@@ -260,6 +293,27 @@ export function buildEngineContextMessage(
   }
   if (o.actionDenied) {
     outcomeParts.push(`ACTION DENIED: The player attempted to "${o.actionDenied.attempted}" but this is impossible. Reason: ${o.actionDenied.reason}. Narrate the FAILURE — describe the character attempting the action and it not working. Do NOT let the action succeed under any circumstances. Be descriptive about why it fails in-world (no magic ability, physical impossibility, etc.).`);
+  }
+  // Report resource consumption so the DM can reference spell power / exhaustion
+  if (o.resourceUpdates) {
+    const consumed: string[] = [];
+    // Compare with original (if available via roll reason) to detect what was spent
+    const slots = o.resourceUpdates.filter((r) =>
+      (r.key.startsWith("spell_slot_") || r.key === "pact_slots") && r.current < r.max
+    );
+    if (slots.length > 0) {
+      const slotInfo = slots.map((s) => `${s.label}: ${s.current}/${s.max} remaining`).join(", ");
+      consumed.push(`Spell slots after cast: ${slotInfo}`);
+    }
+    const features = o.resourceUpdates.filter((r) =>
+      !r.key.startsWith("spell_slot_") && r.key !== "pact_slots" && r.key !== "hit_dice" && r.current < r.max
+    );
+    for (const f of features) {
+      consumed.push(`${f.label}: ${f.current}/${f.max === Infinity ? "unlimited" : f.max} remaining`);
+    }
+    if (consumed.length > 0) {
+      outcomeParts.push(`RESOURCES USED: ${consumed.join(". ")}. Weave this into the narration subtly — the character draws on their inner power, channeling energy, or feeling the strain of expended magic.`);
+    }
   }
   if (o.travelEncounter) {
     outcomeParts.push(`TRAVEL ENCOUNTER: While traveling, the character encounters ${o.travelEncounter.description}. This is a ${o.travelEncounter.type} encounter. Narrate the journey first — describe the terrain, weather, and distance — then introduce this encounter naturally along the way.`);
