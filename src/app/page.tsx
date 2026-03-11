@@ -109,7 +109,7 @@ export default function HomePage() {
   }
 
   return (
-    <main className="relative min-h-[calc(100vh-4rem)] overflow-hidden flex items-center justify-center">
+    <main className="relative min-h-screen overflow-hidden flex items-center justify-center">
       {/* Pollinations background image */}
       {bgUrl && (
         /* eslint-disable-next-line @next/next/no-img-element */
