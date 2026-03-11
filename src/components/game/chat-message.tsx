@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { ChatMessage as ChatMessageType } from "@/types/game";
 import { DiceRollDisplay } from "./dice-roll-display";
+import { useLanguageStore } from "@/stores/language-store";
 
 interface Props {
   message: ChatMessageType;
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function ChatMessage({ message, avatarUrl }: Props) {
+  const t = useLanguageStore((s) => s.t);
   const isUser = message.role === "user";
 
   if (isUser) {
@@ -22,12 +24,12 @@ export function ChatMessage({ message, avatarUrl }: Props) {
           {avatarUrl ? (
             <img
               src={avatarUrl}
-              alt="You"
+              alt={t("chat.you")}
               className="w-8 h-8 rounded-full object-cover object-top shrink-0"
             />
           ) : (
             <div className="w-8 h-8 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center text-sm font-bold shrink-0">
-              You
+              {t("chat.you")}
             </div>
           )}
         </div>
@@ -43,7 +45,7 @@ export function ChatMessage({ message, avatarUrl }: Props) {
       {message.rollResult && <DiceRollDisplay roll={message.rollResult} />}
       <div className="flex gap-3 justify-start">
         <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold shrink-0">
-          DM
+          {t("chat.dm")}
         </div>
         <div className="max-w-[80%] rounded-lg px-4 py-3 text-sm leading-relaxed bg-muted text-foreground">
           <TypewriterText text={message.narrative} />
@@ -57,7 +59,7 @@ export function ChatMessage({ message, avatarUrl }: Props) {
                 ? "bg-emerald-950/60 text-emerald-400 border border-emerald-700/30"
                 : "bg-red-950/60 text-red-400 border border-red-700/30"
             }`}>
-              {message.karmaChange! > 0 ? "+" : ""}{message.karmaChange} karma
+              {message.karmaChange! > 0 ? "+" : ""}{message.karmaChange} {t("chat.karma")}
             </span>
           )}
           {hasFameChange && (
@@ -66,7 +68,7 @@ export function ChatMessage({ message, avatarUrl }: Props) {
                 ? "bg-sky-950/60 text-sky-400 border border-sky-700/30"
                 : "bg-orange-950/60 text-orange-400 border border-orange-700/30"
             }`}>
-              {message.fameChange! > 0 ? "+" : ""}{message.fameChange} fame
+              {message.fameChange! > 0 ? "+" : ""}{message.fameChange} {t("chat.fame")}
             </span>
           )}
         </div>

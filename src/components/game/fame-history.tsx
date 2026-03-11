@@ -2,6 +2,7 @@
 
 import type { FameEvent } from "@/lib/karma";
 import { cn } from "@/lib/utils";
+import { useLanguageStore } from "@/stores/language-store";
 
 interface Props {
   fame: number;
@@ -9,21 +10,23 @@ interface Props {
   onClose: () => void;
 }
 
-const CATEGORY_LABELS: Record<FameEvent["category"], string> = {
-  quest: "Quest",
-  combat: "Combat",
-  crime: "Crime",
-  social: "Social",
-  decay: "Decay",
+const CATEGORY_KEYS: Record<FameEvent["category"], string> = {
+  quest: "fame.categoryQuest",
+  combat: "fame.categoryCombat",
+  crime: "fame.categoryCrime",
+  social: "fame.categorySocial",
+  decay: "fame.categoryDecay",
 };
 
 export function FameHistory({ fame, history, onClose }: Props) {
+  const t = useLanguageStore((s) => s.t);
+
   const fameTier =
-    fame >= 75 ? "Legendary" :
-    fame >= 50 ? "Renowned" :
-    fame >= 30 ? "Well-Known" :
-    fame >= 15 ? "Recognized" :
-    "Unknown";
+    fame >= 75 ? t("fame.legendary") :
+    fame >= 50 ? t("fame.renowned") :
+    fame >= 30 ? t("fame.wellKnown") :
+    fame >= 15 ? t("fame.recognized") :
+    t("fame.unknown");
 
   return (
     <div
@@ -45,9 +48,9 @@ export function FameHistory({ fame, history, onClose }: Props) {
 
         {/* Header */}
         <div className="px-5 pt-5 pb-3 border-b border-border/50">
-          <h2 className="text-lg font-black tracking-tight">Fame History</h2>
+          <h2 className="text-lg font-black tracking-tight">{t("fame.historyTitle")}</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Current Fame:{" "}
+            {t("fame.currentFame")}{" "}
             <span className={cn(
               "font-bold",
               fame >= 75 ? "text-amber-400" :
@@ -64,7 +67,7 @@ export function FameHistory({ fame, history, onClose }: Props) {
         <div className="flex-1 overflow-y-auto px-5 py-3">
           {history.length === 0 ? (
             <div className="text-center text-sm text-muted-foreground py-10">
-              No fame events recorded yet. Your deeds will build your reputation.
+              {t("fame.emptyState")}
             </div>
           ) : (
             <ul className="space-y-2">
@@ -97,10 +100,10 @@ export function FameHistory({ fame, history, onClose }: Props) {
                     <div className="text-xs">{event.reason}</div>
                     <div className="flex gap-2 mt-0.5">
                       <span className="text-[10px] text-muted-foreground">
-                        Turn {event.turn}
+                        {t("fame.turn")} {event.turn}
                       </span>
                       <span className="text-[10px] text-muted-foreground">
-                        {CATEGORY_LABELS[event.category]}
+                        {t(CATEGORY_KEYS[event.category])}
                       </span>
                     </div>
                   </div>

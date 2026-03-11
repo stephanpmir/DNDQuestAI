@@ -216,7 +216,7 @@ export function GameView() {
           updateFromGameState({ fameChange: data.fameChange });
           addFameEvent({
             amount: data.fameChange,
-            reason: data.fameReason ?? (data.fameChange > 0 ? "Your deeds have been noticed" : "Your reputation has suffered"),
+            reason: data.fameReason ?? (data.fameChange > 0 ? t("game.defaultFameGain") : t("game.defaultFameLoss")),
             category: data.fameCategory ?? (data.fameChange > 0 ? "social" : "crime"),
             turn: turnCount,
           });
@@ -317,7 +317,7 @@ export function GameView() {
         addMessage({
           id: generateId(),
           role: "assistant",
-          narrative: "The Dungeon Master pauses briefly... Something went wrong behind the scenes. Please try your action again.",
+          narrative: t("game.errorMessage"),
           timestamp: Date.now(),
         });
       } finally {
@@ -442,7 +442,7 @@ export function GameView() {
             {isLoading && (
               <div className="flex gap-3">
                 <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
-                  DM
+                  {t("chat.dm")}
                 </div>
                 <div className="bg-muted rounded-lg px-4 py-3 text-sm animate-pulse">
                   {t("game.dmThinking")}

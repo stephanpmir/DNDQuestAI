@@ -134,11 +134,11 @@ export function CharacterSidebar() {
                 character.fame >= 15 ? "text-slate-300" :
                 "text-gray-500"
               )}>
-                {character.fame >= 75 ? "Legendary" :
-                 character.fame >= 50 ? "Renowned" :
-                 character.fame >= 30 ? "Well-Known" :
-                 character.fame >= 15 ? "Recognized" :
-                 "Unknown"}
+                {character.fame >= 75 ? t("fame.legendary") :
+                 character.fame >= 50 ? t("fame.renowned") :
+                 character.fame >= 30 ? t("fame.wellKnown") :
+                 character.fame >= 15 ? t("fame.recognized") :
+                 t("fame.unknown")}
               </div>
             </div>
           </div>
@@ -146,7 +146,7 @@ export function CharacterSidebar() {
           {/* Unconscious/Death warning */}
           {character.isUnconscious && (
             <div className="text-center py-1 bg-red-950/60 border border-red-700/50 rounded text-red-300 text-xs font-bold animate-pulse">
-              UNCONSCIOUS — Death Saves: {character.deathSaves.successes}S / {character.deathSaves.failures}F
+              {t("sidebar.unconscious")} {character.deathSaves.successes}S / {character.deathSaves.failures}F
             </div>
           )}
 
@@ -218,7 +218,7 @@ export function CharacterSidebar() {
                 })}
               </ul>
             ) : (
-              <div className="text-xs text-muted-foreground italic">None</div>
+              <div className="text-xs text-muted-foreground italic">{t("sidebar.none")}</div>
             )
           )}
         </div>
@@ -252,7 +252,7 @@ export function CharacterSidebar() {
                 })}
               </ul>
             ) : (
-              <div className="text-xs text-muted-foreground italic">Empty</div>
+              <div className="text-xs text-muted-foreground italic">{t("sidebar.empty")}</div>
             )
           )}
         </div>

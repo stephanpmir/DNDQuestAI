@@ -1,19 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSaveStore } from "@/stores/save-store";
 import { useLanguageStore } from "@/stores/language-store";
-
-function formatRelative(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 10) return "just now";
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ago`;
-}
 
 export function AutoSaveIndicator() {
   const t = useLanguageStore((s) => s.t);
@@ -22,6 +11,17 @@ export function AutoSaveIndicator() {
   const [display, setDisplay] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
 
+  const formatRelative = useCallback((iso: string): string => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const seconds = Math.floor(diff / 1000);
+    if (seconds < 10) return t("time.justNow");
+    if (seconds < 60) return t("time.sAgo").replace("{s}", String(seconds));
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return t("time.mAgo").replace("{m}", String(minutes));
+    const hours = Math.floor(minutes / 60);
+    return t("time.hAgo").replace("{h}", String(hours));
+  }, [t]);
+
   useEffect(() => {
     if (!lastSavedAt) return;
     setDisplay(formatRelative(lastSavedAt));
@@ -29,7 +29,7 @@ export function AutoSaveIndicator() {
       setDisplay(formatRelative(lastSavedAt));
     }, 15_000);
     return () => clearInterval(interval);
-  }, [lastSavedAt]);
+  }, [lastSavedAt, formatRelative]);
 
   useEffect(() => {
     if (!lastSavedAt) return;

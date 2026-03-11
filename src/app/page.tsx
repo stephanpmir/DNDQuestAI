@@ -41,11 +41,11 @@ interface SaveInfo {
   snapshot: SaveSlot["snapshot"];
 }
 
-const SLOT_LABELS: Record<SlotId, string> = {
-  auto: "Auto-Save",
-  "slot-1": "Slot 1",
-  "slot-2": "Slot 2",
-  "slot-3": "Slot 3",
+const SLOT_LABEL_KEYS: Record<SlotId, string> = {
+  auto: "save.autoSave",
+  "slot-1": "save.slot1",
+  "slot-2": "save.slot2",
+  "slot-3": "save.slot3",
 };
 
 /** Read all save slots from localStorage (raw read, no Zustand import) */
@@ -65,7 +65,7 @@ function getAllSaves(): SaveInfo[] {
           slotId: slotId as SlotId,
           characterName: s.characterName,
           characterLevel: s.characterLevel ?? 1,
-          location: s.location ?? "Unknown",
+          location: s.location ?? "",
           savedAt: s.savedAt,
           snapshot: s.snapshot,
         });
@@ -78,15 +78,15 @@ function getAllSaves(): SaveInfo[] {
   }
 }
 
-function formatTimeAgo(iso: string): string {
+function formatTimeAgo(iso: string, t: (key: string) => string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return t("time.justNow");
+  if (minutes < 60) return t("time.mAgo").replace("{m}", String(minutes));
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t("time.hAgo").replace("{h}", String(hours));
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t("time.dAgo").replace("{d}", String(days));
 }
 
 export default function HomePage() {
@@ -166,7 +166,7 @@ export default function HomePage() {
         <p className="text-base sm:text-lg text-gray-300/90 max-w-md mx-auto leading-relaxed">
           {t("landing.tagline")}
           <span className="block mt-1 text-amber-300/60 text-sm italic">
-            Every decision matters.
+            {t("landing.everyDecision")}
           </span>
         </p>
 
@@ -187,11 +187,11 @@ export default function HomePage() {
                   {mostRecent.characterName}
                 </span>
                 <span className="text-gray-600">·</span>
-                <span>Lvl {mostRecent.characterLevel}</span>
+                <span>{t("landing.lvl")} {mostRecent.characterLevel}</span>
                 <span className="text-gray-600">·</span>
                 <span>{mostRecent.location}</span>
                 <span className="text-gray-600">·</span>
-                <span>{formatTimeAgo(mostRecent.savedAt)}</span>
+                <span>{formatTimeAgo(mostRecent.savedAt, t)}</span>
               </div>
             </div>
           )}
@@ -232,11 +232,11 @@ export default function HomePage() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-medium text-gray-200">
-                            {SLOT_LABELS[save.slotId]}
+                            {t(SLOT_LABEL_KEYS[save.slotId])}
                           </span>
                           {save.slotId === "auto" && (
                             <span className="text-[9px] bg-emerald-500/15 text-emerald-400 px-1.5 py-0.5 rounded-full border border-emerald-500/30">
-                              AUTO
+                              {t("landing.auto")}
                             </span>
                           )}
                         </div>
@@ -245,13 +245,13 @@ export default function HomePage() {
                             {save.characterName}
                           </span>
                           <span className="text-gray-600">·</span>
-                          <span>Lvl {save.characterLevel}</span>
+                          <span>{t("landing.lvl")} {save.characterLevel}</span>
                           <span className="text-gray-600">·</span>
                           <span className="truncate">{save.location}</span>
                         </div>
                       </div>
                       <span className="text-[10px] text-gray-500 shrink-0 ml-3">
-                        {formatTimeAgo(save.savedAt)}
+                        {formatTimeAgo(save.savedAt, t)}
                       </span>
                     </button>
                   ))}
@@ -286,14 +286,14 @@ export default function HomePage() {
 
         {/* Tagline */}
         <p className="text-xs text-gray-500/60 tracking-wider">
-          Powered by AI &bull; D&D 5e Rules &bull; Solo Adventure
+          {t("landing.footer")}
         </p>
       </div>
 
       {/* Regenerate background button */}
       <button
         onClick={handleRegenerate}
-        title="Generate new background"
+        title={t("landing.regenBg")}
         className="absolute bottom-4 right-4 z-20 p-2 rounded-full bg-black/40 border border-white/10 text-gray-400/60 hover:text-amber-300/80 hover:border-amber-500/30 hover:bg-black/60 transition-all duration-300 cursor-pointer"
       >
         <svg

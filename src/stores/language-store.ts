@@ -222,6 +222,26 @@ export const EN_STRINGS: UITranslations = {
   "appearance.description": "Fill in as many or as few details as you like. Your race, class, and gender are already part of the portrait — these fields add the finishing touches.",
   "appearance.generate": "Generate My Portrait",
   "appearance.skip": "Skip — Use Random Portrait",
+  "appearance.heightSize": "Height / Size",
+  "appearance.heightSizePlaceholder": "e.g. Tall and imposing, 6'2\"",
+  "appearance.weight": "Weight / Build",
+  "appearance.weightPlaceholder": "e.g. Lean and wiry, 160 lbs",
+  "appearance.hairColor": "Hair Color & Style",
+  "appearance.hairColorPlaceholder": "e.g. Long silver hair, braided",
+  "appearance.facialHair": "Facial Hair & Color",
+  "appearance.facialHairPlaceholder": "e.g. Thick auburn beard, neatly trimmed",
+  "appearance.scars": "Scars & Markings",
+  "appearance.scarsPlaceholder": "e.g. A jagged scar across the left cheek",
+  "appearance.eyeColor": "Eye Color",
+  "appearance.eyeColorPlaceholder": "e.g. Piercing amber eyes",
+  "appearance.lipColor": "Lip Color",
+  "appearance.lipColorPlaceholder": "e.g. Pale, thin lips",
+  "appearance.clothing": "Clothing & Armor",
+  "appearance.clothingPlaceholder": "e.g. Worn leather armor with a dark green cloak",
+  "appearance.accessories": "Accessories",
+  "appearance.accessoriesPlaceholder": "e.g. A silver pendant, iron rings on both hands",
+  "appearance.allOptional": "All fields are optional — fill in what matters to you.",
+  "appearance.filledCount": "{count} of {total} details filled in.",
 
   // Game UI
   "game.characterSheet": "Character Sheet",
@@ -231,6 +251,9 @@ export const EN_STRINGS: UITranslations = {
   "game.sendAction": "Send",
   "game.shortRest": "Short Rest",
   "game.longRest": "Long Rest",
+  "game.errorMessage": "The Dungeon Master pauses briefly... Something went wrong behind the scenes. Please try your action again.",
+  "game.defaultFameGain": "Your deeds have been noticed",
+  "game.defaultFameLoss": "Your reputation has suffered",
 
   // Sidebar
   "sidebar.hp": "HP",
@@ -245,6 +268,47 @@ export const EN_STRINGS: UITranslations = {
   "sidebar.quests": "Quests",
   "sidebar.nearby": "Nearby Items",
   "sidebar.companions": "Companions",
+  "sidebar.none": "None",
+  "sidebar.empty": "Empty",
+  "sidebar.unconscious": "UNCONSCIOUS — Death Saves:",
+
+  // Fame tiers
+  "fame.legendary": "Legendary",
+  "fame.renowned": "Renowned",
+  "fame.wellKnown": "Well-Known",
+  "fame.recognized": "Recognized",
+  "fame.unknown": "Unknown",
+
+  // Fame history
+  "fame.historyTitle": "Fame History",
+  "fame.currentFame": "Current Fame:",
+  "fame.emptyState": "No fame events recorded yet. Your deeds will build your reputation.",
+  "fame.turn": "Turn",
+  "fame.categoryQuest": "Quest",
+  "fame.categoryCombat": "Combat",
+  "fame.categoryCrime": "Crime",
+  "fame.categorySocial": "Social",
+  "fame.categoryDecay": "Decay",
+
+  // Chat badges
+  "chat.you": "You",
+  "chat.dm": "DM",
+  "chat.karma": "karma",
+  "chat.fame": "fame",
+
+  // Landing page extras
+  "landing.everyDecision": "Every decision matters.",
+  "landing.footer": "Powered by AI \u2022 D&D 5e Rules \u2022 Solo Adventure",
+  "landing.regenBg": "Generate new background",
+  "landing.lvl": "Lvl",
+  "landing.auto": "AUTO",
+
+  // Time formatting
+  "time.justNow": "just now",
+  "time.mAgo": "{m}m ago",
+  "time.hAgo": "{h}h ago",
+  "time.dAgo": "{d}d ago",
+  "time.sAgo": "{s}s ago",
 
   // Wizard step labels
   "wizard.step": "Step",
