@@ -22,7 +22,7 @@ import { StepSurvey } from "./step-survey";
 import { CharacterAvatar } from "./character-avatar";
 import { StepSuggestion } from "./step-suggestion";
 import { recommend, type SurveyRecommendation } from "@/lib/survey-recommend";
-import { generateAvatar } from "@/lib/avatar";
+import { PortraitLoading } from "./portrait-loading";
 
 const STEP_LABELS = [
   "Welcome",
@@ -71,6 +71,7 @@ export function CharacterWizard() {
   const [step, setStep] = useState(0);
   const [showSurvey, setShowSurvey] = useState(false);
   const [showSuggestion, setShowSuggestion] = useState(false);
+  const [showPortrait, setShowPortrait] = useState(false);
   const [surveyData, setSurveyData] = useState<BeginnerSurvey | null>(null);
   const [surveyRec, setSurveyRec] = useState<SurveyRecommendation | null>(null);
 
@@ -83,6 +84,26 @@ export function CharacterWizard() {
   const [halfElfBonus2, setHalfElfBonus2] = useState("");
 
   const classData = CLASS_DATA[character.class as CharacterClass];
+
+  /** Common finalization: show portrait interstitial instead of navigating immediately */
+  function finalizeAndShowPortrait() {
+    resetGame();
+    resetWorld();
+    resetKarma();
+    setTimeout(() => {
+      finalizeCharacter();
+      setShowPortrait(true);
+    }, 0);
+  }
+
+  /** Called when portrait generation completes (or times out) */
+  const handlePortraitComplete = useCallback(
+    (portraitUrl: string | null) => {
+      if (portraitUrl) setAvatarUrl(portraitUrl);
+      router.push("/game");
+    },
+    [router, setAvatarUrl]
+  );
 
   function handleAcceptProfile(profile: {
     name: string;
@@ -132,26 +153,7 @@ export function CharacterWizard() {
     };
     setAvatar(avatarData);
 
-    resetGame();
-    resetWorld();
-    resetKarma();
-
-    // Fire avatar generation in background
-    generateAvatar({
-      ...useCharacterStore.getState().character,
-      name: profile.name,
-      gender: profile.gender,
-      race: profile.race,
-      class: profile.class,
-      avatar: { ...useCharacterStore.getState().character.avatar, ...avatarData },
-    }).then((url) => {
-      if (url) setAvatarUrl(url);
-    });
-
-    setTimeout(() => {
-      finalizeCharacter();
-      router.push("/game");
-    }, 0);
+    finalizeAndShowPortrait();
   }
 
   const handleClassChange = useCallback(
@@ -219,20 +221,7 @@ export function CharacterWizard() {
       setHalfElfBonuses([halfElfBonus1, halfElfBonus2]);
     }
 
-    resetGame();
-    resetWorld();
-    resetKarma();
-
-    // Fire avatar generation in background (don't block navigation)
-    const charSnapshot = { ...character };
-    generateAvatar(charSnapshot).then((url) => {
-      if (url) setAvatarUrl(url);
-    });
-
-    setTimeout(() => {
-      finalizeCharacter();
-      router.push("/game");
-    }, 0);
+    finalizeAndShowPortrait();
   }
 
   function handleQuickStart() {
@@ -303,32 +292,22 @@ export function CharacterWizard() {
     };
     setAvatar(avatarData);
 
-    resetGame();
-    resetWorld();
-    resetKarma();
-
-    // Fire avatar generation in background
-    const charName = useCharacterStore.getState().character.name;
-    generateAvatar({
-      ...useCharacterStore.getState().character,
-      name: charName,
-      gender,
-      race,
-      class: cls,
-      avatar: { ...useCharacterStore.getState().character.avatar, ...avatarData },
-    }).then((url) => {
-      if (url) setAvatarUrl(url);
-    });
-
-    setTimeout(() => {
-      finalizeCharacter();
-      router.push("/game");
-    }, 0);
+    finalizeAndShowPortrait();
   }
 
   const progress = Math.round((step / (STEP_LABELS.length - 1)) * 100);
 
   const showAvatar = step >= 1 || showSurvey || showSuggestion;
+
+  // Show portrait generation interstitial
+  if (showPortrait) {
+    return (
+      <PortraitLoading
+        character={useCharacterStore.getState().character}
+        onComplete={handlePortraitComplete}
+      />
+    );
+  }
 
   return (
     <div className="flex justify-center gap-8 max-w-4xl mx-auto">
