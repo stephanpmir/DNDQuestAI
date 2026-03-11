@@ -104,12 +104,15 @@ export function StepAbilities({
   const canIndividualReroll = individualRerollsUsed < MAX_INDIVIDUAL_REROLLS;
 
   return (
-    <div className="rounded-lg border border-[#c9a227]/30 bg-[#1a1a1a] overflow-hidden">
+    <div
+      className="rounded-lg border border-[#c9a227] bg-[#111111] overflow-hidden"
+      style={{ boxShadow: "0 0 20px rgba(201,162,39,0.15)" }}
+    >
       <div className="px-6 pt-6 pb-3">
         <h2
           className="text-xl font-cinzel font-bold tracking-wide flex items-center gap-1"
           style={{
-            background: "linear-gradient(180deg, #e0c068, #c9a227, #8b6914)",
+            background: "linear-gradient(180deg, #f0d060, #c9a227)",
             WebkitBackgroundClip: "text",
             WebkitTextFillColor: "transparent",
           }}
@@ -119,7 +122,7 @@ export function StepAbilities({
             <InfoTip text="Ability scores are your character's core stats (like Strength and Intelligence). Higher scores make you better at related tasks. We roll 4 dice and drop the lowest for each stat." />
           </span>
         </h2>
-        <p className="text-sm text-neutral-400 mt-1">
+        <p className="text-sm text-[#8a8a8a] mt-1">
           Click &quot;Roll Dice&quot; to generate your stats. You get 1 full
           reroll and 2 individual rerolls.
         </p>
@@ -131,8 +134,8 @@ export function StepAbilities({
           disabled={!canFullReroll}
           className={
             hasRolled
-              ? "w-full border-[#c9a227]/30 text-[#c9a227] hover:bg-[#c9a227]/10 hover:border-[#c9a227]/50 bg-transparent border disabled:opacity-40"
-              : "w-full bg-[#8b0000] hover:bg-[#a50000] text-[#e0c068] border border-[#c9a227]/50 font-cinzel tracking-wide"
+              ? "w-full bg-transparent border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-300 hover:bg-transparent border disabled:opacity-40"
+              : "w-full bg-[#6b0000] hover:bg-[#7a0000] text-white border border-[#c9a227] font-cinzel tracking-wide transition-shadow hover:shadow-[0_0_12px_rgba(201,162,39,0.3)]"
           }
         >
           {hasRolled
@@ -142,7 +145,7 @@ export function StepAbilities({
 
         {hasRolled && (
           <>
-            <div className="text-[10px] text-[#c9a227]/60 text-center font-cinzel tracking-wide">
+            <div className="text-[10px] text-[#c9a227] text-center font-cinzel tracking-wide">
               Individual rerolls remaining: {MAX_INDIVIDUAL_REROLLS - individualRerollsUsed}
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -153,21 +156,30 @@ export function StepAbilities({
                 const finalScore = roll.total + racialBonus;
                 const mod = Math.floor((finalScore - 10) / 2);
                 return (
-                  <div key={ability} className="border border-[#c9a227]/20 bg-[#111]/60 rounded-lg p-3 space-y-1.5">
+                  <div key={ability} className="border border-[#2a2a2a] bg-[#0f0f0f] rounded-lg p-3 space-y-1.5">
                     <div className="flex items-start justify-between">
                       <div>
-                        <span className="text-[10px] text-[#c9a227]/60 uppercase tracking-wider font-cinzel">
+                        <span className="text-[10px] text-[#c9a227] uppercase tracking-wider font-cinzel">
                           {ABILITY_LABELS[ability]}
                         </span>
                         <div className="flex items-center">
-                          <span className="text-sm font-medium capitalize text-neutral-200">{ability}</span>
+                          <span className="text-sm font-medium capitalize text-white">{ability}</span>
                           <InfoTip text={desc.long} />
                         </div>
-                        <p className="text-[10px] text-neutral-500">{desc.short}</p>
+                        <p className="text-[10px] text-[#8a8a8a]">{desc.short}</p>
                       </div>
                       <div className="text-right">
-                        <span className="text-lg font-bold text-[#e0c068]">{finalScore}</span>
-                        <span className="text-xs text-neutral-500 ml-1">
+                        <span
+                          className="text-lg font-bold"
+                          style={{
+                            background: "linear-gradient(180deg, #f0d060, #c9a227)",
+                            WebkitBackgroundClip: "text",
+                            WebkitTextFillColor: "transparent",
+                          }}
+                        >
+                          {finalScore}
+                        </span>
+                        <span className="text-xs text-[#8a8a8a] ml-1">
                           ({mod >= 0 ? "+" : ""}{mod})
                         </span>
                         {racialBonus > 0 && (
@@ -183,8 +195,8 @@ export function StepAbilities({
                           key={di}
                           className={`inline-flex items-center justify-center w-7 h-7 rounded text-xs font-mono ${
                             di === roll.droppedIndex
-                              ? "bg-[#8b0000]/20 text-neutral-600 line-through border border-[#8b0000]/30"
-                              : "bg-[#1a1a1a] border border-[#333] text-neutral-300"
+                              ? "bg-[#1a0000] text-[#555] line-through border border-[#6b0000]/50"
+                              : "bg-[#1a1a1a] border border-[#333] text-white"
                           }`}
                         >
                           {d}
@@ -194,7 +206,7 @@ export function StepAbilities({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-7 px-2 text-xs ml-auto text-[#c9a227]/70 hover:text-[#c9a227] hover:bg-[#c9a227]/10"
+                        className="h-7 px-2 text-xs ml-auto text-[#c9a227] hover:text-white hover:bg-[#6b0000]/30"
                         onClick={() => handleRerollOne(i)}
                         disabled={!canIndividualReroll}
                       >
@@ -212,14 +224,14 @@ export function StepAbilities({
           <Button
             variant="outline"
             onClick={onBack}
-            className="flex-1 border-[#c9a227]/30 text-[#c9a227] hover:bg-[#c9a227]/10 hover:border-[#c9a227]/50"
+            className="flex-1 bg-transparent border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-300 hover:bg-transparent"
           >
             Back
           </Button>
           <Button
             onClick={onNext}
             disabled={!hasRolled}
-            className="flex-1 bg-[#8b0000] hover:bg-[#a50000] text-[#e0c068] border border-[#c9a227]/50 font-cinzel tracking-wide disabled:opacity-40"
+            className="flex-1 bg-[#6b0000] hover:bg-[#7a0000] text-white border border-[#c9a227] font-cinzel tracking-wide disabled:opacity-40 transition-shadow hover:shadow-[0_0_12px_rgba(201,162,39,0.3)]"
           >
             Next — Choose Skills
           </Button>

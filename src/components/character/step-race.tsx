@@ -44,12 +44,15 @@ export function StepRace({
       halfElfBonus1 !== halfElfBonus2);
 
   return (
-    <div className="rounded-lg border border-[#c9a227]/30 bg-[#1a1a1a] overflow-hidden">
+    <div
+      className="rounded-lg border border-[#c9a227] bg-[#111111] overflow-hidden"
+      style={{ boxShadow: "0 0 20px rgba(201,162,39,0.15)" }}
+    >
       <div className="px-6 pt-6 pb-3">
         <h2
           className="text-xl font-cinzel font-bold tracking-wide flex items-center gap-1"
           style={{
-            background: "linear-gradient(180deg, #e0c068, #c9a227, #8b6914)",
+            background: "linear-gradient(180deg, #f0d060, #c9a227)",
             WebkitBackgroundClip: "text",
             WebkitTextFillColor: "transparent",
           }}
@@ -59,7 +62,7 @@ export function StepRace({
             <InfoTip text="Your race determines your character's species — like human, elf, or dwarf. Each race gets special abilities and stat bonuses that help in different ways." />
           </span>
         </h2>
-        <p className="text-sm text-neutral-400 mt-1">
+        <p className="text-sm text-[#8a8a8a] mt-1">
           Each race has unique traits and ability bonuses. Tap any race to select it.
         </p>
       </div>
@@ -77,29 +80,30 @@ export function StepRace({
                 className={cn(
                   "w-full text-left px-4 py-3 rounded-lg border transition-all",
                   selected
-                    ? "bg-[#8b0000]/20 border-[#c9a227]/60 ring-1 ring-[#c9a227]/30"
-                    : "bg-[#111]/60 border-[#333]/50 hover:bg-[#1a1a1a] hover:border-[#c9a227]/30 hover:shadow-[0_0_8px_rgba(201,162,39,0.08)]"
+                    ? "bg-[#1a0000] border-[#c9a227]"
+                    : "bg-[#111] border-[#2a2a2a] hover:bg-[#1a1a1a] hover:border-[#c9a227]"
                 )}
+                style={selected ? { boxShadow: "0 0 12px rgba(201,162,39,0.3)" } : undefined}
               >
                 <div className="flex items-center justify-between">
-                  <span className={cn("text-sm font-semibold", selected ? "text-[#e0c068]" : "text-neutral-200")}>{race}</span>
-                  <span className="text-[10px] text-neutral-500">
+                  <span className={cn("text-sm font-cinzel font-semibold", selected ? "text-white" : "text-white")}>{race}</span>
+                  <span className="text-[10px] text-[#c9a227]">
                     {summary.tagline}
                   </span>
                 </div>
-                <p className="text-xs text-neutral-400 mt-0.5">
+                <p className="text-xs text-[#8a8a8a] mt-0.5">
                   {summary.playstyle}
                 </p>
                 {selected && (
-                  <div className="mt-2 pt-2 border-t border-[#c9a227]/15">
-                    <p className="text-[11px] text-neutral-400">
+                  <div className="mt-2 pt-2 border-t border-[#c9a227]/20">
+                    <p className="text-[11px] text-[#8a8a8a]">
                       {data.description}
                     </p>
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       {data.traits.map((trait) => (
                         <span
                           key={trait}
-                          className="text-[10px] bg-[#c9a227]/10 text-[#c9a227]/80 px-2 py-0.5 rounded-full border border-[#c9a227]/20"
+                          className="text-[10px] bg-[#1a1a1a] text-[#c9a227] px-2 py-0.5 rounded-full border border-[#c9a227]"
                         >
                           {trait}
                         </span>
@@ -114,22 +118,22 @@ export function StepRace({
 
         {/* Half-Elf bonus abilities */}
         {selectedRace === "Half-Elf" && (
-          <div className="bg-[#111]/80 rounded-lg p-3 border border-[#c9a227]/20 space-y-2">
-            <p className="text-xs font-medium text-[#c9a227]/90 font-cinzel">
+          <div className="bg-[#0f0f0f] rounded-lg p-3 border border-[#2a2a2a] space-y-2">
+            <p className="text-xs font-medium text-[#c9a227] font-cinzel">
               Half-Elf Bonus: Choose two abilities to gain +1
               <InfoTip text="Half-Elves get +2 Charisma automatically, plus +1 to two other abilities of your choice. Pick stats that help your class." />
             </p>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <Label className="text-xs text-neutral-400">First +1</Label>
+                <Label className="text-xs text-[#8a8a8a]">First +1</Label>
                 <Select
                   value={halfElfBonus1}
                   onValueChange={(v) => v && onHalfElfBonus1Change(v)}
                 >
-                  <SelectTrigger className="bg-[#111] border-[#333] text-neutral-200 focus:border-[#c9a227]">
+                  <SelectTrigger className="bg-[#0f0f0f] border-[#333] text-white focus:border-[#c9a227]">
                     <SelectValue placeholder="Choose..." />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#1a1a1a] border-[#c9a227]/30">
+                  <SelectContent className="bg-[#111111] border-[#c9a227]">
                     {HALF_ELF_BONUS_CHOICES.filter(
                       (a) => a !== halfElfBonus2
                     ).map((a) => (
@@ -141,15 +145,15 @@ export function StepRace({
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-neutral-400">Second +1</Label>
+                <Label className="text-xs text-[#8a8a8a]">Second +1</Label>
                 <Select
                   value={halfElfBonus2}
                   onValueChange={(v) => v && onHalfElfBonus2Change(v)}
                 >
-                  <SelectTrigger className="bg-[#111] border-[#333] text-neutral-200 focus:border-[#c9a227]">
+                  <SelectTrigger className="bg-[#0f0f0f] border-[#333] text-white focus:border-[#c9a227]">
                     <SelectValue placeholder="Choose..." />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#1a1a1a] border-[#c9a227]/30">
+                  <SelectContent className="bg-[#111111] border-[#c9a227]">
                     {HALF_ELF_BONUS_CHOICES.filter(
                       (a) => a !== halfElfBonus1
                     ).map((a) => (
@@ -168,14 +172,14 @@ export function StepRace({
           <Button
             variant="outline"
             onClick={onBack}
-            className="flex-1 border-[#c9a227]/30 text-[#c9a227] hover:bg-[#c9a227]/10 hover:border-[#c9a227]/50"
+            className="flex-1 bg-transparent border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-300 hover:bg-transparent"
           >
             Back
           </Button>
           <Button
             onClick={onNext}
             disabled={!halfElfValid}
-            className="flex-1 bg-[#8b0000] hover:bg-[#a50000] text-[#e0c068] border border-[#c9a227]/50 font-cinzel tracking-wide disabled:opacity-40"
+            className="flex-1 bg-[#6b0000] hover:bg-[#7a0000] text-white border border-[#c9a227] font-cinzel tracking-wide disabled:opacity-40 transition-shadow hover:shadow-[0_0_12px_rgba(201,162,39,0.3)]"
           >
             Next — Choose Class
           </Button>

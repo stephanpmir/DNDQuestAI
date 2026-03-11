@@ -306,7 +306,7 @@ export function CharacterWizard() {
   }
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
+    <div className="w-full max-w-[860px] mx-auto">
       {/* Progress bar — gold on dark track */}
       {step > 0 && (
         <div className="space-y-1.5 mb-6">
@@ -314,12 +314,12 @@ export function CharacterWizard() {
             <span className="text-[#c9a227]">Step {step} of {STEP_LABELS.length - 1}</span>
             <span className="text-[#c9a227]">{STEP_LABELS[step]}</span>
           </div>
-          <div className="relative h-1.5 w-full rounded-full bg-[#1a1a1a] border border-[#c9a227]/20 overflow-hidden">
+          <div className="relative h-1.5 w-full rounded-full bg-[#1a1a1a] overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-500"
               style={{
                 width: `${progress}%`,
-                background: "linear-gradient(90deg, #8b6914, #c9a227, #e0c068)",
+                background: "linear-gradient(90deg, #8b6914, #c9a227, #f0d060)",
               }}
             />
           </div>

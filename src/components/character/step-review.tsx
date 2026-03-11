@@ -46,40 +46,43 @@ export function StepReview({
   }
 
   return (
-    <div className="rounded-lg border border-[#c9a227]/30 bg-[#1a1a1a] overflow-hidden">
+    <div
+      className="rounded-lg border border-[#c9a227] bg-[#111111] overflow-hidden"
+      style={{ boxShadow: "0 0 20px rgba(201,162,39,0.15)" }}
+    >
       <div className="text-center px-6 pt-6 pb-3">
         <h2
           className="text-xl font-cinzel font-bold tracking-wide"
           style={{
-            background: "linear-gradient(180deg, #e0c068, #c9a227, #8b6914)",
+            background: "linear-gradient(180deg, #f0d060, #c9a227)",
             WebkitBackgroundClip: "text",
             WebkitTextFillColor: "transparent",
           }}
         >
           {character.name} the {character.race} {character.class}
         </h2>
-        <p className="text-sm text-neutral-400 mt-1">
+        <p className="text-sm text-[#8a8a8a] mt-1">
           Review your character before starting the adventure.
         </p>
       </div>
       <div className="px-6 pb-6 space-y-4">
         {/* Identity */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-[#111]/80 rounded-lg p-3 border border-[#c9a227]/15">
-            <p className="text-[10px] text-[#c9a227]/60 uppercase tracking-wider font-cinzel">Race</p>
-            <p className="text-sm font-semibold text-[#e0c068]">{character.race}</p>
-            <p className="text-[10px] text-neutral-500">{raceSummary.tagline}</p>
+          <div className="bg-[#0f0f0f] rounded-lg p-3 border border-[#2a2a2a]">
+            <p className="text-[10px] text-[#c9a227] uppercase tracking-wider font-cinzel">Race</p>
+            <p className="text-sm font-cinzel font-semibold text-white">{character.race}</p>
+            <p className="text-[10px] text-[#c9a227]">{raceSummary.tagline}</p>
           </div>
-          <div className="bg-[#111]/80 rounded-lg p-3 border border-[#c9a227]/15">
-            <p className="text-[10px] text-[#c9a227]/60 uppercase tracking-wider font-cinzel">Class</p>
-            <p className="text-sm font-semibold text-[#e0c068]">{character.class}</p>
-            <p className="text-[10px] text-neutral-500">{classSummary.tagline}</p>
+          <div className="bg-[#0f0f0f] rounded-lg p-3 border border-[#2a2a2a]">
+            <p className="text-[10px] text-[#c9a227] uppercase tracking-wider font-cinzel">Class</p>
+            <p className="text-sm font-cinzel font-semibold text-white">{character.class}</p>
+            <p className="text-[10px] text-[#c9a227]">{classSummary.tagline}</p>
           </div>
         </div>
 
         {/* Ability Scores */}
         <div>
-          <p className="text-xs font-medium mb-2 text-[#c9a227]/80 font-cinzel tracking-wide">Ability Scores</p>
+          <p className="text-xs font-medium mb-2 text-[#c9a227] font-cinzel tracking-wide">Ability Scores</p>
           <div className="grid grid-cols-3 gap-2">
             {(Object.keys(ABILITY_LABELS) as (keyof AbilityScores)[]).map((ability) => {
               const base = character.abilityScores[ability];
@@ -87,11 +90,19 @@ export function StepReview({
               const total = base + racial;
               const mod = Math.floor((total - 10) / 2);
               return (
-                <div key={ability} className="bg-[#111]/80 rounded p-2 text-center border border-[#c9a227]/15">
-                  <p className="text-[10px] text-[#c9a227]/60 font-cinzel">{ABILITY_LABELS[ability]}</p>
-                  <p className="text-lg font-bold text-[#e0c068]">
-                    {total}
-                    <span className="text-xs text-neutral-500 ml-1">
+                <div key={ability} className="bg-[#0f0f0f] rounded p-2 text-center border border-[#2a2a2a]">
+                  <p className="text-[10px] text-[#c9a227] font-cinzel">{ABILITY_LABELS[ability]}</p>
+                  <p className="text-lg font-bold">
+                    <span
+                      style={{
+                        background: "linear-gradient(180deg, #f0d060, #c9a227)",
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                      }}
+                    >
+                      {total}
+                    </span>
+                    <span className="text-xs text-[#8a8a8a] ml-1">
                       ({mod >= 0 ? "+" : ""}{mod})
                     </span>
                   </p>
@@ -106,10 +117,10 @@ export function StepReview({
 
         {/* Skills */}
         <div>
-          <p className="text-xs font-medium mb-1 text-[#c9a227]/80 font-cinzel tracking-wide">Skills</p>
+          <p className="text-xs font-medium mb-1 text-[#c9a227] font-cinzel tracking-wide">Skills</p>
           <div className="flex flex-wrap gap-1">
             {selectedSkills.map((skill) => (
-              <span key={skill} className="text-[10px] bg-[#8b0000]/20 text-[#e0c068] px-2 py-0.5 rounded-full border border-[#c9a227]/30">
+              <span key={skill} className="text-[10px] bg-[#1a1a1a] text-[#c9a227] px-2 py-0.5 rounded-full border border-[#c9a227]">
                 {skill}
               </span>
             ))}
@@ -119,8 +130,8 @@ export function StepReview({
         {/* Fighting Style */}
         {selectedFightingStyle && (
           <div>
-            <p className="text-xs font-medium mb-1 text-[#c9a227]/80 font-cinzel tracking-wide">Fighting Style</p>
-            <span className="text-[10px] bg-[#111]/80 text-neutral-300 px-2 py-0.5 rounded-full border border-[#c9a227]/20">
+            <p className="text-xs font-medium mb-1 text-[#c9a227] font-cinzel tracking-wide">Fighting Style</p>
+            <span className="text-[10px] bg-[#1a1a1a] text-[#c9a227] px-2 py-0.5 rounded-full border border-[#c9a227]">
               {selectedFightingStyle}
             </span>
           </div>
@@ -129,10 +140,10 @@ export function StepReview({
         {/* Cantrips */}
         {selectedCantrips.length > 0 && (
           <div>
-            <p className="text-xs font-medium mb-1 text-[#c9a227]/80 font-cinzel tracking-wide">Cantrips</p>
+            <p className="text-xs font-medium mb-1 text-[#c9a227] font-cinzel tracking-wide">Cantrips</p>
             <div className="flex flex-wrap gap-1">
               {selectedCantrips.map((c) => (
-                <span key={c} className="text-[10px] bg-purple-900/30 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/30">
+                <span key={c} className="text-[10px] bg-purple-950/40 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/40">
                   {c}
                 </span>
               ))}
@@ -143,10 +154,10 @@ export function StepReview({
         {/* Spells */}
         {selectedSpells.length > 0 && (
           <div>
-            <p className="text-xs font-medium mb-1 text-[#c9a227]/80 font-cinzel tracking-wide">Spells</p>
+            <p className="text-xs font-medium mb-1 text-[#c9a227] font-cinzel tracking-wide">Spells</p>
             <div className="flex flex-wrap gap-1">
               {selectedSpells.map((s) => (
-                <span key={s} className="text-[10px] bg-blue-900/30 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">
+                <span key={s} className="text-[10px] bg-blue-950/40 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/40">
                   {s}
                 </span>
               ))}
@@ -156,13 +167,13 @@ export function StepReview({
 
         {/* Class Features & Racial Traits */}
         <div>
-          <p className="text-xs font-medium mb-1 text-[#c9a227]/80 font-cinzel tracking-wide">Features & Traits</p>
+          <p className="text-xs font-medium mb-1 text-[#c9a227] font-cinzel tracking-wide">Features & Traits</p>
           <div className="flex flex-wrap gap-1">
             {classData.features.map((f) => (
-              <span key={f} className="text-[10px] bg-[#111]/80 text-neutral-400 px-2 py-0.5 rounded-full border border-[#c9a227]/15">{f}</span>
+              <span key={f} className="text-[10px] bg-[#1a1a1a] text-[#c9a227] px-2 py-0.5 rounded-full border border-[#c9a227]">{f}</span>
             ))}
             {raceData.traits.map((t) => (
-              <span key={t} className="text-[10px] bg-[#111]/80 text-neutral-400 px-2 py-0.5 rounded-full border border-[#c9a227]/15">{t}</span>
+              <span key={t} className="text-[10px] bg-[#1a1a1a] text-[#c9a227] px-2 py-0.5 rounded-full border border-[#c9a227]">{t}</span>
             ))}
           </div>
         </div>
@@ -171,14 +182,14 @@ export function StepReview({
           <Button
             variant="outline"
             onClick={onBack}
-            className="flex-1 border-[#c9a227]/30 text-[#c9a227] hover:bg-[#c9a227]/10 hover:border-[#c9a227]/50"
+            className="flex-1 bg-transparent border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-300 hover:bg-transparent"
           >
             Back
           </Button>
           <Button
             onClick={onSubmit}
             size="lg"
-            className="flex-1 bg-[#8b0000] hover:bg-[#a50000] text-[#e0c068] border border-[#c9a227]/50 font-cinzel tracking-wide text-base"
+            className="flex-1 bg-[#6b0000] hover:bg-[#7a0000] text-white border border-[#c9a227] font-cinzel tracking-wide text-base transition-shadow hover:shadow-[0_0_12px_rgba(201,162,39,0.3)]"
           >
             Begin Adventure!
           </Button>

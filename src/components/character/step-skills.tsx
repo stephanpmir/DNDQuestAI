@@ -37,10 +37,13 @@ const ALL_SKILLS = [
 
 /** Shared gold gradient for section headers */
 const goldGradientStyle = {
-  background: "linear-gradient(180deg, #e0c068, #c9a227, #8b6914)",
+  background: "linear-gradient(180deg, #f0d060, #c9a227)",
   WebkitBackgroundClip: "text",
   WebkitTextFillColor: "transparent",
 } as const;
+
+/** Shared card wrapper style */
+const cardShadow = "0 0 20px rgba(201,162,39,0.15)";
 
 export function StepSkills({
   characterClass,
@@ -80,7 +83,10 @@ export function StepSkills({
   return (
     <div className="space-y-4">
       {/* Skills */}
-      <div className="rounded-lg border border-[#c9a227]/30 bg-[#1a1a1a] overflow-hidden">
+      <div
+        className="rounded-lg border border-[#c9a227] bg-[#111111] overflow-hidden"
+        style={{ boxShadow: cardShadow }}
+      >
         <div className="px-6 pt-5 pb-2">
           <h3
             className="text-base font-cinzel font-bold tracking-wide flex items-center gap-1"
@@ -91,10 +97,10 @@ export function StepSkills({
               <InfoTip text="Skills represent what your character is trained in. Being proficient in a skill means you add a bonus when attempting related actions." />
             </span>
           </h3>
-          <p className="text-sm text-neutral-400 mt-1">
+          <p className="text-sm text-[#8a8a8a] mt-1">
             Choose {totalSkillChoices} skills.
             {selectedSkills.length < totalSkillChoices && (
-              <span className="text-amber-400 ml-1">
+              <span className="text-[#c9a227] ml-1">
                 ({totalSkillChoices - selectedSkills.length} remaining)
               </span>
             )}
@@ -114,21 +120,22 @@ export function StepSkills({
                   onClick={() => onToggleSkill(skill)}
                   disabled={disabled}
                   className={cn(
-                    "text-left px-3 py-2 rounded border transition-colors",
+                    "text-left px-3 py-2 rounded border transition-all",
                     selected
-                      ? "bg-[#8b0000]/20 border-[#c9a227]/50"
+                      ? "bg-[#1a0000] border-[#c9a227]"
                       : disabled
-                        ? "bg-[#111]/30 border-[#222]/30 text-neutral-600 cursor-not-allowed"
-                        : "bg-[#111]/60 border-[#333]/40 hover:bg-[#1a1a1a] hover:border-[#c9a227]/30 cursor-pointer"
+                        ? "bg-[#0a0a0a] border-[#1a1a1a] text-[#555] cursor-not-allowed"
+                        : "bg-[#111] border-[#2a2a2a] hover:bg-[#1a1a1a] hover:border-[#c9a227] cursor-pointer"
                   )}
+                  style={selected ? { boxShadow: "0 0 12px rgba(201,162,39,0.3)" } : undefined}
                 >
                   <div className="flex items-center gap-1">
-                    <span className={cn("text-xs", selected ? "font-semibold text-[#e0c068]" : "text-neutral-300")}>
+                    <span className={cn("text-xs", selected ? "font-semibold text-[#c9a227]" : "text-white")}>
                       {selected ? "\u25C9 " : "\u25CB "}{skill}
                     </span>
                   </div>
                   {desc && (
-                    <p className="text-[10px] text-neutral-500 mt-0.5 ml-4">
+                    <p className="text-[10px] text-[#8a8a8a] mt-0.5 ml-4">
                       {desc}
                     </p>
                   )}
@@ -141,7 +148,10 @@ export function StepSkills({
 
       {/* Fighting Style */}
       {fightingStyles.length > 0 && (
-        <div className="rounded-lg border border-[#c9a227]/30 bg-[#1a1a1a] overflow-hidden">
+        <div
+          className="rounded-lg border border-[#c9a227] bg-[#111111] overflow-hidden"
+          style={{ boxShadow: cardShadow }}
+        >
           <div className="px-6 pt-5 pb-2">
             <h3
               className="text-base font-cinzel font-bold tracking-wide flex items-center gap-1"
@@ -152,7 +162,7 @@ export function StepSkills({
                 <InfoTip text="Your preferred way of fighting. This gives you a permanent bonus based on your combat preference." />
               </span>
             </h3>
-            <p className="text-sm text-neutral-400 mt-1">Choose your combat specialization.</p>
+            <p className="text-sm text-[#8a8a8a] mt-1">Choose your combat specialization.</p>
           </div>
           <div className="px-6 pb-5">
             <div className="space-y-1.5">
@@ -165,17 +175,18 @@ export function StepSkills({
                     type="button"
                     onClick={() => onFightingStyleChange(style)}
                     className={cn(
-                      "w-full text-left px-3 py-2 rounded border transition-colors",
+                      "w-full text-left px-3 py-2 rounded border transition-all cursor-pointer",
                       selected
-                        ? "bg-[#8b0000]/20 border-[#c9a227]/50 font-semibold"
-                        : "bg-[#111]/60 border-[#333]/40 hover:bg-[#1a1a1a] hover:border-[#c9a227]/30 cursor-pointer"
+                        ? "bg-[#1a0000] border-[#c9a227]"
+                        : "bg-[#111] border-[#2a2a2a] hover:bg-[#1a1a1a] hover:border-[#c9a227]"
                     )}
+                    style={selected ? { boxShadow: "0 0 12px rgba(201,162,39,0.3)" } : undefined}
                   >
-                    <span className={cn("text-xs", selected ? "text-[#e0c068]" : "text-neutral-300")}>
+                    <span className={cn("text-xs", selected ? "font-semibold text-[#c9a227]" : "text-white")}>
                       {selected ? "\u25C9 " : "\u25CB "}{style}
                     </span>
                     {desc && (
-                      <p className="text-[10px] text-neutral-500 mt-0.5 ml-4">{desc}</p>
+                      <p className="text-[10px] text-[#8a8a8a] mt-0.5 ml-4">{desc}</p>
                     )}
                   </button>
                 );
@@ -187,7 +198,10 @@ export function StepSkills({
 
       {/* Cantrips */}
       {classData.cantripsKnown > 0 && (
-        <div className="rounded-lg border border-[#c9a227]/30 bg-[#1a1a1a] overflow-hidden">
+        <div
+          className="rounded-lg border border-[#c9a227] bg-[#111111] overflow-hidden"
+          style={{ boxShadow: cardShadow }}
+        >
           <div className="px-6 pt-5 pb-2">
             <h3
               className="text-base font-cinzel font-bold tracking-wide flex items-center gap-1"
@@ -198,10 +212,10 @@ export function StepSkills({
                 <InfoTip text="Cantrips are minor spells you can cast anytime without using a spell slot. Think of them as your magical basics." />
               </span>
             </h3>
-            <p className="text-sm text-neutral-400 mt-1">
+            <p className="text-sm text-[#8a8a8a] mt-1">
               Choose {classData.cantripsKnown} cantrips.
               {selectedCantrips.length < classData.cantripsKnown && (
-                <span className="text-amber-400 ml-1">
+                <span className="text-[#c9a227] ml-1">
                   ({classData.cantripsKnown - selectedCantrips.length} remaining)
                 </span>
               )}
@@ -222,19 +236,20 @@ export function StepSkills({
                     onClick={() => onToggleCantrip(cantrip)}
                     disabled={disabled}
                     className={cn(
-                      "text-left px-3 py-2 rounded border transition-colors",
+                      "text-left px-3 py-2 rounded border transition-all",
                       selected
-                        ? "bg-purple-900/30 border-purple-500/40"
+                        ? "bg-purple-950/40 border-purple-500/50"
                         : disabled
-                          ? "bg-[#111]/30 border-[#222]/30 text-neutral-600 cursor-not-allowed"
-                          : "bg-[#111]/60 border-[#333]/40 hover:bg-[#1a1a1a] hover:border-purple-500/30 cursor-pointer"
+                          ? "bg-[#0a0a0a] border-[#1a1a1a] text-[#555] cursor-not-allowed"
+                          : "bg-[#111] border-[#2a2a2a] hover:bg-[#1a1a1a] hover:border-purple-500/40 cursor-pointer"
                     )}
+                    style={selected ? { boxShadow: "0 0 12px rgba(168,85,247,0.2)" } : undefined}
                   >
-                    <span className={cn("text-xs", selected ? "font-semibold text-purple-300" : "text-neutral-300")}>
+                    <span className={cn("text-xs", selected ? "font-semibold text-purple-300" : "text-white")}>
                       {selected ? "\u25C9 " : "\u25CB "}{cantrip}
                     </span>
                     {desc && (
-                      <p className="text-[10px] text-neutral-500 mt-0.5 ml-4">{desc}</p>
+                      <p className="text-[10px] text-[#8a8a8a] mt-0.5 ml-4">{desc}</p>
                     )}
                   </button>
                 );
@@ -246,7 +261,10 @@ export function StepSkills({
 
       {/* Spells */}
       {classData.spellsKnown > 0 && (
-        <div className="rounded-lg border border-[#c9a227]/30 bg-[#1a1a1a] overflow-hidden">
+        <div
+          className="rounded-lg border border-[#c9a227] bg-[#111111] overflow-hidden"
+          style={{ boxShadow: cardShadow }}
+        >
           <div className="px-6 pt-5 pb-2">
             <h3
               className="text-base font-cinzel font-bold tracking-wide flex items-center gap-1"
@@ -257,10 +275,10 @@ export function StepSkills({
                 <InfoTip text="These are more powerful spells that use spell slots. You can only cast them a limited number of times before resting." />
               </span>
             </h3>
-            <p className="text-sm text-neutral-400 mt-1">
+            <p className="text-sm text-[#8a8a8a] mt-1">
               Choose {classData.spellsKnown} spells.
               {selectedSpells.length < classData.spellsKnown && (
-                <span className="text-amber-400 ml-1">
+                <span className="text-[#c9a227] ml-1">
                   ({classData.spellsKnown - selectedSpells.length} remaining)
                 </span>
               )}
@@ -280,19 +298,20 @@ export function StepSkills({
                     onClick={() => onToggleSpell(spell)}
                     disabled={disabled}
                     className={cn(
-                      "text-left px-3 py-2 rounded border transition-colors",
+                      "text-left px-3 py-2 rounded border transition-all",
                       selected
-                        ? "bg-blue-900/30 border-blue-500/40"
+                        ? "bg-blue-950/40 border-blue-500/50"
                         : disabled
-                          ? "bg-[#111]/30 border-[#222]/30 text-neutral-600 cursor-not-allowed"
-                          : "bg-[#111]/60 border-[#333]/40 hover:bg-[#1a1a1a] hover:border-blue-500/30 cursor-pointer"
+                          ? "bg-[#0a0a0a] border-[#1a1a1a] text-[#555] cursor-not-allowed"
+                          : "bg-[#111] border-[#2a2a2a] hover:bg-[#1a1a1a] hover:border-blue-500/40 cursor-pointer"
                     )}
+                    style={selected ? { boxShadow: "0 0 12px rgba(59,130,246,0.2)" } : undefined}
                   >
-                    <span className={cn("text-xs", selected ? "font-semibold text-blue-300" : "text-neutral-300")}>
+                    <span className={cn("text-xs", selected ? "font-semibold text-blue-300" : "text-white")}>
                       {selected ? "\u25C9 " : "\u25CB "}{spell}
                     </span>
                     {desc && (
-                      <p className="text-[10px] text-neutral-500 mt-0.5 ml-4">{desc}</p>
+                      <p className="text-[10px] text-[#8a8a8a] mt-0.5 ml-4">{desc}</p>
                     )}
                   </button>
                 );
@@ -306,14 +325,14 @@ export function StepSkills({
         <Button
           variant="outline"
           onClick={onBack}
-          className="flex-1 border-[#c9a227]/30 text-[#c9a227] hover:bg-[#c9a227]/10 hover:border-[#c9a227]/50"
+          className="flex-1 bg-transparent border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-300 hover:bg-transparent"
         >
           Back
         </Button>
         <Button
           onClick={onNext}
           disabled={!isValid}
-          className="flex-1 bg-[#8b0000] hover:bg-[#a50000] text-[#e0c068] border border-[#c9a227]/50 font-cinzel tracking-wide disabled:opacity-40"
+          className="flex-1 bg-[#6b0000] hover:bg-[#7a0000] text-white border border-[#c9a227] font-cinzel tracking-wide disabled:opacity-40 transition-shadow hover:shadow-[0_0_12px_rgba(201,162,39,0.3)]"
         >
           Next — Review Character
         </Button>
