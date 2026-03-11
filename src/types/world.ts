@@ -156,6 +156,8 @@ export interface EngineOutcome {
   lastHealTurn?: number;
   /** Turn of last travel encounter (for XP farming prevention) */
   lastTravelEncounterTurn?: number;
+  /** Updated resource pool after resource consumption */
+  resourceUpdates?: import("@/lib/resources").ResourcePool;
 }
 
 /** What the LLM receives to narrate — it does NOT decide outcomes. */

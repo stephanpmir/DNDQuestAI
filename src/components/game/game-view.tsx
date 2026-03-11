@@ -145,6 +145,7 @@ export function GameView() {
             raging: u.raging,
             lastHealTurn: u.lastHealTurn,
             lastTravelEncounterTurn: u.lastTravelEncounterTurn,
+            resourceUpdates: u.resourceUpdates,
           });
           if (u.locationChange) {
             setLocation(u.locationChange);

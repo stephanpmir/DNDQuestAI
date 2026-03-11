@@ -39,6 +39,7 @@ export interface DMResponsePayload {
     raging?: boolean;
     lastHealTurn?: number;
     lastTravelEncounterTurn?: number;
+    resourceUpdates?: import("@/lib/resources").ResourcePool;
   };
   /** Engine outcome details */
   engineOutcome?: {

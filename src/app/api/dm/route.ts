@@ -310,6 +310,7 @@ export async function POST(request: Request) {
         raging: eo.raging,
         lastHealTurn: eo.lastHealTurn,
         lastTravelEncounterTurn: eo.lastTravelEncounterTurn,
+        resourceUpdates: eo.resourceUpdates,
       },
       engineOutcome: {
         roll: eo.roll,

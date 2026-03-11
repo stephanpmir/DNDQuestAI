@@ -4,6 +4,8 @@ import type { Character, Gender, Race, CharacterClass, AbilityScores, AvatarCust
 import { createDefaultCharacter, getXpToNextLevel } from "@/types/character";
 import { getDefaultEquipped, getItemInfo, getEquipSlot, SLOT_LIMITS } from "@/lib/items";
 import { RACIAL_DATA, applyRacialBonuses } from "@/lib/races";
+import { buildResourcePool, recalculateResources, rechargeResources } from "@/lib/resources";
+import type { ResourcePool } from "@/lib/resources";
 
 interface CharacterStore {
   character: Character;
@@ -39,6 +41,7 @@ interface CharacterStore {
     raging?: boolean;
     lastHealTurn?: number;
     lastTravelEncounterTurn?: number;
+    resourceUpdates?: ResourcePool;
   }) => void;
   reset: () => void;
 }
@@ -259,6 +262,19 @@ export const useCharacterStore = create<CharacterStore>()(
             return info?.isMagical;
           });
 
+          // Build initial resource pool
+          const chaMod = computeModifier(abilityScores.charisma);
+          const resources = buildResourcePool(c.class, c.race, 1);
+          // Adjust Bard inspiration uses based on CHA
+          if (c.class === "Bard") {
+            const bardRes = resources.find((r) => r.key === "bardic_inspiration");
+            if (bardRes) {
+              const uses = Math.max(1, chaMod);
+              bardRes.max = uses;
+              bardRes.current = uses;
+            }
+          }
+
           return {
             isCreated: true,
             character: {
@@ -279,6 +295,7 @@ export const useCharacterStore = create<CharacterStore>()(
               deathSaves: { successes: 0, failures: 0 },
               isUnconscious: false,
               isDead: false,
+              resources,
             },
           };
         }),
@@ -395,6 +412,11 @@ export const useCharacterStore = create<CharacterStore>()(
             c.lastTravelEncounterTurn = updates.lastTravelEncounterTurn;
           }
 
+          // Resource pool updates (from engine resource consumption)
+          if (updates.resourceUpdates) {
+            c.resources = updates.resourceUpdates;
+          }
+
           // Rest tracking
           if (updates.lastRestTurn !== undefined) {
             c.lastRestTurn = updates.lastRestTurn;
@@ -405,6 +427,10 @@ export const useCharacterStore = create<CharacterStore>()(
             // End Barbarian Rage on rest
             if (c.class === "Barbarian") {
               c.raging = false;
+            }
+            // Recharge resources on rest (treat all rests as short rest for now)
+            if (c.resources) {
+              c.resources = rechargeResources(c.resources, "short");
             }
           }
 
@@ -453,6 +479,12 @@ export const useCharacterStore = create<CharacterStore>()(
               const hpIncrease = newMaxHp - c.maxHp;
               c.maxHp = newMaxHp;
               c.hp = Math.min(c.maxHp, c.hp + hpIncrease);
+
+              // Recalculate resource pools on level-up
+              if (c.resources) {
+                const chaMod = computeModifier(c.abilityScores.charisma);
+                c.resources = recalculateResources(c.resources, c.class, c.race, c.level, chaMod);
+              }
             }
           }
 

@@ -148,6 +148,8 @@ export interface Character {
   lastHealTurn?: number;
   /** Turn number of last travel with encounter */
   lastTravelEncounterTurn?: number;
+  /** Class/race resource pools (spell slots, ki, rage uses, etc.) */
+  resources?: import("@/lib/resources").ResourcePool;
 }
 
 /** D&D 5e XP thresholds for levels 1-20 */
@@ -204,5 +206,6 @@ export function createDefaultCharacter(): Character {
       bodyBuild: "average",
       height: "average",
     },
+    resources: [],
   };
 }

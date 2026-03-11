@@ -14,6 +14,8 @@ import {
 } from "@/lib/karma";
 import { detectCrime } from "@/lib/crimes";
 import { getItemInfo, getBuyPrice, getSellPrice, isEquippable, getEquipSlot, getWeaponDamage } from "@/lib/items";
+import { consumeResource, findSpellSlot } from "@/lib/resources";
+import type { ResourcePool } from "@/lib/resources";
 
 /** Action categories the engine can detect from player input. */
 type ActionType =
@@ -523,6 +525,10 @@ export function resolveAction(
   const action = detectAction(playerInput, character);
   // Halfling Lucky trait: reroll natural 1s on d20 rolls
   const lucky = character.race === "Halfling";
+  // Mutable copy of resource pool for consumption tracking
+  let resources: ResourcePool = character.resources
+    ? character.resources.map((r) => ({ ...r }))
+    : [];
   const outcome: EngineOutcome = {
     hpChange: 0,
     itemsGained: [],
@@ -687,6 +693,25 @@ export function resolveAction(
             attempted: "cast a spell",
           };
           break;
+        }
+      }
+
+      // ── Spell slot consumption for leveled spells ──
+      // Cantrips are free; leveled spells cost a slot
+      if (isSpell) {
+        const CANTRIP_PATTERN = /\b(fire bolt|ray of frost|sacred flame|chill touch|shocking grasp|acid splash|poison spray|eldritch blast|thorn whip|produce flame|shillelagh|vicious mockery|blade ward|dancing lights|friends|light|mage hand|mending|message|minor illusion|prestidigitation|true strike|guidance|resistance|spare the dying|thaumaturgy|druidcraft)\b/i;
+        const isCantrip = CANTRIP_PATTERN.test(playerInput);
+        if (!isCantrip) {
+          const slotKey = findSpellSlot(resources);
+          if (!slotKey) {
+            outcome.actionDenied = {
+              reason: "You have no spell slots remaining. Cantrips are still available. Spell slots recharge after a rest.",
+              attempted: "cast a leveled spell",
+            };
+            break;
+          }
+          const consumed = consumeResource(resources, slotKey);
+          resources = consumed.pool;
         }
       }
 
@@ -1186,6 +1211,18 @@ export function resolveAction(
         };
         break;
       }
+      // Resource check: 1 use per short rest
+      {
+        const consumed = consumeResource(resources, "second_wind");
+        if (!consumed.success) {
+          outcome.actionDenied = {
+            reason: "You've already used Second Wind. It recharges after a short rest.",
+            attempted: "use Second Wind",
+          };
+          break;
+        }
+        resources = consumed.pool;
+      }
       // Heal 1d10 + level
       const healRoll = d(10) + character.level;
       const healed = Math.min(healRoll, character.maxHp - character.hp);
@@ -1211,6 +1248,18 @@ export function resolveAction(
           attempted: "use Breath Weapon",
         };
         break;
+      }
+      // Resource check: 1 use per short rest
+      {
+        const consumed = consumeResource(resources, "breath_weapon");
+        if (!consumed.success) {
+          outcome.actionDenied = {
+            reason: "You've already used your Breath Weapon. It recharges after a short rest.",
+            attempted: "use Breath Weapon",
+          };
+          break;
+        }
+        resources = consumed.pool;
       }
       const prof = proficiencyBonus(character.level);
       // Scale damage: 2d6 at levels 1-5, 3d6 at 6-10, 4d6 at 11-15, 5d6 at 16+
@@ -1239,6 +1288,18 @@ export function resolveAction(
           attempted: "use Bardic Inspiration",
         };
         break;
+      }
+      // Resource check
+      {
+        const consumed = consumeResource(resources, "bardic_inspiration");
+        if (!consumed.success) {
+          outcome.actionDenied = {
+            reason: "You've used all your Bardic Inspiration dice. They recharge after a rest.",
+            attempted: "use Bardic Inspiration",
+          };
+          break;
+        }
+        resources = consumed.pool;
       }
       // Inspiration die scales: d6 at L1, d8 at L5, d10 at L10, d12 at L15
       const inspireDie = character.level >= 15 ? 12 : character.level >= 10 ? 10 : character.level >= 5 ? 8 : 6;
@@ -1282,6 +1343,18 @@ export function resolveAction(
           attempted: "use Channel Divinity",
         };
         break;
+      }
+      // Resource check
+      {
+        const consumed = consumeResource(resources, "channel_divinity");
+        if (!consumed.success) {
+          outcome.actionDenied = {
+            reason: "You've exhausted your Channel Divinity uses. They recharge after a short rest.",
+            attempted: "use Channel Divinity",
+          };
+          break;
+        }
+        resources = consumed.pool;
       }
       const lower = playerInput.toLowerCase();
       if (/preserve life/i.test(lower)) {
@@ -1337,6 +1410,18 @@ export function resolveAction(
         };
         break;
       }
+      // Resource check: 2 uses per short rest
+      {
+        const consumed = consumeResource(resources, "wild_shape");
+        if (!consumed.success) {
+          outcome.actionDenied = {
+            reason: "You've used both Wild Shape charges. They recharge after a short rest.",
+            attempted: "use Wild Shape",
+          };
+          break;
+        }
+        resources = consumed.pool;
+      }
       // Wild Shape grants temporary HP based on beast form (simulated)
       // CR scales: L2 = CR 1/4 (~7 HP), L4 = CR 1/2 (~19 HP), L8 = CR 1 (~33 HP)
       const beastHP = character.level >= 8 ? 33 : character.level >= 4 ? 19 : 7;
@@ -1370,6 +1455,18 @@ export function resolveAction(
           attempted: "use Ki abilities",
         };
         break;
+      }
+      // Resource check: 1 Ki point per use
+      {
+        const consumed = consumeResource(resources, "ki");
+        if (!consumed.success) {
+          outcome.actionDenied = {
+            reason: "You've spent all your Ki points. They recharge after a short rest.",
+            attempted: "use Ki abilities",
+          };
+          break;
+        }
+        resources = consumed.pool;
       }
       const lower = playerInput.toLowerCase();
       if (/patient defense/i.test(lower)) {
@@ -1438,7 +1535,7 @@ export function resolveAction(
     }
 
     case "lay_on_hands": {
-      // Paladin class feature: heal up to 5 × Paladin level HP (flat, no roll)
+      // Paladin class feature: heal from a pool of 5 × Paladin level HP
       if (character.class !== "Paladin") {
         outcome.actionDenied = {
           reason: `Lay on Hands is a Paladin class feature. As a ${character.class}, you don't have this ability.`,
@@ -1446,24 +1543,38 @@ export function resolveAction(
         };
         break;
       }
-      const healPool = 5 * character.level;
-      const healed = Math.min(healPool, character.maxHp - character.hp);
-      outcome.hpChange = healed;
+      // Check remaining pool from resources
+      const lohRes = resources.find((r) => r.key === "lay_on_hands");
+      const poolRemaining = lohRes?.current ?? 0;
+      if (poolRemaining <= 0) {
+        outcome.actionDenied = {
+          reason: "Your Lay on Hands healing pool is empty. It recharges after a long rest.",
+          attempted: "use Lay on Hands",
+        };
+        break;
+      }
+      const hpNeeded = character.maxHp - character.hp;
+      const healAmount = Math.min(poolRemaining, hpNeeded);
+      // Consume from the pool
+      if (lohRes) {
+        lohRes.current = Math.max(0, lohRes.current - healAmount);
+      }
+      outcome.hpChange = healAmount;
       outcome.roll = {
         type: "check",
         ability: "charisma",
-        rolled: healPool,
+        rolled: poolRemaining,
         modifier: 0,
-        total: healPool,
+        total: healAmount,
         dc: 0,
         success: true,
-        reason: `Lay on Hands — ${healPool} HP healing pool (${healed} HP restored)`,
+        reason: `Lay on Hands — ${healAmount} HP restored (${Math.max(0, poolRemaining - healAmount)} remaining in pool)`,
       };
       break;
     }
 
     case "divine_smite": {
-      // Paladin class feature: melee attack + extra radiant damage
+      // Paladin class feature: melee attack + extra radiant damage (costs a spell slot)
       if (character.class !== "Paladin") {
         outcome.actionDenied = {
           reason: `Divine Smite is a Paladin class feature. As a ${character.class}, you don't have this ability.`,
@@ -1477,6 +1588,19 @@ export function resolveAction(
           attempted: "use Divine Smite",
         };
         break;
+      }
+      // Resource check: consumes a spell slot
+      {
+        const slotKey = findSpellSlot(resources);
+        if (!slotKey) {
+          outcome.actionDenied = {
+            reason: "You have no spell slots remaining to fuel Divine Smite. They recharge after a long rest.",
+            attempted: "use Divine Smite",
+          };
+          break;
+        }
+        const consumed = consumeResource(resources, slotKey);
+        resources = consumed.pool;
       }
       // Melee attack + 2d8 radiant damage (scales: +1d8 per spell slot level above 1st)
       // Use higher of STR/DEX if wielding a finesse weapon (e.g. rapier)
@@ -1534,6 +1658,18 @@ export function resolveAction(
           success: true, reason: "You are already raging!",
         };
         break;
+      }
+      // Resource check: limited rages per long rest
+      {
+        const consumed = consumeResource(resources, "rage");
+        if (!consumed.success) {
+          outcome.actionDenied = {
+            reason: "You've exhausted your rage uses for the day. They recharge after a long rest.",
+            attempted: "enter a Rage",
+          };
+          break;
+        }
+        resources = consumed.pool;
       }
       // Rage is a bonus action activation — sets raging state for damage bonus + resistance
       outcome.raging = true;
@@ -1713,6 +1849,11 @@ export function resolveAction(
   }
   if (affinity.goldMultiplier !== 1.0 && outcome.goldChange > 0) {
     outcome.goldChange = Math.round(outcome.goldChange * affinity.goldMultiplier);
+  }
+
+  // Attach updated resource pool if any resources were consumed
+  if (resources.length > 0) {
+    outcome.resourceUpdates = resources;
   }
 
   return outcome;
