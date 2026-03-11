@@ -2,13 +2,6 @@
 
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -51,18 +44,26 @@ export function StepRace({
       halfElfBonus1 !== halfElfBonus2);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-1">
+    <div className="rounded-lg border border-[#c9a227]/30 bg-[#1a1a1a] overflow-hidden">
+      <div className="px-6 pt-6 pb-3">
+        <h2
+          className="text-xl font-cinzel font-bold tracking-wide flex items-center gap-1"
+          style={{
+            background: "linear-gradient(180deg, #e0c068, #c9a227, #8b6914)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+          }}
+        >
           Choose Your Race
-          <InfoTip text="Your race determines your character's species — like human, elf, or dwarf. Each race gets special abilities and stat bonuses that help in different ways." />
-        </CardTitle>
-        <CardDescription>
-          Each race has unique traits and ability bonuses. Tap any race to select
-          it.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+          <span style={{ WebkitTextFillColor: "initial", background: "none" }}>
+            <InfoTip text="Your race determines your character's species — like human, elf, or dwarf. Each race gets special abilities and stat bonuses that help in different ways." />
+          </span>
+        </h2>
+        <p className="text-sm text-neutral-400 mt-1">
+          Each race has unique traits and ability bonuses. Tap any race to select it.
+        </p>
+      </div>
+      <div className="px-6 pb-6 space-y-4">
         <div className="grid grid-cols-1 gap-2">
           {RACES.map((race) => {
             const data = RACIAL_DATA[race];
@@ -76,29 +77,29 @@ export function StepRace({
                 className={cn(
                   "w-full text-left px-4 py-3 rounded-lg border transition-all",
                   selected
-                    ? "bg-primary/15 border-primary/50 ring-1 ring-primary/30"
-                    : "bg-muted/20 border-border/30 hover:bg-muted/40 hover:border-border/50"
+                    ? "bg-[#8b0000]/20 border-[#c9a227]/60 ring-1 ring-[#c9a227]/30"
+                    : "bg-[#111]/60 border-[#333]/50 hover:bg-[#1a1a1a] hover:border-[#c9a227]/30 hover:shadow-[0_0_8px_rgba(201,162,39,0.08)]"
                 )}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold">{race}</span>
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className={cn("text-sm font-semibold", selected ? "text-[#e0c068]" : "text-neutral-200")}>{race}</span>
+                  <span className="text-[10px] text-neutral-500">
                     {summary.tagline}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="text-xs text-neutral-400 mt-0.5">
                   {summary.playstyle}
                 </p>
                 {selected && (
-                  <div className="mt-2 pt-2 border-t border-border/20">
-                    <p className="text-[11px] text-muted-foreground">
+                  <div className="mt-2 pt-2 border-t border-[#c9a227]/15">
+                    <p className="text-[11px] text-neutral-400">
                       {data.description}
                     </p>
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       {data.traits.map((trait) => (
                         <span
                           key={trait}
-                          className="text-[10px] bg-muted/60 px-2 py-0.5 rounded-full border border-border/20"
+                          className="text-[10px] bg-[#c9a227]/10 text-[#c9a227]/80 px-2 py-0.5 rounded-full border border-[#c9a227]/20"
                         >
                           {trait}
                         </span>
@@ -113,22 +114,22 @@ export function StepRace({
 
         {/* Half-Elf bonus abilities */}
         {selectedRace === "Half-Elf" && (
-          <div className="bg-muted/30 rounded-lg p-3 border border-border/30 space-y-2">
-            <p className="text-xs font-medium">
+          <div className="bg-[#111]/80 rounded-lg p-3 border border-[#c9a227]/20 space-y-2">
+            <p className="text-xs font-medium text-[#c9a227]/90 font-cinzel">
               Half-Elf Bonus: Choose two abilities to gain +1
               <InfoTip text="Half-Elves get +2 Charisma automatically, plus +1 to two other abilities of your choice. Pick stats that help your class." />
             </p>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <Label className="text-xs">First +1</Label>
+                <Label className="text-xs text-neutral-400">First +1</Label>
                 <Select
                   value={halfElfBonus1}
                   onValueChange={(v) => v && onHalfElfBonus1Change(v)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-[#111] border-[#333] text-neutral-200 focus:border-[#c9a227]">
                     <SelectValue placeholder="Choose..." />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-[#1a1a1a] border-[#c9a227]/30">
                     {HALF_ELF_BONUS_CHOICES.filter(
                       (a) => a !== halfElfBonus2
                     ).map((a) => (
@@ -140,15 +141,15 @@ export function StepRace({
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Second +1</Label>
+                <Label className="text-xs text-neutral-400">Second +1</Label>
                 <Select
                   value={halfElfBonus2}
                   onValueChange={(v) => v && onHalfElfBonus2Change(v)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-[#111] border-[#333] text-neutral-200 focus:border-[#c9a227]">
                     <SelectValue placeholder="Choose..." />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-[#1a1a1a] border-[#c9a227]/30">
                     {HALF_ELF_BONUS_CHOICES.filter(
                       (a) => a !== halfElfBonus1
                     ).map((a) => (
@@ -164,14 +165,22 @@ export function StepRace({
         )}
 
         <div className="flex gap-3 pt-2">
-          <Button variant="outline" onClick={onBack} className="flex-1">
+          <Button
+            variant="outline"
+            onClick={onBack}
+            className="flex-1 border-[#c9a227]/30 text-[#c9a227] hover:bg-[#c9a227]/10 hover:border-[#c9a227]/50"
+          >
             Back
           </Button>
-          <Button onClick={onNext} disabled={!halfElfValid} className="flex-1">
+          <Button
+            onClick={onNext}
+            disabled={!halfElfValid}
+            className="flex-1 bg-[#8b0000] hover:bg-[#a50000] text-[#e0c068] border border-[#c9a227]/50 font-cinzel tracking-wide disabled:opacity-40"
+          >
             Next — Choose Class
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

@@ -10,7 +10,6 @@ import type { CharacterClass, Race, Gender, AbilityScores, BeginnerSurvey } from
 import { RACES, CLASSES, HAIR_STYLES, HAIR_COLORS, SKIN_TONES, BODY_BUILDS, HEIGHT_OPTIONS } from "@/types/character";
 import { CLASS_DATA, FIGHTING_STYLES } from "@/lib/classes";
 import { generateRandomName } from "@/lib/descriptions";
-import { Progress } from "@/components/ui/progress";
 import { StepWelcome } from "./step-welcome";
 import { StepIdentity } from "./step-identity";
 import { StepRace } from "./step-race";
@@ -19,29 +18,9 @@ import { StepAbilities } from "./step-abilities";
 import { StepSkills } from "./step-skills";
 import { StepReview } from "./step-review";
 import { StepSurvey } from "./step-survey";
-import { AvatarCustomizer } from "./avatar-customizer";
 import { StepSuggestion } from "./step-suggestion";
 import { recommend, type SurveyRecommendation } from "@/lib/survey-recommend";
 import { PortraitLoading } from "./portrait-loading";
-import type { AvatarCustomization } from "@/types/character";
-
-/** Appearance customizer panel (no image preview — portrait shown at reveal) */
-function AvatarCustomizerPanel({
-  avatar,
-  onAvatarChange,
-}: {
-  avatar: AvatarCustomization;
-  onAvatarChange: (updates: Partial<AvatarCustomization>) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider text-center">
-        Appearance
-      </h3>
-      <AvatarCustomizer avatar={avatar} onChange={onAvatarChange} />
-    </div>
-  );
-}
 
 const STEP_LABELS = [
   "Welcome",
@@ -316,8 +295,6 @@ export function CharacterWizard() {
 
   const progress = Math.round((step / (STEP_LABELS.length - 1)) * 100);
 
-  const showAvatar = step >= 1 || showSurvey || showSuggestion;
-
   // Show portrait generation interstitial
   if (showPortrait) {
     return (
@@ -329,142 +306,135 @@ export function CharacterWizard() {
   }
 
   return (
-    <div className="flex justify-center gap-8 max-w-4xl mx-auto">
-      {/* Main wizard column */}
-      <div className="space-y-4 w-full max-w-lg">
-        {/* Progress bar */}
-        {step > 0 && (
-          <div className="space-y-1">
-            <div className="flex justify-between text-[10px] text-muted-foreground">
-              <span>Step {step} of {STEP_LABELS.length - 1}</span>
-              <span>{STEP_LABELS[step]}</span>
-            </div>
-            <Progress value={progress} />
+    <div className="w-full max-w-2xl mx-auto">
+      {/* Progress bar — gold on dark track */}
+      {step > 0 && (
+        <div className="space-y-1.5 mb-6">
+          <div className="flex justify-between text-[10px] font-cinzel tracking-wider">
+            <span className="text-[#c9a227]">Step {step} of {STEP_LABELS.length - 1}</span>
+            <span className="text-[#c9a227]">{STEP_LABELS[step]}</span>
           </div>
-        )}
-
-        {/* Steps */}
-        {step === 0 && !showSurvey && !showSuggestion && (
-          <StepWelcome
-            onNext={() => setStep(1)}
-            onQuickStart={handleQuickStart}
-            onSurvey={() => setShowSurvey(true)}
-          />
-        )}
-        {step === 0 && showSurvey && (
-          <StepSurvey
-            onComplete={(survey) => {
-              setBeginnerSurvey(survey);
-              const rec = recommend(survey);
-              setSurveyData(survey);
-              setSurveyRec(rec);
-              setRace(rec.race);
-              setClass(rec.characterClass);
-              setShowSurvey(false);
-              setShowSuggestion(true);
-            }}
-            onBack={() => setShowSurvey(false)}
-          />
-        )}
-        {step === 0 && showSuggestion && surveyData && surveyRec && (
-          <StepSuggestion
-            survey={surveyData}
-            fallbackRace={surveyRec.race}
-            fallbackClass={surveyRec.characterClass}
-            onAccept={(profile) => handleAcceptProfile(profile)}
-            onSkip={() => {
-              setShowSuggestion(false);
-              setStep(1);
-            }}
-            onBack={() => {
-              setShowSuggestion(false);
-              setShowSurvey(true);
-            }}
-          />
-        )}
-        {step === 1 && (
-          <StepIdentity
-            name={character.name}
-            gender={character.gender}
-            onNameChange={setName}
-            onGenderChange={setGender}
-            onNext={() => setStep(2)}
-            onBack={() => setStep(0)}
-          />
-        )}
-        {step === 2 && (
-          <StepRace
-            selectedRace={character.race}
-            halfElfBonus1={halfElfBonus1}
-            halfElfBonus2={halfElfBonus2}
-            onRaceChange={handleRaceChange}
-            onHalfElfBonus1Change={setHalfElfBonus1}
-            onHalfElfBonus2Change={setHalfElfBonus2}
-            onNext={() => setStep(3)}
-            onBack={() => setStep(1)}
-          />
-        )}
-        {step === 3 && (
-          <StepClass
-            selectedClass={character.class}
-            onClassChange={handleClassChange}
-            onNext={() => setStep(4)}
-            onBack={() => setStep(2)}
-          />
-        )}
-        {step === 4 && (
-          <StepAbilities
-            scores={character.abilityScores}
-            race={character.race}
-            halfElfBonuses={
-              character.race === "Half-Elf"
-                ? [halfElfBonus1, halfElfBonus2].filter(Boolean)
-                : []
-            }
-            onChange={setAbilityScores}
-            onNext={() => setStep(5)}
-            onBack={() => setStep(3)}
-          />
-        )}
-        {step === 5 && (
-          <StepSkills
-            characterClass={character.class}
-            race={character.race}
-            selectedSkills={selectedSkills}
-            selectedCantrips={selectedCantrips}
-            selectedSpells={selectedSpells}
-            selectedFightingStyle={selectedFightingStyle}
-            onToggleSkill={toggleSkill}
-            onToggleCantrip={toggleCantrip}
-            onToggleSpell={toggleSpell}
-            onFightingStyleChange={setSelectedFightingStyle}
-            onNext={() => setStep(6)}
-            onBack={() => setStep(4)}
-          />
-        )}
-        {step === 6 && (
-          <StepReview
-            character={character}
-            selectedSkills={selectedSkills}
-            selectedCantrips={selectedCantrips}
-            selectedSpells={selectedSpells}
-            selectedFightingStyle={selectedFightingStyle}
-            onBack={() => setStep(5)}
-            onSubmit={handleSubmit}
-          />
-        )}
-      </div>
-
-      {/* Avatar customizer — sticky on the right, hidden on small screens */}
-      {showAvatar && (
-        <div className="hidden lg:block w-56 shrink-0">
-          <div className="sticky top-24">
-            <AvatarCustomizerPanel
-              avatar={character.avatar}
-              onAvatarChange={setAvatar}
+          <div className="relative h-1.5 w-full rounded-full bg-[#1a1a1a] border border-[#c9a227]/20 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${progress}%`,
+                background: "linear-gradient(90deg, #8b6914, #c9a227, #e0c068)",
+              }}
             />
           </div>
         </div>
+      )}
+
+      {/* Steps */}
+      {step === 0 && !showSurvey && !showSuggestion && (
+        <StepWelcome
+          onNext={() => setStep(1)}
+          onQuickStart={handleQuickStart}
+          onSurvey={() => setShowSurvey(true)}
+        />
+      )}
+      {step === 0 && showSurvey && (
+        <StepSurvey
+          onComplete={(survey) => {
+            setBeginnerSurvey(survey);
+            const rec = recommend(survey);
+            setSurveyData(survey);
+            setSurveyRec(rec);
+            setRace(rec.race);
+            setClass(rec.characterClass);
+            setShowSurvey(false);
+            setShowSuggestion(true);
+          }}
+          onBack={() => setShowSurvey(false)}
+        />
+      )}
+      {step === 0 && showSuggestion && surveyData && surveyRec && (
+        <StepSuggestion
+          survey={surveyData}
+          fallbackRace={surveyRec.race}
+          fallbackClass={surveyRec.characterClass}
+          onAccept={(profile) => handleAcceptProfile(profile)}
+          onSkip={() => {
+            setShowSuggestion(false);
+            setStep(1);
+          }}
+          onBack={() => {
+            setShowSuggestion(false);
+            setShowSurvey(true);
+          }}
+        />
+      )}
+      {step === 1 && (
+        <StepIdentity
+          name={character.name}
+          gender={character.gender}
+          onNameChange={setName}
+          onGenderChange={setGender}
+          onNext={() => setStep(2)}
+          onBack={() => setStep(0)}
+        />
+      )}
+      {step === 2 && (
+        <StepRace
+          selectedRace={character.race}
+          halfElfBonus1={halfElfBonus1}
+          halfElfBonus2={halfElfBonus2}
+          onRaceChange={handleRaceChange}
+          onHalfElfBonus1Change={setHalfElfBonus1}
+          onHalfElfBonus2Change={setHalfElfBonus2}
+          onNext={() => setStep(3)}
+          onBack={() => setStep(1)}
+        />
+      )}
+      {step === 3 && (
+        <StepClass
+          selectedClass={character.class}
+          onClassChange={handleClassChange}
+          onNext={() => setStep(4)}
+          onBack={() => setStep(2)}
+        />
+      )}
+      {step === 4 && (
+        <StepAbilities
+          scores={character.abilityScores}
+          race={character.race}
+          halfElfBonuses={
+            character.race === "Half-Elf"
+              ? [halfElfBonus1, halfElfBonus2].filter(Boolean)
+              : []
+          }
+          onChange={setAbilityScores}
+          onNext={() => setStep(5)}
+          onBack={() => setStep(3)}
+        />
+      )}
+      {step === 5 && (
+        <StepSkills
+          characterClass={character.class}
+          race={character.race}
+          selectedSkills={selectedSkills}
+          selectedCantrips={selectedCantrips}
+          selectedSpells={selectedSpells}
+          selectedFightingStyle={selectedFightingStyle}
+          onToggleSkill={toggleSkill}
+          onToggleCantrip={toggleCantrip}
+          onToggleSpell={toggleSpell}
+          onFightingStyleChange={setSelectedFightingStyle}
+          onNext={() => setStep(6)}
+          onBack={() => setStep(4)}
+        />
+      )}
+      {step === 6 && (
+        <StepReview
+          character={character}
+          selectedSkills={selectedSkills}
+          selectedCantrips={selectedCantrips}
+          selectedSpells={selectedSpells}
+          selectedFightingStyle={selectedFightingStyle}
+          onBack={() => setStep(5)}
+          onSubmit={handleSubmit}
+        />
       )}
     </div>
   );

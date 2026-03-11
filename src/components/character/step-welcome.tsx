@@ -1,13 +1,6 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
 interface StepWelcomeProps {
   onNext: () => void;
@@ -17,19 +10,28 @@ interface StepWelcomeProps {
 
 export function StepWelcome({ onNext, onQuickStart, onSurvey }: StepWelcomeProps) {
   return (
-    <Card>
-      <CardHeader className="text-center">
-        <CardTitle className="text-2xl">Welcome, Adventurer!</CardTitle>
-        <CardDescription className="text-sm max-w-md mx-auto">
+    <div className="rounded-lg border border-[#c9a227]/30 bg-[#1a1a1a] overflow-hidden">
+      <div className="text-center px-6 pt-6 pb-4">
+        <h2
+          className="text-2xl font-cinzel font-bold tracking-wide"
+          style={{
+            background: "linear-gradient(180deg, #e0c068, #c9a227, #8b6914)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+          }}
+        >
+          Welcome, Adventurer!
+        </h2>
+        <p className="text-sm text-neutral-400 max-w-md mx-auto mt-2">
           You&apos;re about to create a character for a solo D&amp;D adventure
           with an AI Dungeon Master. Don&apos;t worry if you&apos;re new —
           we&apos;ll walk you through each step.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="bg-muted/50 rounded-lg p-4 border border-border/30 text-sm space-y-2">
-          <p className="font-medium">Here&apos;s what we&apos;ll set up:</p>
-          <ol className="list-decimal list-inside space-y-1 text-muted-foreground text-xs">
+        </p>
+      </div>
+      <div className="px-6 pb-6 space-y-4">
+        <div className="bg-[#111]/80 rounded-lg p-4 border border-[#c9a227]/10 text-sm space-y-2">
+          <p className="font-medium text-[#c9a227]/90 font-cinzel text-xs tracking-wide">Here&apos;s what we&apos;ll set up:</p>
+          <ol className="list-decimal list-inside space-y-1 text-neutral-400 text-xs">
             <li>Your character&apos;s name and identity</li>
             <li>Race — determines special abilities and stat bonuses</li>
             <li>Class — your role in combat and exploration</li>
@@ -39,13 +41,17 @@ export function StepWelcome({ onNext, onQuickStart, onSurvey }: StepWelcomeProps
         </div>
 
         <div className="flex flex-col gap-3">
-          <Button size="lg" className="w-full" onClick={onNext}>
+          <Button
+            size="lg"
+            className="w-full bg-[#8b0000] hover:bg-[#a50000] text-[#e0c068] border border-[#c9a227]/50 font-cinzel tracking-wide"
+            onClick={onNext}
+          >
             Create My Character
           </Button>
           <Button
             variant="outline"
             size="lg"
-            className="w-full"
+            className="w-full border-[#c9a227]/30 text-[#c9a227] hover:bg-[#c9a227]/10 hover:border-[#c9a227]/50 font-cinzel tracking-wide"
             onClick={onSurvey}
           >
             I&apos;m New — Help Me Choose
@@ -53,17 +59,17 @@ export function StepWelcome({ onNext, onQuickStart, onSurvey }: StepWelcomeProps
           <Button
             variant="ghost"
             size="lg"
-            className="w-full"
+            className="w-full text-neutral-400 hover:text-[#c9a227] hover:bg-[#c9a227]/5 font-cinzel tracking-wide"
             onClick={onQuickStart}
           >
             Quick Start — Surprise Me!
           </Button>
-          <p className="text-[11px] text-muted-foreground text-center">
+          <p className="text-[11px] text-neutral-500 text-center">
             &quot;Help Me Choose&quot; asks a few quick questions to suggest a
             character. Quick Start generates one randomly.
           </p>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

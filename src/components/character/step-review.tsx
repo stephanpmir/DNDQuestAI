@@ -5,13 +5,6 @@ import { RACIAL_DATA } from "@/lib/races";
 import { CLASS_DATA } from "@/lib/classes";
 import { RACE_SUMMARIES, CLASS_SUMMARIES } from "@/lib/descriptions";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
 const ABILITY_LABELS: Record<keyof AbilityScores, string> = {
   strength: "STR",
@@ -53,33 +46,40 @@ export function StepReview({
   }
 
   return (
-    <Card>
-      <CardHeader className="text-center">
-        <CardTitle className="text-xl">
+    <div className="rounded-lg border border-[#c9a227]/30 bg-[#1a1a1a] overflow-hidden">
+      <div className="text-center px-6 pt-6 pb-3">
+        <h2
+          className="text-xl font-cinzel font-bold tracking-wide"
+          style={{
+            background: "linear-gradient(180deg, #e0c068, #c9a227, #8b6914)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+          }}
+        >
           {character.name} the {character.race} {character.class}
-        </CardTitle>
-        <CardDescription>
+        </h2>
+        <p className="text-sm text-neutral-400 mt-1">
           Review your character before starting the adventure.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </p>
+      </div>
+      <div className="px-6 pb-6 space-y-4">
         {/* Identity */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-muted/30 rounded-lg p-3 border border-border/20">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Race</p>
-            <p className="text-sm font-semibold">{character.race}</p>
-            <p className="text-[10px] text-muted-foreground">{raceSummary.tagline}</p>
+          <div className="bg-[#111]/80 rounded-lg p-3 border border-[#c9a227]/15">
+            <p className="text-[10px] text-[#c9a227]/60 uppercase tracking-wider font-cinzel">Race</p>
+            <p className="text-sm font-semibold text-[#e0c068]">{character.race}</p>
+            <p className="text-[10px] text-neutral-500">{raceSummary.tagline}</p>
           </div>
-          <div className="bg-muted/30 rounded-lg p-3 border border-border/20">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Class</p>
-            <p className="text-sm font-semibold">{character.class}</p>
-            <p className="text-[10px] text-muted-foreground">{classSummary.tagline}</p>
+          <div className="bg-[#111]/80 rounded-lg p-3 border border-[#c9a227]/15">
+            <p className="text-[10px] text-[#c9a227]/60 uppercase tracking-wider font-cinzel">Class</p>
+            <p className="text-sm font-semibold text-[#e0c068]">{character.class}</p>
+            <p className="text-[10px] text-neutral-500">{classSummary.tagline}</p>
           </div>
         </div>
 
         {/* Ability Scores */}
         <div>
-          <p className="text-xs font-medium mb-2">Ability Scores</p>
+          <p className="text-xs font-medium mb-2 text-[#c9a227]/80 font-cinzel tracking-wide">Ability Scores</p>
           <div className="grid grid-cols-3 gap-2">
             {(Object.keys(ABILITY_LABELS) as (keyof AbilityScores)[]).map((ability) => {
               const base = character.abilityScores[ability];
@@ -87,11 +87,11 @@ export function StepReview({
               const total = base + racial;
               const mod = Math.floor((total - 10) / 2);
               return (
-                <div key={ability} className="bg-muted/30 rounded p-2 text-center border border-border/20">
-                  <p className="text-[10px] text-muted-foreground">{ABILITY_LABELS[ability]}</p>
-                  <p className="text-lg font-bold">
+                <div key={ability} className="bg-[#111]/80 rounded p-2 text-center border border-[#c9a227]/15">
+                  <p className="text-[10px] text-[#c9a227]/60 font-cinzel">{ABILITY_LABELS[ability]}</p>
+                  <p className="text-lg font-bold text-[#e0c068]">
                     {total}
-                    <span className="text-xs text-muted-foreground ml-1">
+                    <span className="text-xs text-neutral-500 ml-1">
                       ({mod >= 0 ? "+" : ""}{mod})
                     </span>
                   </p>
@@ -106,10 +106,10 @@ export function StepReview({
 
         {/* Skills */}
         <div>
-          <p className="text-xs font-medium mb-1">Skills</p>
+          <p className="text-xs font-medium mb-1 text-[#c9a227]/80 font-cinzel tracking-wide">Skills</p>
           <div className="flex flex-wrap gap-1">
             {selectedSkills.map((skill) => (
-              <span key={skill} className="text-[10px] bg-primary/15 text-primary px-2 py-0.5 rounded-full border border-primary/30">
+              <span key={skill} className="text-[10px] bg-[#8b0000]/20 text-[#e0c068] px-2 py-0.5 rounded-full border border-[#c9a227]/30">
                 {skill}
               </span>
             ))}
@@ -119,8 +119,8 @@ export function StepReview({
         {/* Fighting Style */}
         {selectedFightingStyle && (
           <div>
-            <p className="text-xs font-medium mb-1">Fighting Style</p>
-            <span className="text-[10px] bg-muted/50 px-2 py-0.5 rounded-full border border-border/20">
+            <p className="text-xs font-medium mb-1 text-[#c9a227]/80 font-cinzel tracking-wide">Fighting Style</p>
+            <span className="text-[10px] bg-[#111]/80 text-neutral-300 px-2 py-0.5 rounded-full border border-[#c9a227]/20">
               {selectedFightingStyle}
             </span>
           </div>
@@ -129,10 +129,10 @@ export function StepReview({
         {/* Cantrips */}
         {selectedCantrips.length > 0 && (
           <div>
-            <p className="text-xs font-medium mb-1">Cantrips</p>
+            <p className="text-xs font-medium mb-1 text-[#c9a227]/80 font-cinzel tracking-wide">Cantrips</p>
             <div className="flex flex-wrap gap-1">
               {selectedCantrips.map((c) => (
-                <span key={c} className="text-[10px] bg-purple-500/15 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/30">
+                <span key={c} className="text-[10px] bg-purple-900/30 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/30">
                   {c}
                 </span>
               ))}
@@ -143,10 +143,10 @@ export function StepReview({
         {/* Spells */}
         {selectedSpells.length > 0 && (
           <div>
-            <p className="text-xs font-medium mb-1">Spells</p>
+            <p className="text-xs font-medium mb-1 text-[#c9a227]/80 font-cinzel tracking-wide">Spells</p>
             <div className="flex flex-wrap gap-1">
               {selectedSpells.map((s) => (
-                <span key={s} className="text-[10px] bg-blue-500/15 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">
+                <span key={s} className="text-[10px] bg-blue-900/30 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">
                   {s}
                 </span>
               ))}
@@ -156,26 +156,34 @@ export function StepReview({
 
         {/* Class Features & Racial Traits */}
         <div>
-          <p className="text-xs font-medium mb-1">Features & Traits</p>
+          <p className="text-xs font-medium mb-1 text-[#c9a227]/80 font-cinzel tracking-wide">Features & Traits</p>
           <div className="flex flex-wrap gap-1">
             {classData.features.map((f) => (
-              <span key={f} className="text-[10px] bg-muted/50 px-2 py-0.5 rounded-full border border-border/20">{f}</span>
+              <span key={f} className="text-[10px] bg-[#111]/80 text-neutral-400 px-2 py-0.5 rounded-full border border-[#c9a227]/15">{f}</span>
             ))}
             {raceData.traits.map((t) => (
-              <span key={t} className="text-[10px] bg-muted/50 px-2 py-0.5 rounded-full border border-border/20">{t}</span>
+              <span key={t} className="text-[10px] bg-[#111]/80 text-neutral-400 px-2 py-0.5 rounded-full border border-[#c9a227]/15">{t}</span>
             ))}
           </div>
         </div>
 
         <div className="flex gap-3 pt-2">
-          <Button variant="outline" onClick={onBack} className="flex-1">
+          <Button
+            variant="outline"
+            onClick={onBack}
+            className="flex-1 border-[#c9a227]/30 text-[#c9a227] hover:bg-[#c9a227]/10 hover:border-[#c9a227]/50"
+          >
             Back
           </Button>
-          <Button onClick={onSubmit} size="lg" className="flex-1">
+          <Button
+            onClick={onSubmit}
+            size="lg"
+            className="flex-1 bg-[#8b0000] hover:bg-[#a50000] text-[#e0c068] border border-[#c9a227]/50 font-cinzel tracking-wide text-base"
+          >
             Begin Adventure!
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

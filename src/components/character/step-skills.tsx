@@ -10,13 +10,6 @@ import {
 } from "@/lib/descriptions";
 import { InfoTip } from "./info-tip";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 interface StepSkillsProps {
@@ -42,6 +35,13 @@ const ALL_SKILLS = [
   "Sleight of Hand", "Stealth", "Survival",
 ];
 
+/** Shared gold gradient for section headers */
+const goldGradientStyle = {
+  background: "linear-gradient(180deg, #e0c068, #c9a227, #8b6914)",
+  WebkitBackgroundClip: "text",
+  WebkitTextFillColor: "transparent",
+} as const;
+
 export function StepSkills({
   characterClass,
   race,
@@ -59,10 +59,8 @@ export function StepSkills({
   const classData = CLASS_DATA[characterClass];
   const fightingStyles = FIGHTING_STYLES[characterClass] ?? [];
 
-  // Half-Elf Skill Versatility: +2 extra skill proficiencies from any skill
   const halfElfBonus = race === "Half-Elf" ? 2 : 0;
   const totalSkillChoices = classData.skillChoiceCount + halfElfBonus;
-  // Combine class skills + all skills for Half-Elf
   const availableSkills = race === "Half-Elf"
     ? [...new Set([...classData.skillChoices, ...ALL_SKILLS])]
     : classData.skillChoices;
@@ -82,22 +80,27 @@ export function StepSkills({
   return (
     <div className="space-y-4">
       {/* Skills */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-1">
+      <div className="rounded-lg border border-[#c9a227]/30 bg-[#1a1a1a] overflow-hidden">
+        <div className="px-6 pt-5 pb-2">
+          <h3
+            className="text-base font-cinzel font-bold tracking-wide flex items-center gap-1"
+            style={goldGradientStyle}
+          >
             Skill Proficiencies
-            <InfoTip text="Skills represent what your character is trained in. Being proficient in a skill means you add a bonus when attempting related actions." />
-          </CardTitle>
-          <CardDescription>
+            <span style={{ WebkitTextFillColor: "initial", background: "none" }}>
+              <InfoTip text="Skills represent what your character is trained in. Being proficient in a skill means you add a bonus when attempting related actions." />
+            </span>
+          </h3>
+          <p className="text-sm text-neutral-400 mt-1">
             Choose {totalSkillChoices} skills.
             {selectedSkills.length < totalSkillChoices && (
               <span className="text-amber-400 ml-1">
                 ({totalSkillChoices - selectedSkills.length} remaining)
               </span>
             )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          </p>
+        </div>
+        <div className="px-6 pb-5">
           <div className="grid grid-cols-1 gap-1.5">
             {availableSkills.map((skill) => {
               const selected = selectedSkills.includes(skill);
@@ -113,19 +116,19 @@ export function StepSkills({
                   className={cn(
                     "text-left px-3 py-2 rounded border transition-colors",
                     selected
-                      ? "bg-primary/20 border-primary/50"
+                      ? "bg-[#8b0000]/20 border-[#c9a227]/50"
                       : disabled
-                        ? "bg-muted/20 border-border/10 text-muted-foreground/50 cursor-not-allowed"
-                        : "bg-muted/30 border-border/20 hover:bg-muted/50 cursor-pointer"
+                        ? "bg-[#111]/30 border-[#222]/30 text-neutral-600 cursor-not-allowed"
+                        : "bg-[#111]/60 border-[#333]/40 hover:bg-[#1a1a1a] hover:border-[#c9a227]/30 cursor-pointer"
                   )}
                 >
                   <div className="flex items-center gap-1">
-                    <span className={cn("text-xs", selected && "font-semibold text-primary")}>
+                    <span className={cn("text-xs", selected ? "font-semibold text-[#e0c068]" : "text-neutral-300")}>
                       {selected ? "\u25C9 " : "\u25CB "}{skill}
                     </span>
                   </div>
                   {desc && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5 ml-4">
+                    <p className="text-[10px] text-neutral-500 mt-0.5 ml-4">
                       {desc}
                     </p>
                   )}
@@ -133,20 +136,25 @@ export function StepSkills({
               );
             })}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Fighting Style */}
       {fightingStyles.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-1">
+        <div className="rounded-lg border border-[#c9a227]/30 bg-[#1a1a1a] overflow-hidden">
+          <div className="px-6 pt-5 pb-2">
+            <h3
+              className="text-base font-cinzel font-bold tracking-wide flex items-center gap-1"
+              style={goldGradientStyle}
+            >
               Fighting Style
-              <InfoTip text="Your preferred way of fighting. This gives you a permanent bonus based on your combat preference." />
-            </CardTitle>
-            <CardDescription>Choose your combat specialization.</CardDescription>
-          </CardHeader>
-          <CardContent>
+              <span style={{ WebkitTextFillColor: "initial", background: "none" }}>
+                <InfoTip text="Your preferred way of fighting. This gives you a permanent bonus based on your combat preference." />
+              </span>
+            </h3>
+            <p className="text-sm text-neutral-400 mt-1">Choose your combat specialization.</p>
+          </div>
+          <div className="px-6 pb-5">
             <div className="space-y-1.5">
               {fightingStyles.map((style) => {
                 const selected = selectedFightingStyle === style;
@@ -159,40 +167,47 @@ export function StepSkills({
                     className={cn(
                       "w-full text-left px-3 py-2 rounded border transition-colors",
                       selected
-                        ? "bg-primary/20 border-primary/50 text-primary font-semibold"
-                        : "bg-muted/30 border-border/20 hover:bg-muted/50 cursor-pointer"
+                        ? "bg-[#8b0000]/20 border-[#c9a227]/50 font-semibold"
+                        : "bg-[#111]/60 border-[#333]/40 hover:bg-[#1a1a1a] hover:border-[#c9a227]/30 cursor-pointer"
                     )}
                   >
-                    <span className="text-xs">{selected ? "\u25C9 " : "\u25CB "}{style}</span>
+                    <span className={cn("text-xs", selected ? "text-[#e0c068]" : "text-neutral-300")}>
+                      {selected ? "\u25C9 " : "\u25CB "}{style}
+                    </span>
                     {desc && (
-                      <p className="text-[10px] text-muted-foreground mt-0.5 ml-4">{desc}</p>
+                      <p className="text-[10px] text-neutral-500 mt-0.5 ml-4">{desc}</p>
                     )}
                   </button>
                 );
               })}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Cantrips */}
       {classData.cantripsKnown > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-1">
+        <div className="rounded-lg border border-[#c9a227]/30 bg-[#1a1a1a] overflow-hidden">
+          <div className="px-6 pt-5 pb-2">
+            <h3
+              className="text-base font-cinzel font-bold tracking-wide flex items-center gap-1"
+              style={goldGradientStyle}
+            >
               Cantrips
-              <InfoTip text="Cantrips are minor spells you can cast anytime without using a spell slot. Think of them as your magical basics." />
-            </CardTitle>
-            <CardDescription>
+              <span style={{ WebkitTextFillColor: "initial", background: "none" }}>
+                <InfoTip text="Cantrips are minor spells you can cast anytime without using a spell slot. Think of them as your magical basics." />
+              </span>
+            </h3>
+            <p className="text-sm text-neutral-400 mt-1">
               Choose {classData.cantripsKnown} cantrips.
               {selectedCantrips.length < classData.cantripsKnown && (
                 <span className="text-amber-400 ml-1">
                   ({classData.cantripsKnown - selectedCantrips.length} remaining)
                 </span>
               )}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+            </p>
+          </div>
+          <div className="px-6 pb-5">
             <div className="grid grid-cols-1 gap-1.5">
               {classData.cantrips.map((cantrip) => {
                 const selected = selectedCantrips.includes(cantrip);
@@ -209,44 +224,49 @@ export function StepSkills({
                     className={cn(
                       "text-left px-3 py-2 rounded border transition-colors",
                       selected
-                        ? "bg-purple-500/20 border-purple-500/50"
+                        ? "bg-purple-900/30 border-purple-500/40"
                         : disabled
-                          ? "bg-muted/20 border-border/10 text-muted-foreground/50 cursor-not-allowed"
-                          : "bg-muted/30 border-border/20 hover:bg-muted/50 cursor-pointer"
+                          ? "bg-[#111]/30 border-[#222]/30 text-neutral-600 cursor-not-allowed"
+                          : "bg-[#111]/60 border-[#333]/40 hover:bg-[#1a1a1a] hover:border-purple-500/30 cursor-pointer"
                     )}
                   >
-                    <span className={cn("text-xs", selected && "font-semibold text-purple-300")}>
+                    <span className={cn("text-xs", selected ? "font-semibold text-purple-300" : "text-neutral-300")}>
                       {selected ? "\u25C9 " : "\u25CB "}{cantrip}
                     </span>
                     {desc && (
-                      <p className="text-[10px] text-muted-foreground mt-0.5 ml-4">{desc}</p>
+                      <p className="text-[10px] text-neutral-500 mt-0.5 ml-4">{desc}</p>
                     )}
                   </button>
                 );
               })}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Spells */}
       {classData.spellsKnown > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-1">
+        <div className="rounded-lg border border-[#c9a227]/30 bg-[#1a1a1a] overflow-hidden">
+          <div className="px-6 pt-5 pb-2">
+            <h3
+              className="text-base font-cinzel font-bold tracking-wide flex items-center gap-1"
+              style={goldGradientStyle}
+            >
               1st-Level Spells
-              <InfoTip text="These are more powerful spells that use spell slots. You can only cast them a limited number of times before resting." />
-            </CardTitle>
-            <CardDescription>
+              <span style={{ WebkitTextFillColor: "initial", background: "none" }}>
+                <InfoTip text="These are more powerful spells that use spell slots. You can only cast them a limited number of times before resting." />
+              </span>
+            </h3>
+            <p className="text-sm text-neutral-400 mt-1">
               Choose {classData.spellsKnown} spells.
               {selectedSpells.length < classData.spellsKnown && (
                 <span className="text-amber-400 ml-1">
                   ({classData.spellsKnown - selectedSpells.length} remaining)
                 </span>
               )}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+            </p>
+          </div>
+          <div className="px-6 pb-5">
             <div className="grid grid-cols-1 gap-1.5">
               {classData.spells.map((spell) => {
                 const selected = selectedSpells.includes(spell);
@@ -262,31 +282,39 @@ export function StepSkills({
                     className={cn(
                       "text-left px-3 py-2 rounded border transition-colors",
                       selected
-                        ? "bg-blue-500/20 border-blue-500/50"
+                        ? "bg-blue-900/30 border-blue-500/40"
                         : disabled
-                          ? "bg-muted/20 border-border/10 text-muted-foreground/50 cursor-not-allowed"
-                          : "bg-muted/30 border-border/20 hover:bg-muted/50 cursor-pointer"
+                          ? "bg-[#111]/30 border-[#222]/30 text-neutral-600 cursor-not-allowed"
+                          : "bg-[#111]/60 border-[#333]/40 hover:bg-[#1a1a1a] hover:border-blue-500/30 cursor-pointer"
                     )}
                   >
-                    <span className={cn("text-xs", selected && "font-semibold text-blue-300")}>
+                    <span className={cn("text-xs", selected ? "font-semibold text-blue-300" : "text-neutral-300")}>
                       {selected ? "\u25C9 " : "\u25CB "}{spell}
                     </span>
                     {desc && (
-                      <p className="text-[10px] text-muted-foreground mt-0.5 ml-4">{desc}</p>
+                      <p className="text-[10px] text-neutral-500 mt-0.5 ml-4">{desc}</p>
                     )}
                   </button>
                 );
               })}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       <div className="flex gap-3">
-        <Button variant="outline" onClick={onBack} className="flex-1">
+        <Button
+          variant="outline"
+          onClick={onBack}
+          className="flex-1 border-[#c9a227]/30 text-[#c9a227] hover:bg-[#c9a227]/10 hover:border-[#c9a227]/50"
+        >
           Back
         </Button>
-        <Button onClick={onNext} disabled={!isValid} className="flex-1">
+        <Button
+          onClick={onNext}
+          disabled={!isValid}
+          className="flex-1 bg-[#8b0000] hover:bg-[#a50000] text-[#e0c068] border border-[#c9a227]/50 font-cinzel tracking-wide disabled:opacity-40"
+        >
           Next — Review Character
         </Button>
       </div>

@@ -6,13 +6,6 @@ import { RACIAL_DATA } from "@/lib/races";
 import { ABILITY_DESCRIPTIONS } from "@/lib/descriptions";
 import { InfoTip } from "./info-tip";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
 const ABILITY_NAMES: (keyof AbilityScores)[] = [
   "strength", "dexterity", "constitution", "wisdom", "intelligence", "charisma",
@@ -111,24 +104,36 @@ export function StepAbilities({
   const canIndividualReroll = individualRerollsUsed < MAX_INDIVIDUAL_REROLLS;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-1">
+    <div className="rounded-lg border border-[#c9a227]/30 bg-[#1a1a1a] overflow-hidden">
+      <div className="px-6 pt-6 pb-3">
+        <h2
+          className="text-xl font-cinzel font-bold tracking-wide flex items-center gap-1"
+          style={{
+            background: "linear-gradient(180deg, #e0c068, #c9a227, #8b6914)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+          }}
+        >
           Roll Your Ability Scores
-          <InfoTip text="Ability scores are your character's core stats (like Strength and Intelligence). Higher scores make you better at related tasks. We roll 4 dice and drop the lowest for each stat." />
-        </CardTitle>
-        <CardDescription>
+          <span style={{ WebkitTextFillColor: "initial", background: "none" }}>
+            <InfoTip text="Ability scores are your character's core stats (like Strength and Intelligence). Higher scores make you better at related tasks. We roll 4 dice and drop the lowest for each stat." />
+          </span>
+        </h2>
+        <p className="text-sm text-neutral-400 mt-1">
           Click &quot;Roll Dice&quot; to generate your stats. You get 1 full
           reroll and 2 individual rerolls.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </p>
+      </div>
+      <div className="px-6 pb-6 space-y-4">
         <Button
           type="button"
           onClick={handleRollAll}
-          variant={hasRolled ? "outline" : "default"}
           disabled={!canFullReroll}
-          className="w-full"
+          className={
+            hasRolled
+              ? "w-full border-[#c9a227]/30 text-[#c9a227] hover:bg-[#c9a227]/10 hover:border-[#c9a227]/50 bg-transparent border disabled:opacity-40"
+              : "w-full bg-[#8b0000] hover:bg-[#a50000] text-[#e0c068] border border-[#c9a227]/50 font-cinzel tracking-wide"
+          }
         >
           {hasRolled
             ? `Reroll All (${MAX_FULL_REROLLS - fullRerollsUsed} left)`
@@ -137,7 +142,7 @@ export function StepAbilities({
 
         {hasRolled && (
           <>
-            <div className="text-[10px] text-muted-foreground text-center">
+            <div className="text-[10px] text-[#c9a227]/60 text-center font-cinzel tracking-wide">
               Individual rerolls remaining: {MAX_INDIVIDUAL_REROLLS - individualRerollsUsed}
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -148,21 +153,21 @@ export function StepAbilities({
                 const finalScore = roll.total + racialBonus;
                 const mod = Math.floor((finalScore - 10) / 2);
                 return (
-                  <div key={ability} className="border rounded-lg p-3 space-y-1.5">
+                  <div key={ability} className="border border-[#c9a227]/20 bg-[#111]/60 rounded-lg p-3 space-y-1.5">
                     <div className="flex items-start justify-between">
                       <div>
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                        <span className="text-[10px] text-[#c9a227]/60 uppercase tracking-wider font-cinzel">
                           {ABILITY_LABELS[ability]}
                         </span>
                         <div className="flex items-center">
-                          <span className="text-sm font-medium capitalize">{ability}</span>
+                          <span className="text-sm font-medium capitalize text-neutral-200">{ability}</span>
                           <InfoTip text={desc.long} />
                         </div>
-                        <p className="text-[10px] text-muted-foreground">{desc.short}</p>
+                        <p className="text-[10px] text-neutral-500">{desc.short}</p>
                       </div>
                       <div className="text-right">
-                        <span className="text-lg font-bold">{finalScore}</span>
-                        <span className="text-xs text-muted-foreground ml-1">
+                        <span className="text-lg font-bold text-[#e0c068]">{finalScore}</span>
+                        <span className="text-xs text-neutral-500 ml-1">
                           ({mod >= 0 ? "+" : ""}{mod})
                         </span>
                         {racialBonus > 0 && (
@@ -178,8 +183,8 @@ export function StepAbilities({
                           key={di}
                           className={`inline-flex items-center justify-center w-7 h-7 rounded text-xs font-mono ${
                             di === roll.droppedIndex
-                              ? "bg-destructive/20 text-muted-foreground line-through"
-                              : "bg-muted"
+                              ? "bg-[#8b0000]/20 text-neutral-600 line-through border border-[#8b0000]/30"
+                              : "bg-[#1a1a1a] border border-[#333] text-neutral-300"
                           }`}
                         >
                           {d}
@@ -189,7 +194,7 @@ export function StepAbilities({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-7 px-2 text-xs ml-auto"
+                        className="h-7 px-2 text-xs ml-auto text-[#c9a227]/70 hover:text-[#c9a227] hover:bg-[#c9a227]/10"
                         onClick={() => handleRerollOne(i)}
                         disabled={!canIndividualReroll}
                       >
@@ -204,14 +209,22 @@ export function StepAbilities({
         )}
 
         <div className="flex gap-3 pt-2">
-          <Button variant="outline" onClick={onBack} className="flex-1">
+          <Button
+            variant="outline"
+            onClick={onBack}
+            className="flex-1 border-[#c9a227]/30 text-[#c9a227] hover:bg-[#c9a227]/10 hover:border-[#c9a227]/50"
+          >
             Back
           </Button>
-          <Button onClick={onNext} disabled={!hasRolled} className="flex-1">
+          <Button
+            onClick={onNext}
+            disabled={!hasRolled}
+            className="flex-1 bg-[#8b0000] hover:bg-[#a50000] text-[#e0c068] border border-[#c9a227]/50 font-cinzel tracking-wide disabled:opacity-40"
+          >
             Next — Choose Skills
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
