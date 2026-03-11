@@ -3,34 +3,43 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCharacterStore } from "@/stores/character-store";
+import { useGameStore } from "@/stores/game-store";
+import { applyPendingSnapshot } from "@/lib/save-snapshot";
 import { GameView } from "@/components/game/game-view";
 
 export default function GamePage() {
   const router = useRouter();
   const isCreated = useCharacterStore((s) => s.isCreated);
-  const [hydrated, setHydrated] = useState(false);
+  const [ready, setReady] = useState(false);
 
-  // Wait for Zustand persist rehydration before acting on isCreated.
-  // restoreSnapshot() calls setState synchronously, but on a fresh page
-  // load the persist middleware rehydrates from localStorage async.
+  // Wait for all stores to hydrate, then apply any pending save snapshot.
+  // This prevents the persist middleware from overwriting loaded save data.
   useEffect(() => {
-    const unsub = useCharacterStore.persist.onFinishHydration(() => {
-      setHydrated(true);
-    });
-    // If already hydrated (e.g. SPA navigation), check immediately
-    if (useCharacterStore.persist.hasHydrated()) {
-      setHydrated(true);
+    function checkReady() {
+      const charHydrated = useCharacterStore.persist.hasHydrated();
+      const gameHydrated = useGameStore.persist.hasHydrated();
+      if (charHydrated && gameHydrated) {
+        // Apply stashed snapshot (from Continue/Load on landing page)
+        applyPendingSnapshot();
+        setReady(true);
+      }
     }
-    return unsub;
+
+    checkReady();
+
+    // If not yet hydrated, listen for hydration events
+    const unsub1 = useCharacterStore.persist.onFinishHydration(checkReady);
+    const unsub2 = useGameStore.persist.onFinishHydration(checkReady);
+    return () => { unsub1(); unsub2(); };
   }, []);
 
   useEffect(() => {
-    if (hydrated && !isCreated) {
+    if (ready && !isCreated) {
       router.replace("/character");
     }
-  }, [hydrated, isCreated, router]);
+  }, [ready, isCreated, router]);
 
-  if (!hydrated || !isCreated) return null;
+  if (!ready || !isCreated) return null;
 
   return <GameView />;
 }

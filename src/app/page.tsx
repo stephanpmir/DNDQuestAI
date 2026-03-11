@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { SlotId, SaveSlot } from "@/stores/save-store";
-import { restoreSnapshot } from "@/lib/save-snapshot";
+import { stashSnapshotForRestore } from "@/lib/save-snapshot";
 import { buildPollinationsUrl } from "@/lib/avatar";
 
 const BG_PROMPT =
@@ -112,7 +112,7 @@ export default function HomePage() {
   const hasMultipleSaves = saves.length > 1;
 
   function handleLoadSave(save: SaveInfo) {
-    restoreSnapshot(save.snapshot);
+    stashSnapshotForRestore(save.snapshot);
     router.push("/game");
   }
 

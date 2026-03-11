@@ -104,3 +104,31 @@ export function restoreSnapshot(snap: GameSnapshot): void {
     crimes: snap.crime.crimes,
   });
 }
+
+const PENDING_SNAPSHOT_KEY = "dndquest-pending-snapshot";
+
+/**
+ * Stash a snapshot for deferred restore. The game page will pick it up
+ * after all Zustand stores have finished hydrating from localStorage,
+ * preventing the persist middleware from overwriting the loaded state.
+ */
+export function stashSnapshotForRestore(snap: GameSnapshot): void {
+  sessionStorage.setItem(PENDING_SNAPSHOT_KEY, JSON.stringify(snap));
+}
+
+/**
+ * Check for and apply a stashed snapshot. Returns true if one was found
+ * and applied. Should be called on the game page after hydration.
+ */
+export function applyPendingSnapshot(): boolean {
+  const raw = sessionStorage.getItem(PENDING_SNAPSHOT_KEY);
+  if (!raw) return false;
+  sessionStorage.removeItem(PENDING_SNAPSHOT_KEY);
+  try {
+    const snap = JSON.parse(raw) as GameSnapshot;
+    restoreSnapshot(snap);
+    return true;
+  } catch {
+    return false;
+  }
+}
