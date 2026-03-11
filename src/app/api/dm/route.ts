@@ -148,6 +148,11 @@ function sleep(ms: number): Promise<void> {
 
 /** Check if an error is a timeout/network error worth retrying */
 function isRetryableError(error: unknown): boolean {
+  // OpenAI SDK errors have a numeric `status` property
+  const status = (error as { status?: number }).status;
+  if (status === 429 || status === 502 || status === 503) {
+    return true;
+  }
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
     return (
@@ -157,10 +162,7 @@ function isRetryableError(error: unknown): boolean {
       msg.includes("socket hang up") ||
       msg.includes("network") ||
       msg.includes("fetch failed") ||
-      msg.includes("aborted") ||
-      msg.includes("503") ||
-      msg.includes("502") ||
-      msg.includes("429")
+      msg.includes("aborted")
     );
   }
   return false;
@@ -172,42 +174,51 @@ async function callWithRetry(
   messages: OpenAI.ChatCompletionMessageParam[]
 ): Promise<string> {
   const providers = getProviders();
+  console.error(`[DM API] Starting LLM call with ${providers.length} provider(s): ${providers.map(p => p.name).join(", ")}`);
   let lastError: unknown;
 
   for (const provider of providers) {
+    console.error(`[DM API] Trying ${provider.name} (model: ${provider.model})`);
     for (let attempt = 0; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
       try {
+        console.error(`[DM API] ${provider.name} attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS + 1}...`);
         const response = await provider.client.chat.completions.create({
           model: provider.model,
           messages,
           max_tokens: 1024,
         });
         const content = response.choices[0]?.message?.content;
+        console.error(`[DM API] ${provider.name} responded, content length: ${content?.length ?? 0}`);
         // Treat empty/null content as failure (e.g. reasoning-token overflow)
         if (!content || content.trim().length === 0) {
-          console.warn(
-            `[DM API] ${provider.name} returned empty content, treating as failure`
+          console.error(
+            `[DM API] ${provider.name} returned empty content, falling through to next provider`
           );
           lastError = new Error(`${provider.name} returned empty content`);
           break; // Move to next provider (no point retrying empty responses)
         }
+        console.error(`[DM API] ${provider.name} succeeded (${content.length} chars)`);
         return content;
       } catch (error) {
         lastError = error;
+        const status = (error as { status?: number }).status;
         const errMsg = error instanceof Error ? error.message : String(error);
-        console.warn(
-          `[DM API] ${provider.name} attempt ${attempt + 1} failed: ${errMsg}`
+        console.error(
+          `[DM API] ${provider.name} attempt ${attempt + 1} FAILED: status=${status ?? "N/A"} msg=${errMsg}`
         );
         if (!isRetryableError(error) || attempt >= MAX_RETRY_ATTEMPTS) {
+          console.error(`[DM API] ${provider.name} error not retryable or retries exhausted, moving to next provider`);
           break; // Move to next provider
         }
         const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+        console.error(`[DM API] ${provider.name} retrying in ${delay}ms...`);
         await sleep(delay);
       }
     }
-    console.warn(`[DM API] ${provider.name} exhausted, trying next provider...`);
+    console.error(`[DM API] ${provider.name} exhausted, trying next provider...`);
   }
 
+  console.error(`[DM API] All providers exhausted. Last error:`, lastError);
   throw lastError;
 }
 
