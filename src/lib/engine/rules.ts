@@ -1042,14 +1042,98 @@ export function resolveAction(
 
       if (turnsSinceLastRest < MIN_TURNS_BETWEEN_RESTS) {
         outcome.restDenied = true;
+        const turnsRemaining = MIN_TURNS_BETWEEN_RESTS - turnsSinceLastRest;
+        outcome.actionDenied = {
+          reason: `You rested recently and aren't tired enough yet. You need ${turnsRemaining} more turn${turnsRemaining === 1 ? "" : "s"} of activity before you can rest again.`,
+          attempted: "rest",
+        };
         break;
       }
 
-      // Short rest: recover some HP (minimum 1 HP healed if not at max)
-      const conMod = modifier(character.abilityScores.constitution);
-      const healed = Math.max(1, Math.floor(character.maxHp * 0.25) + conMod);
-      outcome.hpChange = Math.min(healed, character.maxHp - character.hp);
-      outcome.lastRestTurn = gameState.turnCount;
+      // Detect long rest vs short rest
+      const restLower = playerInput.toLowerCase();
+      const isLongRest = /\b(long rest|sleep|camp|full rest)\b/i.test(restLower);
+
+      if (isLongRest) {
+        // ── Long Rest: fully restore HP, recharge all resources ──
+        outcome.hpChange = character.maxHp - character.hp;
+        outcome.restType = "long";
+        outcome.lastRestTurn = gameState.turnCount;
+        // Resource recharge happens in the store when it sees restType
+        outcome.roll = {
+          type: "check",
+          ability: "constitution",
+          rolled: character.maxHp,
+          modifier: 0,
+          total: character.maxHp,
+          dc: 0,
+          success: true,
+          reason: `Long Rest — fully restored to ${character.maxHp} HP. All resources recharged.`,
+        };
+      } else {
+        // ── Short Rest: spend hit dice to heal ──
+        // Find hit dice resource
+        const hitDiceRes = resources.find((r) => r.key === "hit_dice");
+        const conMod = modifier(character.abilityScores.constitution);
+
+        if (hitDiceRes && hitDiceRes.current > 0 && character.hp < character.maxHp) {
+          // Spend up to half your level in hit dice (min 1), capped by available dice
+          const diceToSpend = Math.min(
+            hitDiceRes.current,
+            Math.max(1, Math.floor(character.level / 2))
+          );
+          // Get hit die size from the resource label (e.g. "Hit Dice (d10)" -> 10)
+          const dieSizeMatch = hitDiceRes.label.match(/d(\d+)/);
+          const dieSize = dieSizeMatch ? parseInt(dieSizeMatch[1], 10) : 8;
+
+          let totalHealed = 0;
+          for (let i = 0; i < diceToSpend; i++) {
+            totalHealed += Math.max(1, d(dieSize) + conMod);
+          }
+          const actualHealed = Math.min(totalHealed, character.maxHp - character.hp);
+          outcome.hpChange = actualHealed;
+
+          // Consume hit dice
+          hitDiceRes.current = Math.max(0, hitDiceRes.current - diceToSpend);
+
+          outcome.roll = {
+            type: "check",
+            ability: "constitution",
+            rolled: totalHealed - (conMod * diceToSpend),
+            modifier: conMod * diceToSpend,
+            total: totalHealed,
+            dc: 0,
+            success: true,
+            reason: `Short Rest — spent ${diceToSpend} hit ${diceToSpend === 1 ? "die" : "dice"} (d${dieSize}+${conMod} each), healed ${actualHealed} HP`,
+          };
+        } else if (hitDiceRes && hitDiceRes.current <= 0) {
+          // No hit dice left, still get short rest benefits (resource recharge)
+          outcome.roll = {
+            type: "check",
+            ability: "constitution",
+            rolled: 0,
+            modifier: 0,
+            total: 0,
+            dc: 0,
+            success: true,
+            reason: "Short Rest — no hit dice remaining to spend, but short-rest abilities recharged",
+          };
+        } else {
+          // Already at full HP
+          outcome.roll = {
+            type: "check",
+            ability: "constitution",
+            rolled: 0,
+            modifier: 0,
+            total: 0,
+            dc: 0,
+            success: true,
+            reason: "Short Rest — already at full HP. Short-rest abilities recharged.",
+          };
+        }
+        outcome.restType = "short";
+        outcome.lastRestTurn = gameState.turnCount;
+      }
       break;
     }
 

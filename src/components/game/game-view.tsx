@@ -142,6 +142,7 @@ export function GameView() {
             goldChange: u.goldChange,
             xpGained: u.xpGained,
             lastRestTurn: u.lastRestTurn,
+            restType: u.restType,
             raging: u.raging,
             lastHealTurn: u.lastHealTurn,
             lastTravelEncounterTurn: u.lastTravelEncounterTurn,

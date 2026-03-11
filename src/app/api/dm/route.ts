@@ -307,6 +307,7 @@ export async function POST(request: Request) {
         completeQuest: eo.completeQuest,
         xpGained: eo.xpGained || undefined,
         lastRestTurn: eo.lastRestTurn,
+        restType: eo.restType,
         raging: eo.raging,
         lastHealTurn: eo.lastHealTurn,
         lastTravelEncounterTurn: eo.lastTravelEncounterTurn,

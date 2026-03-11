@@ -101,6 +101,13 @@ const WARLOCK_SLOTS: Record<number, { count: number; level: number }> = {
 const FULL_CASTERS: CharacterClass[] = ["Bard", "Cleric", "Druid", "Sorcerer", "Wizard"];
 const HALF_CASTERS: CharacterClass[] = ["Paladin", "Ranger"];
 
+/** Hit die size per class */
+export const HIT_DIE_SIZE: Record<CharacterClass, number> = {
+  Barbarian: 12, Fighter: 10, Paladin: 10, Ranger: 10,
+  Bard: 8, Cleric: 8, Druid: 8, Monk: 8, Rogue: 8, Warlock: 8,
+  Sorcerer: 6, Wizard: 6,
+};
+
 /**
  * Build the initial resource pool for a character based on class, race, and level.
  */
@@ -110,6 +117,15 @@ export function buildResourcePool(
   level: number,
 ): ResourcePool {
   const resources: ResourcePool = [];
+
+  // ── Hit Dice (spent during short rests to heal, regain half on long rest) ──
+  resources.push({
+    key: "hit_dice",
+    label: `Hit Dice (d${HIT_DIE_SIZE[cls]})`,
+    current: level,
+    max: level,
+    rechargesOn: "long", // long rest restores half (handled specially)
+  });
 
   // ── Fighter: Second Wind (1/short rest) ──
   if (cls === "Fighter") {
@@ -291,11 +307,23 @@ export function recalculateResources(
 
 /**
  * Recharge resources after a rest.
+ * Short rest: recharges short-rest resources only (hit dice NOT recharged).
+ * Long rest: recharges everything; hit dice regain half (min 1) per 5e rules.
  */
 export function rechargeResources(pool: ResourcePool, restType: RestType): ResourcePool {
   return pool.map((r) => {
-    // Long rest recharges everything; short rest only recharges short-rest resources
-    if (restType === "long" || r.rechargesOn === "short") {
+    if (restType === "long") {
+      // Hit dice: regain half your total (min 1) on long rest, not all
+      if (r.key === "hit_dice") {
+        const regain = Math.max(1, Math.floor(r.max / 2));
+        return { ...r, current: Math.min(r.max, r.current + regain) };
+      }
+      // Everything else fully recharges on long rest
+      return { ...r, current: r.max };
+    }
+    // Short rest: only recharge short-rest resources (hit dice are NOT recharged here —
+    // they are spent during short rest, not recharged)
+    if (r.rechargesOn === "short") {
       return { ...r, current: r.max };
     }
     return r;

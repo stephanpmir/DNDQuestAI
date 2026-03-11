@@ -35,6 +35,7 @@ interface CharacterStore {
     goldChange?: number;
     xpGained?: number;
     lastRestTurn?: number;
+    restType?: import("@/lib/resources").RestType;
     deathSaveResult?: "nat20" | "nat1" | "success" | "failure";
     karmaChange?: number;
     fameChange?: number;
@@ -420,17 +421,18 @@ export const useCharacterStore = create<CharacterStore>()(
           // Rest tracking
           if (updates.lastRestTurn !== undefined) {
             c.lastRestTurn = updates.lastRestTurn;
-            // Reset Half-Orc Relentless Endurance on rest
-            if (c.race === "Half-Orc") {
+            const restType = updates.restType ?? "short";
+            // Reset Half-Orc Relentless Endurance on long rest
+            if (c.race === "Half-Orc" && restType === "long") {
               c.relentlessUsed = false;
             }
             // End Barbarian Rage on rest
             if (c.class === "Barbarian") {
               c.raging = false;
             }
-            // Recharge resources on rest (treat all rests as short rest for now)
+            // Recharge resources based on rest type
             if (c.resources) {
-              c.resources = rechargeResources(c.resources, "short");
+              c.resources = rechargeResources(c.resources, restType);
             }
           }
 

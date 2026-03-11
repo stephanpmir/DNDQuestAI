@@ -217,7 +217,13 @@ export function buildEngineContextMessage(
   }
 
   if (o.restDenied) {
-    outcomeParts.push("REST DENIED: The character is not tired enough to rest. Narrate that they tried to rest but feel too alert or haven't been active enough.");
+    outcomeParts.push("REST DENIED: The character attempted to rest too soon after their last rest. Narrate that they are too restless, the area feels unsafe, or they haven't exerted themselves enough to sleep. Make it clear they need to adventure more before resting again.");
+  }
+  if (o.restType === "long") {
+    outcomeParts.push("LONG REST: The character settles in for a full night's rest. Narrate them finding a safe camp, sleeping through the night, and waking refreshed. All HP restored and all abilities recharged.");
+  }
+  if (o.restType === "short" && !o.restDenied) {
+    outcomeParts.push("SHORT REST: The character takes a brief breather (about 1 hour). Narrate them catching their breath, bandaging wounds, and recovering some energy. Short-rest abilities are recharged.");
   }
   if (o.deathSaveResult) {
     const dsLabels: Record<string, string> = {

@@ -75,6 +75,8 @@ export interface EngineOutcome {
   restDenied?: boolean;
   /** Track the turn of last rest */
   lastRestTurn?: number;
+  /** Type of rest taken (short or long) */
+  restType?: import("@/lib/resources").RestType;
   /** Death save result for unconscious characters */
   deathSaveResult?: "nat20" | "nat1" | "success" | "failure";
   /** Damage dealt by player attack */

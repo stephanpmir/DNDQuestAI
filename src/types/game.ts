@@ -36,6 +36,7 @@ export interface DMResponsePayload {
     completeQuest?: string;
     xpGained?: number;
     lastRestTurn?: number;
+    restType?: import("@/lib/resources").RestType;
     raging?: boolean;
     lastHealTurn?: number;
     lastTravelEncounterTurn?: number;
