@@ -15,8 +15,8 @@ export function CharacterSidebar() {
   const { location, questLog } = useGameStore();
   const { companions } = useKarmaStore();
 
-  const [equippedOpen, setEquippedOpen] = useState(true);
-  const [backpackOpen, setBackpackOpen] = useState(true);
+  const [equippedOpen, setEquippedOpen] = useState(false);
+  const [backpackOpen, setBackpackOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [portraitOpen, setPortraitOpen] = useState(false);
 
@@ -33,11 +33,6 @@ export function CharacterSidebar() {
     : character.xpToNextLevel > 0
       ? Math.round((character.xp / character.xpToNextLevel) * 100)
       : 0;
-
-  const mod = (score: number) => {
-    const m = Math.floor((score - 10) / 2);
-    return m >= 0 ? `+${m}` : `${m}`;
-  };
 
   const equipped = character.equipped ?? [];
   const backpack = character.inventory.filter((item) => !equipped.includes(item));
@@ -115,76 +110,6 @@ export function CharacterSidebar() {
             </div>
           </div>
 
-          {/* Unconscious/Death warning */}
-          {character.isUnconscious && (
-            <div className="text-center py-1 bg-red-950/60 border border-red-700/50 rounded text-red-300 text-xs font-bold animate-pulse">
-              UNCONSCIOUS — Death Saves: {character.deathSaves.successes}S / {character.deathSaves.failures}F
-            </div>
-          )}
-
-          {/* AC / Gold / Stats row */}
-          <div className="flex gap-2">
-            <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">AC</div>
-              <div className="text-lg font-black leading-tight">{character.ac}</div>
-            </div>
-            <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
-              <div className="text-[10px] text-amber-400/80 uppercase tracking-wider">Gold</div>
-              <div className="text-lg font-black text-amber-400 leading-tight">{character.gold}</div>
-            </div>
-          </div>
-
-          {/* Class/Race Resources */}
-          {(character.resources ?? []).length > 0 && (
-            <div className="space-y-1">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Resources</div>
-              {(character.resources ?? []).map((res) => {
-                const pct = res.max > 0 && res.max !== Infinity
-                  ? Math.round((res.current / res.max) * 100)
-                  : 100;
-                const barColor = pct > 50 ? "bg-violet-500" : pct > 25 ? "bg-amber-500" : "bg-red-500";
-                const isPool = res.key === "lay_on_hands";
-                return (
-                  <div key={res.key}>
-                    <div className="flex justify-between text-[11px] mb-0.5">
-                      <span className="text-violet-300 truncate">{res.label}</span>
-                      <span className="font-mono text-[10px] shrink-0 ml-1">
-                        {isPool ? `${res.current}` : `${res.current}/${res.max === Infinity ? "\u221E" : res.max}`}
-                      </span>
-                    </div>
-                    {res.max !== Infinity && (
-                      <div className="w-full bg-violet-950/60 rounded-full h-1.5 overflow-hidden border border-violet-900/30">
-                        <div
-                          className={cn("h-full rounded-full transition-all duration-500", barColor)}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Ability scores — compact 2x3 grid */}
-          <div className="grid grid-cols-3 gap-1.5">
-            {([
-              ["STR", character.abilityScores.strength],
-              ["DEX", character.abilityScores.dexterity],
-              ["CON", character.abilityScores.constitution],
-              ["INT", character.abilityScores.intelligence],
-              ["WIS", character.abilityScores.wisdom],
-              ["CHA", character.abilityScores.charisma],
-            ] as const).map(([label, val]) => (
-              <div key={label} className="text-center bg-muted/30 rounded py-0.5 border border-border/20">
-                <div className="text-[10px] text-muted-foreground">{label}</div>
-                <div className="font-semibold text-xs leading-tight">
-                  {val} <span className="text-muted-foreground">({mod(val)})</span>
-                </div>
-              </div>
-            ))}
-          </div>
-
           {/* Karma & Fame row */}
           <div className="flex gap-2">
             <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
@@ -213,6 +138,25 @@ export function CharacterSidebar() {
                  character.fame >= 15 ? "Recognized" :
                  "Unknown"}
               </div>
+            </div>
+          </div>
+
+          {/* Unconscious/Death warning */}
+          {character.isUnconscious && (
+            <div className="text-center py-1 bg-red-950/60 border border-red-700/50 rounded text-red-300 text-xs font-bold animate-pulse">
+              UNCONSCIOUS — Death Saves: {character.deathSaves.successes}S / {character.deathSaves.failures}F
+            </div>
+          )}
+
+          {/* AC / Gold row */}
+          <div className="flex gap-2">
+            <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">AC</div>
+              <div className="text-lg font-black leading-tight">{character.ac}</div>
+            </div>
+            <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
+              <div className="text-[10px] text-amber-400/80 uppercase tracking-wider">Gold</div>
+              <div className="text-lg font-black text-amber-400 leading-tight">{character.gold}</div>
             </div>
           </div>
 
