@@ -55,6 +55,7 @@ export function CharacterAvatar({
       if (cached) {
         if (cached !== imageUrl) {
           setImageUrl(cached);
+          console.debug("[AvatarPreview] Using cached URL:", cached);
         }
         return;
       }
@@ -63,6 +64,7 @@ export function CharacterAvatar({
         name,
         512
       );
+      console.debug("[AvatarPreview] Generated URL:", url);
       urlCacheRef.current.set(cacheKey, url);
       setLoading(true);
       setImageUrl(url);
@@ -88,8 +90,21 @@ export function CharacterAvatar({
               src={imageUrl}
               alt={`${name || "Character"} preview`}
               className="w-full h-full object-cover"
-              onLoad={() => setLoading(false)}
-              onError={() => setLoading(false)}
+              onLoad={() => {
+                setLoading(false);
+                console.debug("[AvatarPreview] Image loaded successfully");
+              }}
+              onError={() => {
+                console.warn("[AvatarPreview] Image failed to load:", imageUrl);
+                // If the URL has a token, retry without it
+                if (imageUrl.includes("&token=")) {
+                  const fallbackUrl = imageUrl.replace(/&token=[^&]+/, "");
+                  console.debug("[AvatarPreview] Retrying without token:", fallbackUrl);
+                  setImageUrl(fallbackUrl);
+                } else {
+                  setLoading(false);
+                }
+              }}
             />
             {loading && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/60">

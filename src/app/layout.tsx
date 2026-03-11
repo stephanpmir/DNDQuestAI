@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { AppHeader } from "@/components/app-header";
 
 export const metadata: Metadata = {
   title: "DNDQuestAI — AI Dungeon Master",
@@ -25,7 +24,6 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased font-sans">
-        <AppHeader />
         {children}
       </body>
     </html>

@@ -88,9 +88,11 @@ export function nameToSeed(name: string): number {
   return Math.abs(hash);
 }
 
-/** Get the Pollinations token (client-side from NEXT_PUBLIC env, server-side from POLLINATIONS_API_KEY) */
+/** Get the Pollinations token (client-side from NEXT_PUBLIC env, server-side from POLLINATIONS_API_KEY).
+ *  Returns undefined if not set — URLs work without a token, just without priority. */
 export function getPollinationsToken(): string | undefined {
-  return process.env.NEXT_PUBLIC_POLLINATIONS_TOKEN ?? process.env.POLLINATIONS_API_KEY;
+  const token = process.env.NEXT_PUBLIC_POLLINATIONS_TOKEN ?? process.env.POLLINATIONS_API_KEY;
+  return token || undefined; // treat empty string as missing
 }
 
 /** Build a Pollinations.ai image URL with token auth via query param */
