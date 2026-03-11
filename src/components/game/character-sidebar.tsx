@@ -18,6 +18,7 @@ export function CharacterSidebar() {
   const [equippedOpen, setEquippedOpen] = useState(true);
   const [backpackOpen, setBackpackOpen] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [portraitOpen, setPortraitOpen] = useState(false);
 
   const alignment = getAlignment(character.karma);
   const alignmentLabel = ALIGNMENT_LABELS[alignment];
@@ -49,22 +50,29 @@ export function CharacterSidebar() {
         {/* Character identity — avatar + name */}
         <div className="px-4 pt-4 pb-2 bg-gradient-to-b from-muted/80 to-transparent">
           <div className="flex items-center gap-3">
-            {character.avatarUrl ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={character.avatarUrl}
-                alt={`${character.name} portrait`}
-                className="w-12 h-12 rounded-full object-cover border-2 border-primary/40 shrink-0"
-              />
-            ) : (
-              <div className="w-12 h-12 rounded-full bg-gradient-to-b from-primary/30 to-primary/10 border-2 border-primary/40 flex items-center justify-center shrink-0">
-                <span className="text-lg font-black text-primary/70">
-                  {character.name
-                    ? character.name.split(/\s+/).map((w) => w.charAt(0).toUpperCase()).slice(0, 2).join("")
-                    : "?"}
-                </span>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={() => setPortraitOpen(true)}
+              className="shrink-0 cursor-pointer transition-transform hover:scale-105 focus:outline-none"
+              title="View portrait"
+            >
+              {character.avatarUrl ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={character.avatarUrl}
+                  alt={`${character.name} portrait`}
+                  className="w-12 h-12 rounded-full object-cover border-2 border-amber-500/50 hover:border-amber-400/80 transition-colors"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-gradient-to-b from-primary/30 to-primary/10 border-2 border-amber-500/50 hover:border-amber-400/80 flex items-center justify-center transition-colors">
+                  <span className="text-lg font-black text-primary/70">
+                    {character.name
+                      ? character.name.split(/\s+/).map((w) => w.charAt(0).toUpperCase()).slice(0, 2).join("")
+                      : "?"}
+                  </span>
+                </div>
+              )}
+            </button>
             <div className="min-w-0">
               <div className="text-lg font-bold tracking-tight truncate">{character.name}</div>
               <div className="text-xs text-muted-foreground">
@@ -355,6 +363,73 @@ export function CharacterSidebar() {
 
       {/* Character Sheet Modal */}
       {sheetOpen && <CharacterSheet onClose={() => setSheetOpen(false)} />}
+
+      {/* Portrait Modal */}
+      {portraitOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setPortraitOpen(false); }}
+        >
+          {/* Background ambience */}
+          <div className="absolute inset-0 bg-gradient-to-b from-amber-950/20 via-transparent to-red-950/20 pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col items-center gap-5 px-6 text-center animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            {/* Decorative top rule */}
+            <div className="flex items-center justify-center gap-4">
+              <div className="h-px w-16 bg-gradient-to-r from-transparent to-amber-600/60" />
+              <div className="w-2 h-2 rotate-45 border border-amber-500/60" />
+              <div className="h-px w-16 bg-gradient-to-l from-transparent to-amber-600/60" />
+            </div>
+
+            <h2 className="font-cinzel text-lg sm:text-xl tracking-[0.3em] uppercase text-amber-200/80">
+              {character.name}
+            </h2>
+
+            {/* Portrait with ornate golden frame */}
+            <div className="relative w-72 h-96 sm:w-80 sm:h-[28rem] rounded-lg overflow-hidden">
+              {/* Gold border glow */}
+              <div className="absolute -inset-1 rounded-lg bg-gradient-to-b from-amber-400/30 via-amber-600/20 to-amber-400/30 blur-sm" />
+              <div className="relative w-full h-full rounded-lg border-2 border-amber-500/50 overflow-hidden bg-black/50">
+                {character.avatarUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={character.avatarUrl}
+                    alt={`${character.name} portrait`}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-amber-950/30 to-black">
+                    <span className="font-cinzel text-6xl font-bold text-amber-500/40">
+                      {character.name
+                        ? character.name.split(/\s+/).map((w) => w.charAt(0).toUpperCase()).slice(0, 2).join("")
+                        : "?"}
+                    </span>
+                  </div>
+                )}
+                {/* Gold corner accents */}
+                <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-amber-400/60" />
+                <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-amber-400/60" />
+                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-amber-400/60" />
+                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-amber-400/60" />
+              </div>
+            </div>
+
+            {/* Character subtitle */}
+            <p className="font-cinzel text-sm text-amber-400/60 tracking-widest uppercase">
+              {character.race} {character.class}
+            </p>
+
+            {/* Decorative bottom rule */}
+            <div className="flex items-center justify-center gap-4">
+              <div className="h-px w-12 bg-gradient-to-r from-transparent to-red-600/40" />
+              <div className="w-1.5 h-1.5 rotate-45 bg-red-500/40" />
+              <div className="h-px w-24 bg-gradient-to-r from-red-600/40 via-amber-600/30 to-red-600/40" />
+              <div className="w-1.5 h-1.5 rotate-45 bg-red-500/40" />
+              <div className="h-px w-12 bg-gradient-to-l from-transparent to-red-600/40" />
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
