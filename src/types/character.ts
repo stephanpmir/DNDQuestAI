@@ -142,6 +142,8 @@ export interface Character {
   beginnerSurvey?: BeginnerSurvey;
   /** Half-Orc Relentless Endurance used this rest cycle */
   relentlessUsed?: boolean;
+  /** Barbarian Rage active (cleared on rest) */
+  raging?: boolean;
 }
 
 /** D&D 5e XP thresholds for levels 1-20 */

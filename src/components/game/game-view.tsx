@@ -142,6 +142,7 @@ export function GameView() {
             goldChange: u.goldChange,
             xpGained: u.xpGained,
             lastRestTurn: u.lastRestTurn,
+            raging: u.raging,
           });
           if (u.locationChange) {
             setLocation(u.locationChange);

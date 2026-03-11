@@ -307,6 +307,7 @@ export async function POST(request: Request) {
         completeQuest: eo.completeQuest,
         xpGained: eo.xpGained || undefined,
         lastRestTurn: eo.lastRestTurn,
+        raging: eo.raging,
       },
       engineOutcome: {
         roll: eo.roll,

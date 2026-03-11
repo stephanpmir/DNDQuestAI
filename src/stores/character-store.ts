@@ -36,6 +36,7 @@ interface CharacterStore {
     deathSaveResult?: "nat20" | "nat1" | "success" | "failure";
     karmaChange?: number;
     fameChange?: number;
+    raging?: boolean;
   }) => void;
   reset: () => void;
 }
@@ -135,7 +136,9 @@ function computeAC(cls: CharacterClass, dexScore: number, conScore: number, wisS
 
 function computeStartingHp(cls: CharacterClass, conScore: number): number {
   const base = HIT_DICE[cls] ?? 8;
-  return base + computeModifier(conScore);
+  // Sorcerer Draconic Resilience: +1 HP per level (including level 1)
+  const draconicBonus = cls === "Sorcerer" ? 1 : 0;
+  return base + computeModifier(conScore) + draconicBonus;
 }
 
 function computeMaxHpForLevel(cls: CharacterClass, conScore: number, level: number): number {
@@ -362,12 +365,21 @@ export const useCharacterStore = create<CharacterStore>()(
             c.gold = Math.max(0, c.gold + updates.goldChange);
           }
 
+          // Barbarian rage state
+          if (updates.raging !== undefined) {
+            c.raging = updates.raging;
+          }
+
           // Rest tracking
           if (updates.lastRestTurn !== undefined) {
             c.lastRestTurn = updates.lastRestTurn;
             // Reset Half-Orc Relentless Endurance on rest
             if (c.race === "Half-Orc") {
               c.relentlessUsed = false;
+            }
+            // End Barbarian Rage on rest
+            if (c.class === "Barbarian") {
+              c.raging = false;
             }
           }
 

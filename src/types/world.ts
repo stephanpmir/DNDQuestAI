@@ -150,6 +150,8 @@ export interface EngineOutcome {
   equipItem?: string;
   /** Item to add to identified list (engine signals, store applies) */
   identifyItem?: string;
+  /** Barbarian rage state change */
+  raging?: boolean;
 }
 
 /** What the LLM receives to narrate — it does NOT decide outcomes. */

@@ -487,6 +487,10 @@ function getSpellDamageDice(playerInput: string, level: number): { dice: number;
   if (/ray of sickness/i.test(lower)) return { dice: 2, sides: 8 };
   if (/hellish rebuke/i.test(lower)) return { dice: 2, sides: 10 };
 
+  // Utility/non-damage cantrips — should not deal damage
+  const UTILITY_CANTRIPS = /\b(blade ward|dancing lights|friends|light|mage hand|mending|message|minor illusion|prestidigitation|true strike|guidance|resistance|spare the dying|thaumaturgy|druidcraft)\b/i;
+  if (UTILITY_CANTRIPS.test(lower)) return { dice: 0, sides: 0 };
+
   // Default: generic spell damage (2d6)
   return { dice: 2, sides: 6 };
 }
@@ -628,6 +632,25 @@ export function resolveAction(
         break;
       }
 
+      // ── Utility/non-damage cantrip detection ──
+      // These cantrips have no damage component; narrate as flavor, no combat
+      if (isSpell) {
+        const spellDmg = getSpellDamageDice(playerInput, character.level);
+        if (spellDmg.dice === 0) {
+          outcome.roll = {
+            type: "check",
+            ability: "charisma",
+            rolled: 0,
+            modifier: 0,
+            total: 0,
+            dc: 0,
+            success: true,
+            reason: "Utility cantrip — no damage, the DM narrates the magical effect",
+          };
+          break;
+        }
+      }
+
       // D&D 5e attack: d20 + ability modifier + proficiency bonus vs enemy AC
       // Check both player input AND equipped weapons for ranged detection
       const equippedHasRanged = (character.equipped ?? []).some((w) =>
@@ -689,8 +712,8 @@ export function resolveAction(
 
         let dmgBonus = atkMod;
 
-        // Barbarian Rage bonus: +2 damage on STR-based melee attacks (scales at higher levels)
-        if (!isSpell && !isRanged && character.class === "Barbarian" && atkAbility === "strength") {
+        // Barbarian Rage bonus: +2 damage on STR-based melee attacks (only while raging)
+        if (!isSpell && !isRanged && character.class === "Barbarian" && character.raging && atkAbility === "strength") {
           const rageBonus = character.level >= 16 ? 4 : character.level >= 9 ? 3 : 2;
           dmgBonus += rageBonus;
         }
@@ -745,8 +768,9 @@ export function resolveAction(
         outcome.isCriticalHit = isCrit;
         outcome.xpGained = combatXpReward(character.level);
 
-        // Warlock (The Fiend) Dark One's Blessing: gain temp HP on defeating an enemy
-        // Temp HP = CHA mod + warlock level (simplified: added as healing since we don't track temp HP)
+        // Warlock (The Fiend) Dark One's Blessing: gain temp HP when reducing a hostile to 0 HP.
+        // In our engine each successful hit resolves an encounter (XP awarded), so this triggers per hit.
+        // Temp HP = CHA mod + warlock level (added as healing since we don't track temp HP separately).
         if (character.class === "Warlock") {
           const chaBonus = modifier(character.abilityScores.charisma);
           const darkBlessing = Math.max(1, chaBonus + character.level);
@@ -759,8 +783,8 @@ export function resolveAction(
         if (enemyTotal >= character.ac) {
           const enemyDmg = damageRoll(enemy.damageDice.count, enemy.damageDice.sides, enemy.damageBonus);
           let dmgTaken = Math.max(1, enemyDmg.total);
-          // Barbarian Rage: resistance to bludgeoning, piercing, slashing (halve physical damage)
-          if (character.class === "Barbarian") {
+          // Barbarian Rage: resistance to bludgeoning, piercing, slashing (only while raging)
+          if (character.class === "Barbarian" && character.raging) {
             dmgTaken = Math.max(1, Math.floor(dmgTaken / 2));
           }
           // Tiefling fire resistance & Dragonborn damage resistance (general elemental resistance)
@@ -1346,9 +1370,15 @@ export function resolveAction(
         };
         break;
       }
-      // Rage doesn't have a roll — it's a bonus action activation
-      // The damage bonus is applied automatically in the attack handler above
-      // Signal that rage was activated (purely narrative — bonus is always applied for Barbarians)
+      if (character.raging) {
+        outcome.roll = {
+          type: "check", ability: "strength", rolled: 0, modifier: 0, total: 0, dc: 0,
+          success: true, reason: "You are already raging!",
+        };
+        break;
+      }
+      // Rage is a bonus action activation — sets raging state for damage bonus + resistance
+      outcome.raging = true;
       outcome.roll = {
         type: "check",
         ability: "strength",

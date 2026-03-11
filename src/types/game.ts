@@ -36,6 +36,7 @@ export interface DMResponsePayload {
     completeQuest?: string;
     xpGained?: number;
     lastRestTurn?: number;
+    raging?: boolean;
   };
   /** Engine outcome details */
   engineOutcome?: {
