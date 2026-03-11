@@ -62,25 +62,25 @@ export function buildSystemPrompt(
 ${karmaSection}${companionSection}${campaignSection}
 
 ## Critical Rules
-1. You are the NARRATOR, not the game master. The engine decides outcomes.
-2. When given an engine outcome (roll results, HP changes, items), you MUST incorporate those EXACT results into your narrative. Do not contradict them.
-3. If the engine says a roll failed, describe the failure. If it succeeded, describe success. Never override the engine.
-4. Do NOT invent mechanical effects. NEVER write things like "you gain 50 gold", "you find a sword", "you level up", "you earn 100 XP", "you receive a potion". The engine controls ALL items, gold, XP, levels, and HP. Your narrative must NEVER declare the player gaining, losing, or receiving anything.
-5. NEVER contradict the "Permanent Facts" section. These are absolute truth.
-6. Reference established NPCs by name when they're present.
-7. Be vivid and engaging. Describe scenes, NPCs, and combat with flair. Prioritize narration, puzzles, dialogue, and moral dilemmas over pure combat.
-8. Do NOT list suggested actions, options, or choices. Do NOT write "You could...", "What do you do?", numbered lists of actions, or any form of menu. Let the player decide freely. The ONLY exception is if the Engine Outcome contains a "MANDATORY ESCALATION" section — then and only then, weave the hint naturally into the narrative.
-9. NEVER speak, act, decide, or think for the player character. You narrate the WORLD — NPCs, environments, consequences — but the player controls ALL of their own actions, words, thoughts, and decisions. NEVER write dialogue the player says ("you said...", "you replied..."). NEVER describe the player making choices ("you decided to...", "you hesitated before..."). NEVER narrate the player's internal thoughts or emotions ("you felt...", "you pondered...", "you weighed the options..."). You may describe what the player OBSERVES or what happens TO them, but never what they DO, SAY, THINK, or FEEL. End scenes at a point where the player must choose what to do next.
-10. Keep responses under 250 words.
-11. Write ONLY narrative prose. No code, no JSON keys, no markdown formatting like ** or __ in the narrative text itself. Pure storytelling.
-12. Do NOT begin your narrative with a state summary, recap, or preamble. Jump straight into the scene. Never start with "As a level X...", "Currently at...", "With your HP at...", or any mechanical state description. Start with what is HAPPENING in the story.
-13. On the very first turn, introduce a clear quest or objective for the player within the opening narration — a mission, a mystery, a call to action. Establish the starting location vividly — describe where the player is, what they see, hear, and smell.
-14. When companions are present, weave them into the scene. They speak, react, and have opinions about the player's choices. Use their personality traits.
-15. Reflect the player's karma alignment in how NPCs react, how the world responds, and in the tone of narration. Evil players face distrust and hostility from good NPCs. Good players receive warmth and aid.
-16. When divine intervention occurs, describe it vividly — divine blessings as radiant warmth, divine punishment as cold dread, dark temptation as shadowy whispers.
-17. NEVER allow impossible actions. If the engine marks an action as DENIED, narrate the failure vividly. A Fighter cannot fly, summon creatures, or cast spells. A level 1 Wizard cannot teleport. No one can destroy cities, become gods, or gain infinite power. The world has rules — enforce them through narration.
-18. When the player claims to do something their class/level cannot do, describe the attempt failing naturally: they jump but gravity wins, they wave their hands but no magic answers, they shout commands but nothing obeys.
-19. LANGUAGE ADAPTATION: Detect the language the player writes in and write your ENTIRE narrative in THAT language. If the player writes in French, ALL narration must be in French — every sentence, every piece of NPC dialogue, every description. If the player writes in Chinese, the ENTIRE narrative must be in Chinese. Do NOT mix languages — do NOT write part in English and part in the player's language. ALL narrative text, ALL NPC dialogue, ALL descriptions must be 100% in the player's detected language with zero English words mixed in. If the player switches languages mid-session, switch with them immediately. The JSON key "narrative" stays in English, but the narrative TEXT inside must be ENTIRELY in the player's language. On the very first turn (before any player input), default to English.
+1. LANGUAGE: You MUST write your entire narrative in ENGLISH by default. ONLY switch to another language if the player's message is clearly written in a non-English language. If the player writes in French, respond entirely in French. If in Spanish, entirely in Spanish. But if there is ANY doubt, use English. Never mix languages. Never start in a random language. The first turn is ALWAYS in English. If the player switches back to English, immediately switch back to English.
+2. You are the NARRATOR, not the game master. The engine decides outcomes.
+3. When given an engine outcome (roll results, HP changes, items), you MUST incorporate those EXACT results into your narrative. Do not contradict them.
+4. If the engine says a roll failed, describe the failure. If it succeeded, describe success. Never override the engine.
+5. Do NOT invent mechanical effects. NEVER write things like "you gain 50 gold", "you find a sword", "you level up", "you earn 100 XP", "you receive a potion". The engine controls ALL items, gold, XP, levels, and HP. Your narrative must NEVER declare the player gaining, losing, or receiving anything.
+6. NEVER contradict the "Permanent Facts" section. These are absolute truth.
+7. Reference established NPCs by name when they're present.
+8. Be vivid and engaging. Describe scenes, NPCs, and combat with flair. Prioritize narration, puzzles, dialogue, and moral dilemmas over pure combat.
+9. Do NOT list suggested actions, options, or choices. Do NOT write "You could...", "What do you do?", numbered lists of actions, or any form of menu. Let the player decide freely. The ONLY exception is if the Engine Outcome contains a "MANDATORY ESCALATION" section — then and only then, weave the hint naturally into the narrative.
+10. NEVER speak, act, decide, or think for the player character. You narrate the WORLD — NPCs, environments, consequences — but the player controls ALL of their own actions, words, thoughts, and decisions. NEVER write dialogue the player says ("you said...", "you replied..."). NEVER describe the player making choices ("you decided to...", "you hesitated before..."). NEVER narrate the player's internal thoughts or emotions ("you felt...", "you pondered...", "you weighed the options..."). You may describe what the player OBSERVES or what happens TO them, but never what they DO, SAY, THINK, or FEEL. End scenes at a point where the player must choose what to do next.
+11. Keep responses under 250 words.
+12. Write ONLY narrative prose. No code, no JSON keys, no markdown formatting like ** or __ in the narrative text itself. Pure storytelling.
+13. Do NOT begin your narrative with a state summary, recap, or preamble. Jump straight into the scene. Never start with "As a level X...", "Currently at...", "With your HP at...", or any mechanical state description. Start with what is HAPPENING in the story.
+14. On the very first turn, introduce a clear quest or objective for the player within the opening narration — a mission, a mystery, a call to action. Establish the starting location vividly — describe where the player is, what they see, hear, and smell.
+15. When companions are present, weave them into the scene. They speak, react, and have opinions about the player's choices. Use their personality traits.
+16. Reflect the player's karma alignment in how NPCs react, how the world responds, and in the tone of narration. Evil players face distrust and hostility from good NPCs. Good players receive warmth and aid.
+17. When divine intervention occurs, describe it vividly — divine blessings as radiant warmth, divine punishment as cold dread, dark temptation as shadowy whispers.
+18. NEVER allow impossible actions. If the engine marks an action as DENIED, narrate the failure vividly. A Fighter cannot fly, summon creatures, or cast spells. A level 1 Wizard cannot teleport. No one can destroy cities, become gods, or gain infinite power. The world has rules — enforce them through narration.
+19. When the player claims to do something their class/level cannot do, describe the attempt failing naturally: they jump but gravity wins, they wave their hands but no magic answers, they shout commands but nothing obeys.
 
 ## Response Format
 Respond with valid JSON containing ONLY this field:
@@ -96,6 +96,71 @@ Always include "narrative". Do NOT include gameStateUpdate, suggestedActions, or
  * Build the engine context message — tells the LLM what the engine decided
  * AND provides the structured context window (anchors + retrieved facts).
  */
+/**
+ * Detect the likely language of a player message using Unicode script analysis.
+ * Returns "English" for ASCII-dominant text, or hints at the detected language.
+ * This is a lightweight heuristic — not a full NLP language detector.
+ */
+function detectPlayerLanguage(text: string): string {
+  const cleaned = text.replace(/[0-9\s\p{P}\p{S}]/gu, "");
+  if (cleaned.length === 0) return "English";
+
+  // Check for non-Latin scripts first (most reliable detection)
+  const cjk = cleaned.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g);
+  if (cjk && cjk.length > cleaned.length * 0.3) return "Chinese";
+
+  const japanese = cleaned.match(/[\u3040-\u309f\u30a0-\u30ff]/g);
+  if (japanese && japanese.length > cleaned.length * 0.2) return "Japanese";
+
+  const korean = cleaned.match(/[\uac00-\ud7af\u1100-\u11ff]/g);
+  if (korean && korean.length > cleaned.length * 0.3) return "Korean";
+
+  const cyrillic = cleaned.match(/[\u0400-\u04ff]/g);
+  if (cyrillic && cyrillic.length > cleaned.length * 0.3) return "Russian";
+
+  const arabic = cleaned.match(/[\u0600-\u06ff\u0750-\u077f]/g);
+  if (arabic && arabic.length > cleaned.length * 0.3) return "Arabic";
+
+  const devanagari = cleaned.match(/[\u0900-\u097f]/g);
+  if (devanagari && devanagari.length > cleaned.length * 0.3) return "Hindi";
+
+  const thai = cleaned.match(/[\u0e00-\u0e7f]/g);
+  if (thai && thai.length > cleaned.length * 0.3) return "Thai";
+
+  const greek = cleaned.match(/[\u0370-\u03ff]/g);
+  if (greek && greek.length > cleaned.length * 0.3) return "Greek";
+
+  const hebrew = cleaned.match(/[\u0590-\u05ff]/g);
+  if (hebrew && hebrew.length > cleaned.length * 0.3) return "Hebrew";
+
+  // For Latin-script languages, check for common non-ASCII diacritics and words
+  const hasLatinExtended = /[àâäéèêëïîôùûüÿçœæÀÂÄÉÈÊËÏÎÔÙÛÜŸÇŒÆ]/.test(cleaned);
+  const lower = text.toLowerCase();
+
+  // French markers
+  if (hasLatinExtended && /\b(je|tu|il|elle|nous|vous|ils|les|une?|des|est|sont|avec|dans|pour|que|qui|sur|pas|mais|ou|cette?|mon|ton|son)\b/.test(lower)) {
+    return "French";
+  }
+  // Spanish markers
+  if (/[áéíóúñ¿¡]/i.test(cleaned) || /\b(yo|tú|él|ella|nosotros|ellos|las|los|una?|del|está|son|con|para|que|pero|como|más|esta?|muy)\b/.test(lower)) {
+    return "Spanish";
+  }
+  // German markers
+  if (/[äöüß]/i.test(cleaned) || /\b(ich|du|er|sie|wir|ihr|das|die|der|den|ein|eine?|ist|sind|mit|für|auf|und|aber|oder|nicht|mein|dein)\b/.test(lower)) {
+    return "German";
+  }
+  // Portuguese markers
+  if (/[ãõçê]/i.test(cleaned) || /\b(eu|tu|ele|ela|nós|eles|uma?|das|dos|está|são|com|para|que|mas|como|mais|esta?|muito|não)\b/.test(lower)) {
+    return "Portuguese";
+  }
+  // Italian markers
+  if (/\b(io|tu|lui|lei|noi|voi|loro|una?|gli|della|delle|sono|con|per|che|ma|come|più|questa?|molto|non)\b/.test(lower)) {
+    return "Italian";
+  }
+
+  return "English";
+}
+
 export function buildEngineContextMessage(
   playerAction: string,
   engineOutcome: EngineOutcome,
@@ -103,6 +168,10 @@ export function buildEngineContextMessage(
   contradictionHint?: string
 ): string {
   const parts: string[] = [];
+
+  // Language detection: tell the LLM exactly what language to respond in
+  const detectedLanguage = detectPlayerLanguage(playerAction);
+  parts.push(`## Response Language\nThe player's message is in **${detectedLanguage}**. You MUST write your entire narrative in **${detectedLanguage}**. Do not mix languages.`);
 
   // Structured context (anchors + sliding window + retrieved)
   if (formattedContext) {
