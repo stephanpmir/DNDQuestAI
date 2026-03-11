@@ -34,13 +34,15 @@ interface LLMProvider {
   client: OpenAI;
   model: string;
   name: string;
+  /** Extra body params merged into every chat completion request (e.g. Z.ai thinking config) */
+  extraBody?: Record<string, unknown>;
 }
 
 /**
  * Build a prioritized list of available LLM providers.
  * Order: Cerebras → Z.ai → Groq → Moonshot
  *   1. Cerebras  — FREE (1M tokens/day), llama3.1-8b
- *   2. Z.ai      — GLM-4-32B-0414-128K ($0.10/M flat, non-reasoning)
+ *   2. Z.ai      — glm-4.5-air ($0.20/M in, $1.10/M out, thinking disabled)
  *   3. Groq      — FREE tier (rate-limited), llama-3.1-8b-instant
  *   4. Moonshot   — PAID last resort, moonshot-v1-8k
  * All use the OpenAI SDK interface.
@@ -64,7 +66,7 @@ function getProviders(): LLMProvider[] {
     });
   }
 
-  // 2. Z.ai — GLM-4-32B-0414-128K ($0.10/M flat, non-reasoning)
+  // 2. Z.ai — glm-4.5-air (thinking disabled for normal chat completions)
   const zaiKey = process.env.ZAI_API_KEY;
   if (zaiKey) {
     providers.push({
@@ -74,8 +76,9 @@ function getProviders(): LLMProvider[] {
         timeout: 30_000,
         fetch: proxyFetch,
       }),
-      model: "GLM-4-32B-0414-128K",
+      model: "glm-4.5-air",
       name: "Z.ai",
+      extraBody: { thinking: { type: "disabled" } },
     });
   }
 
@@ -186,7 +189,8 @@ async function callWithRetry(
           model: provider.model,
           messages,
           max_tokens: 1024,
-        });
+          ...provider.extraBody,
+        } as OpenAI.ChatCompletionCreateParamsNonStreaming);
         const content = response.choices[0]?.message?.content;
         console.error(`[DM API] ${provider.name} responded, content length: ${content?.length ?? 0}`);
         // Treat empty/null content as failure (e.g. reasoning-token overflow)

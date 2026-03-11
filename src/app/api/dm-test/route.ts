@@ -43,7 +43,7 @@ export async function GET() {
     }
   }
 
-  // Test Z.ai (GLM-4-32B-0414-128K — non-reasoning)
+  // Test Z.ai (glm-4.5-air — thinking disabled)
   if (process.env.ZAI_API_KEY) {
     try {
       const res = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
@@ -53,9 +53,10 @@ export async function GET() {
           "Authorization": `Bearer ${process.env.ZAI_API_KEY}`,
         },
         body: JSON.stringify({
-          model: "GLM-4-32B-0414-128K",
+          model: "glm-4.5-air",
           messages: [{ role: "user", content: "Say hi in 3 words" }],
           max_tokens: 20,
+          thinking: { type: "disabled" },
         }),
         signal: AbortSignal.timeout(25_000),
       });

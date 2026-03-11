@@ -11,6 +11,7 @@ interface ProviderConfig {
   url: string;
   model: string;
   keyEnv: string;
+  extraBody?: Record<string, unknown>;
 }
 
 const PROVIDERS: ProviderConfig[] = [
@@ -23,8 +24,9 @@ const PROVIDERS: ProviderConfig[] = [
   {
     name: "Z.ai",
     url: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-    model: "GLM-4-32B-0414-128K",
+    model: "glm-4.5-air",
     keyEnv: "ZAI_API_KEY",
+    extraBody: { thinking: { type: "disabled" } },
   },
   {
     name: "Groq",
@@ -65,6 +67,7 @@ export async function GET() {
             { role: "user", content: "Say hello in exactly 5 words." },
           ],
           max_tokens: 50,
+          ...provider.extraBody,
         }),
         signal: AbortSignal.timeout(30_000),
       });

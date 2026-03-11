@@ -14,14 +14,15 @@ function getProxyFetch(): typeof fetch | undefined {
   ) as unknown as typeof fetch;
 }
 
-function getClient(): { client: OpenAI; model: string } {
+function getClient(): { client: OpenAI; model: string; extraBody?: Record<string, unknown> } {
   const proxyFetch = getProxyFetch();
-  // Primary: Z.ai
+  // Primary: Z.ai (glm-4.5-air with thinking disabled)
   const zaiKey = process.env.ZAI_API_KEY;
   if (zaiKey) {
     return {
-      client: new OpenAI({ baseURL: "https://api.z.ai/api/paas/v4", apiKey: zaiKey, timeout: 30_000, fetch: proxyFetch }),
-      model: "glm-4",
+      client: new OpenAI({ baseURL: "https://open.bigmodel.cn/api/paas/v4", apiKey: zaiKey, timeout: 30_000, fetch: proxyFetch }),
+      model: "glm-4.5-air",
+      extraBody: { thinking: { type: "disabled" } },
     };
   }
   // Fallback: Cerebras
@@ -150,7 +151,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { client, model } = getClient();
+    const { client, model, extraBody } = getClient();
     const prompt = buildPrompt(survey, suggestedRace, suggestedClass);
 
     let lastError: unknown;
@@ -161,7 +162,8 @@ export async function POST(request: Request) {
           messages: [{ role: "user", content: prompt }],
           max_tokens: 512,
           temperature: 0.8,
-        });
+          ...extraBody,
+        } as OpenAI.ChatCompletionCreateParamsNonStreaming);
 
         const raw = response.choices[0]?.message?.content ?? "";
         const profile = parseProfile(raw);
