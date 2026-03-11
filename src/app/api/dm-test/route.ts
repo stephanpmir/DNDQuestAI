@@ -6,34 +6,35 @@ import { NextResponse } from "next/server";
  */
 export async function GET() {
   const results: Record<string, unknown> = {
-    zaiKeySet: !!process.env.ZAI_API_KEY,
+    groqKeySet: !!process.env.GROQ_API_KEY,
     cerebrasKeySet: !!process.env.CEREBRAS_API_KEY,
+    zaiKeySet: !!process.env.ZAI_API_KEY,
   };
 
-  // Test Z.ai
-  if (process.env.ZAI_API_KEY) {
+  // Test Groq
+  if (process.env.GROQ_API_KEY) {
     try {
-      const res = await fetch("https://api.z.ai/api/paas/v4/chat/completions", {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.ZAI_API_KEY}`,
+          "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
         },
         body: JSON.stringify({
-          model: "glm-4",
+          model: "llama-3.1-8b-instant",
           messages: [{ role: "user", content: "Say hi in 3 words" }],
           max_tokens: 20,
         }),
         signal: AbortSignal.timeout(25_000),
       });
       const body = await res.text();
-      results.zai = {
+      results.groq = {
         success: res.ok,
         status: res.status,
         body: body.slice(0, 500),
       };
     } catch (error) {
-      results.zai = {
+      results.groq = {
         success: false,
         error: error instanceof Error ? error.message : String(error),
       };
@@ -64,6 +65,36 @@ export async function GET() {
       };
     } catch (error) {
       results.cerebras = {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  // Test Z.ai
+  if (process.env.ZAI_API_KEY) {
+    try {
+      const res = await fetch("https://api.z.ai/api/paas/v4/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.ZAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "glm-4",
+          messages: [{ role: "user", content: "Say hi in 3 words" }],
+          max_tokens: 20,
+        }),
+        signal: AbortSignal.timeout(25_000),
+      });
+      const body = await res.text();
+      results.zai = {
+        success: res.ok,
+        status: res.status,
+        body: body.slice(0, 500),
+      };
+    } catch (error) {
+      results.zai = {
         success: false,
         error: error instanceof Error ? error.message : String(error),
       };

@@ -30,17 +30,40 @@ function getProxyFetch(): typeof fetch | undefined {
   ) as unknown as typeof fetch;
 }
 
+interface LLMProvider {
+  client: OpenAI;
+  model: string;
+  name: string;
+}
+
 /**
- * LLM client setup.
- * Primary: Cerebras (Llama 3.1 8B) — fast and reliable
- * Fallback: Z.ai (GLM-4) — used only when Cerebras key is missing
+ * Build a prioritized list of available LLM providers.
+ * Order: Groq > Cerebras > Z.ai
+ * All use the OpenAI SDK interface.
  */
-function getClient(): { client: OpenAI; model: string } {
+function getProviders(): LLMProvider[] {
   const proxyFetch = getProxyFetch();
-  // Prefer Cerebras — fast inference, reliable
+  const providers: LLMProvider[] = [];
+
+  // Groq — free, fast, reliable
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    providers.push({
+      client: new OpenAI({
+        baseURL: "https://api.groq.com/openai/v1",
+        apiKey: groqKey,
+        timeout: 30_000,
+        fetch: proxyFetch,
+      }),
+      model: "llama-3.1-8b-instant",
+      name: "Groq",
+    });
+  }
+
+  // Cerebras — fast inference
   const cerebrasKey = process.env.CEREBRAS_API_KEY;
   if (cerebrasKey) {
-    return {
+    providers.push({
       client: new OpenAI({
         baseURL: "https://api.cerebras.ai/v1",
         apiKey: cerebrasKey,
@@ -48,12 +71,14 @@ function getClient(): { client: OpenAI; model: string } {
         fetch: proxyFetch,
       }),
       model: "llama3.1-8b",
-    };
+      name: "Cerebras",
+    });
   }
-  // Fallback: Z.ai
+
+  // Z.ai — GLM-4
   const zaiKey = process.env.ZAI_API_KEY;
   if (zaiKey) {
-    return {
+    providers.push({
       client: new OpenAI({
         baseURL: "https://api.z.ai/api/paas/v4",
         apiKey: zaiKey,
@@ -61,27 +86,15 @@ function getClient(): { client: OpenAI; model: string } {
         fetch: proxyFetch,
       }),
       model: "glm-4",
-    };
+      name: "Z.ai",
+    });
   }
-  throw new Error("No LLM API key set. Set CEREBRAS_API_KEY or ZAI_API_KEY.");
-}
 
-/** Get Z.ai as explicit fallback (when Cerebras is primary but fails) */
-function getFallbackClient(): { client: OpenAI; model: string } | null {
-  const proxyFetch = getProxyFetch();
-  // If Cerebras is primary, try Z.ai as fallback
-  if (process.env.CEREBRAS_API_KEY && process.env.ZAI_API_KEY) {
-    return {
-      client: new OpenAI({
-        baseURL: "https://api.z.ai/api/paas/v4",
-        apiKey: process.env.ZAI_API_KEY,
-        timeout: 30_000,
-        fetch: proxyFetch,
-      }),
-      model: "glm-4",
-    };
+  if (providers.length === 0) {
+    throw new Error("No LLM API key set. Set GROQ_API_KEY, CEREBRAS_API_KEY, or ZAI_API_KEY.");
   }
-  return null;
+
+  return providers;
 }
 
 interface RequestBody {
@@ -134,49 +147,36 @@ function isRetryableError(error: unknown): boolean {
   return false;
 }
 
-/** Make an LLM call with exponential backoff retry, with automatic fallback */
+/** Make an LLM call, trying each provider in order with retry on retryable errors */
 async function callWithRetry(
   messages: OpenAI.ChatCompletionMessageParam[]
 ): Promise<string> {
-  const primary = getClient();
+  const providers = getProviders();
   let lastError: unknown;
 
-  for (let attempt = 0; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
-    try {
-      const response = await primary.client.chat.completions.create({
-        model: primary.model,
-        messages,
-        max_tokens: 1024,
-      });
-      return response.choices[0]?.message?.content ?? "";
-    } catch (error) {
-      lastError = error;
-      if (!isRetryableError(error) || attempt >= MAX_RETRY_ATTEMPTS) {
-        break;
+  for (const provider of providers) {
+    for (let attempt = 0; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+      try {
+        const response = await provider.client.chat.completions.create({
+          model: provider.model,
+          messages,
+          max_tokens: 1024,
+        });
+        return response.choices[0]?.message?.content ?? "";
+      } catch (error) {
+        lastError = error;
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[DM API] ${provider.name} attempt ${attempt + 1} failed: ${errMsg}`
+        );
+        if (!isRetryableError(error) || attempt >= MAX_RETRY_ATTEMPTS) {
+          break; // Move to next provider
+        }
+        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+        await sleep(delay);
       }
-      const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
-      console.warn(
-        `[DM API] Retry ${attempt + 1}/${MAX_RETRY_ATTEMPTS} after ${delay}ms`,
-        error instanceof Error ? error.message : error
-      );
-      await sleep(delay);
     }
-  }
-
-  // Try fallback LLM provider
-  const fallback = getFallbackClient();
-  if (fallback) {
-    console.warn("[DM API] Primary failed, trying fallback...");
-    try {
-      const response = await fallback.client.chat.completions.create({
-        model: fallback.model,
-        messages,
-        max_tokens: 1024,
-      });
-      return response.choices[0]?.message?.content ?? "";
-    } catch (fallbackError) {
-      console.error("[DM API] Fallback also failed:", fallbackError instanceof Error ? fallbackError.message : fallbackError);
-    }
+    console.warn(`[DM API] ${provider.name} exhausted, trying next provider...`);
   }
 
   throw lastError;
