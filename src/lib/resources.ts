@@ -229,6 +229,39 @@ export function buildResourcePool(
     });
   }
 
+  // ── Sorcerer: Sorcery Points (level / long rest, level 2+) ──
+  if (cls === "Sorcerer" && level >= 2) {
+    resources.push({
+      key: "sorcery_points",
+      label: "Sorcery Points",
+      current: level,
+      max: level,
+      rechargesOn: "long",
+    });
+  }
+
+  // ── Ranger: Hunter's Mark (concentration, costs spell slot — tracked as active state) ──
+  if (cls === "Ranger") {
+    resources.push({
+      key: "favored_enemy",
+      label: "Favored Enemy",
+      current: 1,
+      max: 1,
+      rechargesOn: "long",
+    });
+  }
+
+  // ── Wizard: Arcane Recovery (1/long rest, regain spell slots on short rest) ──
+  if (cls === "Wizard") {
+    resources.push({
+      key: "arcane_recovery",
+      label: "Arcane Recovery",
+      current: 1,
+      max: 1,
+      rechargesOn: "long",
+    });
+  }
+
   // ── Warlock: Pact Magic Slots (recharge on short rest) ──
   if (cls === "Warlock") {
     const pact = WARLOCK_SLOTS[level] ?? WARLOCK_SLOTS[1];

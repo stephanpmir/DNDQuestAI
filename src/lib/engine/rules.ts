@@ -39,6 +39,10 @@ type ActionType =
   | "flurry_of_blows"
   | "lay_on_hands"
   | "divine_smite"
+  | "hunters_mark"
+  | "favored_enemy"
+  | "metamagic"
+  | "arcane_recovery"
   | "identify_item"
   | "self_harm"
   | "death_save"
@@ -55,6 +59,10 @@ const ACTION_PATTERNS: [RegExp, ActionType][] = [
   [/\b(flurry of blows|ki strike|ki attack|stunning strike|patient defense|step of the wind)\b/i, "flurry_of_blows"],
   [/\b(lay on hands|laying on hands|heal with hands|divine healing touch)\b/i, "lay_on_hands"],
   [/\b(divine smite|smite|holy smite|radiant smite)\b/i, "divine_smite"],
+  [/\b(hunter'?s mark|mark target|mark prey|mark the)\b/i, "hunters_mark"],
+  [/\b(favored enemy|study enemy|track prey|natural explorer)\b/i, "favored_enemy"],
+  [/\b(metamagic|quicken spell|twin spell|subtle spell|empower spell|heighten spell|careful spell|distant spell|extended spell|sorcery point)\b/i, "metamagic"],
+  [/\b(arcane recovery|recover spell|recover slots|study spellbook|arcane rest)\b/i, "arcane_recovery"],
   [/\b(identify|appraise|examine closely|inspect item|study item)\b/i, "identify_item"],
   [/\b(attack|strike|hit|fight|slash|stab|shoot|swing)\b/i, "attack"],
   [/\b(cast|spell|fireball|fire bolt|eldritch blast|magic missile|sacred flame|cure wounds|healing word|goodberry|thunderwave|burning hands|chromatic orb|guiding bolt|inflict wounds|ray of sickness|hellish rebuke|shocking grasp|acid splash|poison spray|vicious mockery|chill touch|ray of frost|thorn whip|produce flame|shillelagh|witch bolt)\b/i, "cast_spell"],
@@ -200,6 +208,10 @@ function detectAction(playerInput: string, character: Character): ActionType {
       if (action === "rage" && character.class !== "Barbarian") continue;
       if (action === "flurry_of_blows" && character.class !== "Monk") continue;
       if (action === "bardic_inspiration" && character.class !== "Bard") continue;
+      if (action === "hunters_mark" && character.class !== "Ranger") continue;
+      if (action === "favored_enemy" && character.class !== "Ranger") continue;
+      if (action === "metamagic" && character.class !== "Sorcerer") continue;
+      if (action === "arcane_recovery" && character.class !== "Wizard") continue;
       return action;
     }
   }
@@ -1900,6 +1912,199 @@ export function resolveAction(
         dc: 0,
         success: true,
         reason: "Rage activated — primal fury surges through your veins",
+      };
+      break;
+    }
+
+    case "hunters_mark": {
+      // Ranger class feature: mark a target for bonus damage (1d6 per hit)
+      // Costs a spell slot (concentration spell)
+      if (character.class !== "Ranger") {
+        outcome.actionDenied = {
+          reason: `Hunter's Mark is a Ranger class feature. As a ${character.class}, you don't have this ability.`,
+          attempted: "use Hunter's Mark",
+        };
+        break;
+      }
+      // Requires a spell slot
+      {
+        const slotKey = findSpellSlot(resources);
+        if (!slotKey) {
+          outcome.actionDenied = {
+            reason: "You have no spell slots remaining to cast Hunter's Mark.",
+            attempted: "use Hunter's Mark",
+          };
+          break;
+        }
+        const consumed = consumeResource(resources, slotKey);
+        resources = consumed.pool;
+      }
+      // Hunter's Mark: bonus 1d6 damage on next attack against marked target
+      const markDmg = d(6);
+      outcome.roll = {
+        type: "check",
+        ability: "wisdom",
+        rolled: markDmg,
+        modifier: 0,
+        total: markDmg,
+        dc: 0,
+        success: true,
+        reason: `Hunter's Mark — you focus on your quarry, gaining +1d6 damage per hit against the marked target`,
+      };
+      outcome.xpGained = explorationXpReward(character.level);
+      break;
+    }
+
+    case "favored_enemy": {
+      // Ranger class feature: gain advantage on tracking and knowledge checks
+      if (character.class !== "Ranger") {
+        outcome.actionDenied = {
+          reason: `Favored Enemy is a Ranger class feature. As a ${character.class}, you don't have this ability.`,
+          attempted: "use Favored Enemy",
+        };
+        break;
+      }
+      {
+        const consumed = consumeResource(resources, "favored_enemy");
+        if (!consumed.success) {
+          outcome.actionDenied = {
+            reason: "You've already called upon your knowledge of favored enemies. This ability refreshes after a long rest.",
+            attempted: "use Favored Enemy",
+          };
+          break;
+        }
+        resources = consumed.pool;
+      }
+      // Wisdom-based tracking/knowledge check at advantage (roll twice, take best)
+      const prof = proficiencyBonus(character.level);
+      const wisMod = modifier(character.abilityScores.wisdom);
+      const dc = levelScaledDC(10, character.level);
+      const roll1 = lucky ? d20Lucky() : d20();
+      const roll2 = lucky ? d20Lucky() : d20();
+      const bestRoll = Math.max(roll1, roll2);
+      const total = bestRoll + wisMod + prof;
+      const success = total >= dc;
+      outcome.roll = {
+        type: "check",
+        ability: "wisdom",
+        rolled: bestRoll,
+        modifier: wisMod + prof,
+        total,
+        dc,
+        success,
+        reason: success
+          ? "Favored Enemy — your expertise reveals the creature's weaknesses and habits"
+          : "Favored Enemy — you search your memory but this creature doesn't match your studied foes",
+      };
+      if (success) {
+        outcome.xpGained = explorationXpReward(character.level);
+      }
+      break;
+    }
+
+    case "metamagic": {
+      // Sorcerer class feature: spend Sorcery Points for spell modifications
+      if (character.class !== "Sorcerer") {
+        outcome.actionDenied = {
+          reason: `Metamagic is a Sorcerer class feature. As a ${character.class}, you don't have this ability.`,
+          attempted: "use Metamagic",
+        };
+        break;
+      }
+      if (character.level < 3) {
+        outcome.actionDenied = {
+          reason: "You haven't yet learned to shape raw magical energy. Sorcerers gain Metamagic at level 3.",
+          attempted: "use Metamagic",
+        };
+        break;
+      }
+      // Determine which metamagic option and cost
+      const metaLower = playerInput.toLowerCase();
+      let spCost = 1;
+      let metaName = "Metamagic";
+      if (/quicken/i.test(metaLower)) { spCost = 2; metaName = "Quickened Spell"; }
+      else if (/twin/i.test(metaLower)) { spCost = 1; metaName = "Twinned Spell"; }
+      else if (/subtle/i.test(metaLower)) { spCost = 1; metaName = "Subtle Spell"; }
+      else if (/empower/i.test(metaLower)) { spCost = 1; metaName = "Empowered Spell"; }
+      else if (/heighten/i.test(metaLower)) { spCost = 3; metaName = "Heightened Spell"; }
+      else if (/careful/i.test(metaLower)) { spCost = 1; metaName = "Careful Spell"; }
+      else if (/distant/i.test(metaLower)) { spCost = 1; metaName = "Distant Spell"; }
+      else if (/extended/i.test(metaLower)) { spCost = 1; metaName = "Extended Spell"; }
+
+      // Consume sorcery points
+      {
+        const consumed = consumeResource(resources, "sorcery_points", spCost);
+        if (!consumed.success) {
+          const remaining = resources.find((r) => r.key === "sorcery_points");
+          outcome.actionDenied = {
+            reason: `Not enough Sorcery Points for ${metaName} (costs ${spCost}, you have ${remaining?.current ?? 0}). They recharge after a long rest.`,
+            attempted: `use ${metaName}`,
+          };
+          break;
+        }
+        resources = consumed.pool;
+      }
+      outcome.roll = {
+        type: "check",
+        ability: "charisma",
+        rolled: spCost,
+        modifier: 0,
+        total: spCost,
+        dc: 0,
+        success: true,
+        reason: `${metaName} — you bend the Weave with innate power (${spCost} Sorcery Point${spCost > 1 ? "s" : ""} spent)`,
+      };
+      outcome.xpGained = explorationXpReward(character.level);
+      break;
+    }
+
+    case "arcane_recovery": {
+      // Wizard class feature: recover spell slots during a short rest (1/day)
+      if (character.class !== "Wizard") {
+        outcome.actionDenied = {
+          reason: `Arcane Recovery is a Wizard class feature. As a ${character.class}, you don't have this ability.`,
+          attempted: "use Arcane Recovery",
+        };
+        break;
+      }
+      {
+        const consumed = consumeResource(resources, "arcane_recovery");
+        if (!consumed.success) {
+          outcome.actionDenied = {
+            reason: "You've already used Arcane Recovery today. It refreshes after a long rest.",
+            attempted: "use Arcane Recovery",
+          };
+          break;
+        }
+        resources = consumed.pool;
+      }
+      // Recover spell slots: total levels recovered = ceil(wizard level / 2), max slot level 5
+      const recoveryLevels = Math.ceil(character.level / 2);
+      let levelsLeft = recoveryLevels;
+      const recovered: string[] = [];
+      // Recover lowest-level slots first
+      for (let lvl = 1; lvl <= 5 && levelsLeft > 0; lvl++) {
+        const key = `spell_slot_${lvl}`;
+        const slot = resources.find((r) => r.key === key);
+        if (slot && slot.current < slot.max) {
+          const canRecover = Math.min(slot.max - slot.current, Math.floor(levelsLeft / lvl));
+          if (canRecover > 0) {
+            slot.current += canRecover;
+            levelsLeft -= canRecover * lvl;
+            recovered.push(`${canRecover} Lv${lvl}`);
+          }
+        }
+      }
+      const recoveredStr = recovered.length > 0 ? recovered.join(", ") : "none (all full)";
+      outcome.roll = {
+        type: "check",
+        ability: "intelligence",
+        rolled: recoveryLevels,
+        modifier: 0,
+        total: recoveryLevels,
+        dc: 0,
+        success: true,
+        reason: `Arcane Recovery — studying your spellbook, you recover: ${recoveredStr} spell slot${recovered.length !== 1 ? "s" : ""}`,
       };
       break;
     }
