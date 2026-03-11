@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Character, Gender, Race, CharacterClass, AbilityScores, AvatarCustomization, BeginnerSurvey } from "@/types/character";
 import { createDefaultCharacter, getXpToNextLevel } from "@/types/character";
-import { getDefaultEquipped, getItemInfo } from "@/lib/items";
+import { getDefaultEquipped, getItemInfo, getEquipSlot, SLOT_LIMITS } from "@/lib/items";
 import { RACIAL_DATA, applyRacialBonuses } from "@/lib/races";
 
 interface CharacterStore {
@@ -285,9 +285,22 @@ export const useCharacterStore = create<CharacterStore>()(
 
       equipItem: (item) =>
         set((s) => {
-          const newEquipped = s.character.equipped.includes(item)
-            ? s.character.equipped
-            : [...s.character.equipped, item];
+          if (s.character.equipped.includes(item)) {
+            return s; // Already equipped
+          }
+          // Enforce slot limits: unequip existing item in same slot if at limit
+          const slot = getEquipSlot(item);
+          let filtered = [...s.character.equipped];
+          if (slot !== "none") {
+            const limit = SLOT_LIMITS[slot] ?? 1;
+            const inSlot = filtered.filter((e) => getEquipSlot(e) === slot);
+            if (inSlot.length >= limit) {
+              // Remove oldest item in this slot to make room
+              const toRemove = inSlot[0];
+              filtered = filtered.filter((e) => e !== toRemove);
+            }
+          }
+          const newEquipped = [...filtered, item];
           const ac = computeAC(
             s.character.class, s.character.abilityScores.dexterity,
             s.character.abilityScores.constitution, s.character.abilityScores.wisdom,

@@ -96,7 +96,15 @@ function detectAction(playerInput: string, character: Character): ActionType {
   }
 
   for (const [pattern, action] of ACTION_PATTERNS) {
-    if (pattern.test(playerInput)) return action;
+    if (pattern.test(playerInput)) {
+      // Class-gated actions: if a non-matching class triggers a class-specific action
+      // via a common word (e.g. "smite" for non-Paladins), fall through to "attack" instead
+      if (action === "divine_smite" && character.class !== "Paladin") continue;
+      if (action === "rage" && character.class !== "Barbarian") continue;
+      if (action === "flurry_of_blows" && character.class !== "Monk") continue;
+      if (action === "bardic_inspiration" && character.class !== "Bard") continue;
+      return action;
+    }
   }
   return "unknown";
 }
@@ -737,8 +745,8 @@ export function resolveAction(
       const enemy = scaledEnemy(character.level);
       let atkBonus = prof;
 
-      // Apply Fighting Style: Archery (+2 ranged attack)
-      if (isRanged && character.fightingStyle?.includes("Archery")) {
+      // Apply Fighting Style: Archery (+2 ranged WEAPON attack, not spells)
+      if (isRanged && !isSpell && character.fightingStyle?.includes("Archery")) {
         atkBonus += 2;
       }
 
@@ -765,8 +773,10 @@ export function resolveAction(
           if (character.class === "Monk") {
             const martialArtsDie = character.level >= 17 ? 10 : character.level >= 11 ? 8 : character.level >= 5 ? 6 : 4;
             // Use Martial Arts die if it's better than the weapon (or if unarmed/punch/kick)
-            const isUnarmed = /\b(punch|kick|unarmed|strike|fist|elbow|knee|headbutt)\b/i.test(playerInput);
-            if (isUnarmed || martialArtsDie > diceSides) {
+            // Note: "strike" excluded — too common in weapon attack phrasing ("I strike with my sword")
+            const isUnarmed = /\b(punch|kick|unarmed|fist|elbow|knee|headbutt|open hand)\b/i.test(playerInput);
+            const mentionsWeapon = /\b(sword|axe|mace|hammer|club|dagger|rapier|greatsword|longsword|shortsword|halberd|spear|glaive|quarterstaff|flail|morningstar|warhammer|battleaxe|scimitar|trident|pike|maul|whip)\b/i.test(playerInput);
+            if (isUnarmed || (!mentionsWeapon && martialArtsDie > diceSides)) {
               baseDiceCount = 1;
               diceSides = martialArtsDie;
             }
@@ -910,7 +920,11 @@ export function resolveAction(
 
           if (encounterType.type === "combat") {
             // Combat encounter on the road — resolved silently
-            const atkAbility = getAttackAbility(character, playerInput, false, false);
+            // Check equipped weapons for ranged to avoid penalizing DEX-based characters
+            const travelHasRanged = (character.equipped ?? []).some((w) =>
+              RANGED_WEAPONS.some((r) => w.toLowerCase().includes(r))
+            );
+            const atkAbility = getAttackAbility(character, playerInput, false, travelHasRanged);
             const atkScore = character.abilityScores[atkAbility];
             const prof = proficiencyBonus(character.level);
             const enemy = scaledEnemy(character.level);
@@ -973,11 +987,14 @@ export function resolveAction(
         }
         // Safe travel (no encounter) — no roll needed, just arrive
       } else if (!outcome.locationChange) {
-        // Not traveling, just looking around locally
+        // Not traveling, just looking around locally — use appropriate ability
+        // "investigate" uses INT, "search/look" uses WIS, etc.
+        const exploreAbility = getSkillAbility(playerInput);
         const dc = levelScaledDC(10, character.level);
         const prof = proficiencyBonus(character.level);
-        const perc = abilityCheck(character.abilityScores.wisdom, dc, "wisdom", prof, lucky);
-        outcome.roll = { ...perc, reason: "Perception check — searching the area" };
+        const perc = abilityCheck(character.abilityScores[exploreAbility], dc, exploreAbility, prof, lucky);
+        const exploreName = exploreAbility.charAt(0).toUpperCase() + exploreAbility.slice(1);
+        outcome.roll = { ...perc, reason: `${exploreName} check — searching the area` };
         if (perc.success) {
           outcome.xpGained = explorationXpReward(character.level);
         }
@@ -1208,7 +1225,8 @@ export function resolveAction(
         success: true,
         reason: `Breath Weapon — ${breathDice}d6 elemental damage`,
       };
-      outcome.xpGained = combatXpReward(character.level);
+      // Reduced XP for Breath Weapon (no risk of counterattack, guaranteed hit)
+      outcome.xpGained = skillCheckXpReward(character.level);
       break;
     }
 
@@ -1298,7 +1316,8 @@ export function resolveAction(
           reason: `Channel Divinity: Turn Undead — DC ${8 + prof + wisMod} WIS save or be turned`,
         };
       }
-      outcome.xpGained = combatXpReward(character.level);
+      // Reduced XP for Channel Divinity (no risk of counterattack)
+      outcome.xpGained = skillCheckXpReward(character.level);
       break;
     }
 
