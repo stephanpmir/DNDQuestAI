@@ -3,16 +3,17 @@ import { NextResponse } from "next/server";
 /**
  * Diagnostic: tests server-side connectivity to the configured LLM(s).
  * Visit /api/dm-test in the browser to see JSON results.
+ * Order: Cerebras → Z.ai → Groq → Moonshot
  */
 export async function GET() {
   const results: Record<string, unknown> = {
     cerebrasKeySet: !!process.env.CEREBRAS_API_KEY,
-    groqKeySet: !!process.env.GROQ_API_KEY,
     zaiKeySet: !!process.env.ZAI_API_KEY,
+    groqKeySet: !!process.env.GROQ_API_KEY,
     moonshotKeySet: !!process.env.MOONSHOT_API_KEY,
   };
 
-  // Test Cerebras
+  // Test Cerebras (llama-3.3-70b)
   if (process.env.CEREBRAS_API_KEY) {
     try {
       const res = await fetch("https://api.cerebras.ai/v1/chat/completions", {
@@ -22,7 +23,7 @@ export async function GET() {
           "Authorization": `Bearer ${process.env.CEREBRAS_API_KEY}`,
         },
         body: JSON.stringify({
-          model: "llama3.1-8b",
+          model: "llama-3.3-70b",
           messages: [{ role: "user", content: "Say hi in 3 words" }],
           max_tokens: 20,
         }),
@@ -42,7 +43,37 @@ export async function GET() {
     }
   }
 
-  // Test Groq
+  // Test Z.ai (GLM-4.5-Flash — free, non-reasoning)
+  if (process.env.ZAI_API_KEY) {
+    try {
+      const res = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.ZAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "GLM-4.5-Flash",
+          messages: [{ role: "user", content: "Say hi in 3 words" }],
+          max_tokens: 20,
+        }),
+        signal: AbortSignal.timeout(25_000),
+      });
+      const body = await res.text();
+      results.zai = {
+        success: res.ok,
+        status: res.status,
+        body: body.slice(0, 500),
+      };
+    } catch (error) {
+      results.zai = {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  // Test Groq (llama-3.1-8b-instant)
   if (process.env.GROQ_API_KEY) {
     try {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -72,37 +103,7 @@ export async function GET() {
     }
   }
 
-  // Test Z.ai
-  if (process.env.ZAI_API_KEY) {
-    try {
-      const res = await fetch("https://api.z.ai/api/paas/v4/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.ZAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "GLM-4.7-Flash",
-          messages: [{ role: "user", content: "Say hi in 3 words" }],
-          max_tokens: 20,
-        }),
-        signal: AbortSignal.timeout(25_000),
-      });
-      const body = await res.text();
-      results.zai = {
-        success: res.ok,
-        status: res.status,
-        body: body.slice(0, 500),
-      };
-    } catch (error) {
-      results.zai = {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-  }
-
-  // Test Moonshot
+  // Test Moonshot (moonshot-v1-8k)
   if (process.env.MOONSHOT_API_KEY) {
     try {
       const res = await fetch("https://api.moonshot.ai/v1/chat/completions", {

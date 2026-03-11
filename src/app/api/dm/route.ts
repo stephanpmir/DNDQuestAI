@@ -38,18 +38,18 @@ interface LLMProvider {
 
 /**
  * Build a prioritized list of available LLM providers.
- * Order by best cost/performance (all-free first, then capped-free, then paid):
- *   1. Cerebras  — FREE (1M tokens/day, 8K context), 2246 TPS
- *   2. Z.ai      — FREE (GLM-4.7-Flash, $0 unlimited, no daily cap)
- *   3. Groq      — FREE tier (~30k TPM, rate-limited), 840 TPS
- *   4. Moonshot   — PAID ($0.20/$2.00 per M tokens, last resort)
+ * Order: Cerebras → Z.ai → Groq → Moonshot
+ *   1. Cerebras  — FREE (1M tokens/day), llama-3.3-70b
+ *   2. Z.ai      — FREE (GLM-4.5-Flash, $0 unlimited, non-reasoning)
+ *   3. Groq      — FREE tier (rate-limited), llama-3.1-8b-instant
+ *   4. Moonshot   — PAID last resort, moonshot-v1-8k
  * All use the OpenAI SDK interface.
  */
 function getProviders(): LLMProvider[] {
   const proxyFetch = getProxyFetch();
   const providers: LLMProvider[] = [];
 
-  // 1. Cerebras — FREE (1M tokens/day), fastest inference (2246 TPS)
+  // 1. Cerebras — FREE (1M tokens/day), llama-3.3-70b
   const cerebrasKey = process.env.CEREBRAS_API_KEY;
   if (cerebrasKey) {
     providers.push({
@@ -59,22 +59,22 @@ function getProviders(): LLMProvider[] {
         timeout: 30_000,
         fetch: proxyFetch,
       }),
-      model: "llama3.1-8b",
+      model: "llama-3.3-70b",
       name: "Cerebras",
     });
   }
 
-  // 2. Z.ai — FREE (GLM-4.7-Flash: $0 input + output, unlimited)
+  // 2. Z.ai — FREE (GLM-4.5-Flash: $0, non-reasoning model, no empty-content issue)
   const zaiKey = process.env.ZAI_API_KEY;
   if (zaiKey) {
     providers.push({
       client: new OpenAI({
-        baseURL: "https://api.z.ai/api/paas/v4",
+        baseURL: "https://open.bigmodel.cn/api/paas/v4",
         apiKey: zaiKey,
         timeout: 30_000,
         fetch: proxyFetch,
       }),
-      model: "GLM-4.7-Flash",
+      model: "GLM-4.5-Flash",
       name: "Z.ai",
     });
   }
@@ -166,7 +166,8 @@ function isRetryableError(error: unknown): boolean {
   return false;
 }
 
-/** Make an LLM call, trying each provider in order with retry on retryable errors */
+/** Make an LLM call, trying each provider in order with retry on retryable errors.
+ *  Empty content (200 but no text) is treated as a failure and falls through. */
 async function callWithRetry(
   messages: OpenAI.ChatCompletionMessageParam[]
 ): Promise<string> {
@@ -181,7 +182,16 @@ async function callWithRetry(
           messages,
           max_tokens: 1024,
         });
-        return response.choices[0]?.message?.content ?? "";
+        const content = response.choices[0]?.message?.content;
+        // Treat empty/null content as failure (e.g. reasoning-token overflow)
+        if (!content || content.trim().length === 0) {
+          console.warn(
+            `[DM API] ${provider.name} returned empty content, treating as failure`
+          );
+          lastError = new Error(`${provider.name} returned empty content`);
+          break; // Move to next provider (no point retrying empty responses)
+        }
+        return content;
       } catch (error) {
         lastError = error;
         const errMsg = error instanceof Error ? error.message : String(error);
