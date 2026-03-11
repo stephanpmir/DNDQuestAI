@@ -138,6 +138,8 @@ export interface Character {
   avatar: AvatarCustomization;
   /** AI-generated avatar image (base64 data URL) */
   avatarUrl?: string;
+  /** Free-form appearance description entered by the player */
+  appearanceDescription?: string;
   /** Beginner survey answers (undefined if skipped) */
   beginnerSurvey?: BeginnerSurvey;
   /** Half-Orc Relentless Endurance used this rest cycle */

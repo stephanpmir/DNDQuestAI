@@ -17,6 +17,7 @@ import { StepClass } from "./step-class";
 import { StepAbilities } from "./step-abilities";
 import { StepSkills } from "./step-skills";
 import { StepReview } from "./step-review";
+import { StepAppearance } from "./step-appearance";
 import { StepSurvey } from "./step-survey";
 import { StepSuggestion } from "./step-suggestion";
 import { recommend, type SurveyRecommendation } from "@/lib/survey-recommend";
@@ -30,6 +31,7 @@ const STEP_LABELS = [
   "Abilities",
   "Skills",
   "Review",
+  "Appearance",
 ];
 
 /** Pick a random element from an array */
@@ -59,6 +61,7 @@ export function CharacterWizard() {
     setHalfElfBonuses,
     setAvatar,
     setAvatarUrl,
+    setAppearanceDescription,
     setBeginnerSurvey,
     finalizeCharacter,
   } = useCharacterStore();
@@ -72,6 +75,7 @@ export function CharacterWizard() {
   const [showPortrait, setShowPortrait] = useState(false);
   const [surveyData, setSurveyData] = useState<BeginnerSurvey | null>(null);
   const [surveyRec, setSurveyRec] = useState<SurveyRecommendation | null>(null);
+  const [portraitPrompt, setPortraitPrompt] = useState<string | null>(null);
 
   // Local UI state for selections
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
@@ -80,14 +84,16 @@ export function CharacterWizard() {
   const [selectedFightingStyle, setSelectedFightingStyle] = useState("");
   const [halfElfBonus1, setHalfElfBonus1] = useState("");
   const [halfElfBonus2, setHalfElfBonus2] = useState("");
+  const [appearanceText, setAppearanceText] = useState("");
 
   const classData = CLASS_DATA[character.class as CharacterClass];
 
   /** Common finalization: show portrait interstitial instead of navigating immediately */
-  function finalizeAndShowPortrait() {
+  function finalizeAndShowPortrait(customPrompt?: string) {
     resetGame();
     resetWorld();
     resetKarma();
+    if (customPrompt) setPortraitPrompt(customPrompt);
     setTimeout(() => {
       finalizeCharacter();
       setShowPortrait(true);
@@ -210,7 +216,8 @@ export function CharacterWizard() {
     [classData.spellsKnown]
   );
 
-  function handleSubmit() {
+  /** Save skill selections and advance to appearance step */
+  function handleReviewSubmit() {
     setSkillProficiencies(selectedSkills);
     if (selectedCantrips.length > 0) setCantrips(selectedCantrips);
     if (selectedSpells.length > 0) setSpells(selectedSpells);
@@ -218,8 +225,43 @@ export function CharacterWizard() {
     if (character.race === "Half-Elf" && halfElfBonus1 && halfElfBonus2) {
       setHalfElfBonuses([halfElfBonus1, halfElfBonus2]);
     }
+    setStep(7);
+  }
 
-    finalizeAndShowPortrait();
+  /** Generate portrait from player's appearance description via LLM */
+  async function handleGeneratePortrait() {
+    setAppearanceDescription(appearanceText);
+
+    try {
+      const res = await fetch("/api/portrait-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: appearanceText,
+          race: character.race,
+          characterClass: character.class,
+          gender: character.gender,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        finalizeAndShowPortrait(data.prompt);
+        return;
+      }
+    } catch {
+      // Fall through to fallback
+    }
+
+    // Fallback: embed the description directly
+    const fallback = `fantasy portrait, ${character.gender.toLowerCase()} ${character.race.toLowerCase()} ${character.class.toLowerCase()}, ${appearanceText}, D&D character art, detailed painting, dark fantasy style, face visible, upper body, dramatic lighting`;
+    finalizeAndShowPortrait(fallback);
+  }
+
+  /** Skip description — use generic prompt from race/class/gender */
+  function handleSkipAppearance() {
+    const genericPrompt = `fantasy portrait, ${character.gender.toLowerCase()} ${character.race.toLowerCase()} ${character.class.toLowerCase()}, D&D character art, detailed painting, dark fantasy style, face visible, upper body, dramatic lighting`;
+    finalizeAndShowPortrait(genericPrompt);
   }
 
   function handleQuickStart() {
@@ -300,6 +342,7 @@ export function CharacterWizard() {
     return (
       <PortraitLoading
         character={useCharacterStore.getState().character}
+        customPrompt={portraitPrompt ?? undefined}
         onComplete={handlePortraitComplete}
       />
     );
@@ -433,7 +476,16 @@ export function CharacterWizard() {
           selectedSpells={selectedSpells}
           selectedFightingStyle={selectedFightingStyle}
           onBack={() => setStep(5)}
-          onSubmit={handleSubmit}
+          onSubmit={handleReviewSubmit}
+        />
+      )}
+      {step === 7 && (
+        <StepAppearance
+          description={appearanceText}
+          onDescriptionChange={setAppearanceText}
+          onGenerate={handleGeneratePortrait}
+          onSkip={handleSkipAppearance}
+          onBack={() => setStep(6)}
         />
       )}
     </div>

@@ -23,6 +23,7 @@ interface CharacterStore {
   setHalfElfBonuses: (bonuses: [string, string]) => void;
   setAvatar: (avatar: Partial<AvatarCustomization>) => void;
   setAvatarUrl: (url: string) => void;
+  setAppearanceDescription: (desc: string) => void;
   setBeginnerSurvey: (survey: BeginnerSurvey) => void;
   finalizeCharacter: () => void;
   equipItem: (item: string) => void;
@@ -206,6 +207,9 @@ export const useCharacterStore = create<CharacterStore>()(
 
       setAvatarUrl: (url) =>
         set((s) => ({ character: { ...s.character, avatarUrl: url } })),
+
+      setAppearanceDescription: (desc) =>
+        set((s) => ({ character: { ...s.character, appearanceDescription: desc } })),
 
       setBeginnerSurvey: (survey) =>
         set((s) => ({ character: { ...s.character, beginnerSurvey: survey } })),

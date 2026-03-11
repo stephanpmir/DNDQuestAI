@@ -6,11 +6,13 @@ import type { Character } from "@/types/character";
 
 interface PortraitLoadingProps {
   character: Character;
+  /** Optional LLM-optimized prompt from the appearance step */
+  customPrompt?: string;
   onComplete: (portraitUrl: string | null) => void;
 }
 
 /** Full-screen interstitial shown while Pollinations generates the character portrait. */
-export function PortraitLoading({ character, onComplete }: PortraitLoadingProps) {
+export function PortraitLoading({ character, customPrompt, onComplete }: PortraitLoadingProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -21,7 +23,8 @@ export function PortraitLoading({ character, onComplete }: PortraitLoadingProps)
     // Use name seed + reroll offset for variation
     const baseSeed = nameToSeed(character.name || "adventurer");
     const seed = baseSeed + extraSeed;
-    const prompt = `fantasy portrait, ${character.gender.toLowerCase()} ${character.race.toLowerCase()} ${character.class.toLowerCase()}, D&D character art, detailed painting, dark fantasy style, face visible, upper body`;
+    const prompt = customPrompt
+      ?? `fantasy portrait, ${character.gender.toLowerCase()} ${character.race.toLowerCase()} ${character.class.toLowerCase()}, D&D character art, detailed painting, dark fantasy style, face visible, upper body, dramatic lighting`;
     const params = new URLSearchParams({
       prompt,
       width: "768",
@@ -30,7 +33,7 @@ export function PortraitLoading({ character, onComplete }: PortraitLoadingProps)
       enhance: "true",
     });
     return `/.netlify/functions/proxy-portrait?${params.toString()}`;
-  }, [character]);
+  }, [character, customPrompt]);
 
   // Build the Pollinations URL on mount
   useEffect(() => {
