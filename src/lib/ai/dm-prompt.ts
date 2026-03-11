@@ -95,7 +95,7 @@ ${formatResourcesForPrompt(character.resources)}
 ${karmaSection}${companionSection}${campaignSection}
 
 ## Critical Rules
-1. LANGUAGE: You MUST write your entire narrative in ENGLISH by default. ONLY switch to another language if the player's message is clearly written in a non-English language. If the player writes in French, respond entirely in French. If in Spanish, entirely in Spanish. But if there is ANY doubt, use English. Never mix languages. Never start in a random language. The first turn is ALWAYS in English. If the player switches back to English, immediately switch back to English.
+1. LANGUAGE: Detect the language of the player's MOST RECENT message and respond in THAT language ONLY. "I don't understand" is English — respond in English. "Je ne comprends pas" is French — respond in French. ONLY the player's actual typed words determine the language. NEVER infer language from character names, NPC names, location names, in-game dialogue, or story context. A player named "François" who types "I attack the goblin" is writing in ENGLISH. Default to ENGLISH when there is any ambiguity. Never mix languages in a single response.
 2. You are the NARRATOR, not the game master. The engine decides outcomes.
 3. When given an engine outcome (roll results, HP changes, items), you MUST incorporate those EXACT results into your narrative. Do not contradict them.
 4. If the engine says a roll failed, describe the failure. If it succeeded, describe success. Never override the engine.
@@ -130,15 +130,22 @@ Always include "narrative". Do NOT include gameStateUpdate, suggestedActions, or
  * AND provides the structured context window (anchors + retrieved facts).
  */
 /**
- * Detect the likely language of a player message using Unicode script analysis.
- * Returns "English" for ASCII-dominant text, or hints at the detected language.
- * This is a lightweight heuristic — not a full NLP language detector.
+ * Detect the language of the player's most recent message.
+ *
+ * Rules:
+ * - Non-Latin scripts (CJK, Cyrillic, Arabic, etc.) are detected by character ratio.
+ * - Latin-script languages require MULTIPLE common function words (articles,
+ *   pronouns, prepositions) to avoid false positives from proper nouns,
+ *   location names, or in-game terms that happen to look like foreign words.
+ * - Short messages (< 4 words) always default to English for Latin scripts,
+ *   since a single word like a character name can't reliably indicate language.
+ * - When in doubt, returns "English".
  */
 function detectPlayerLanguage(text: string): string {
   const cleaned = text.replace(/[0-9\s\p{P}\p{S}]/gu, "");
   if (cleaned.length === 0) return "English";
 
-  // Check for non-Latin scripts first (most reliable detection)
+  // Non-Latin scripts — detected by character ratio (reliable)
   const cjk = cleaned.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g);
   if (cjk && cjk.length > cleaned.length * 0.3) return "Chinese";
 
@@ -166,30 +173,40 @@ function detectPlayerLanguage(text: string): string {
   const hebrew = cleaned.match(/[\u0590-\u05ff]/g);
   if (hebrew && hebrew.length > cleaned.length * 0.3) return "Hebrew";
 
-  // For Latin-script languages, check for common non-ASCII diacritics and words
-  const hasLatinExtended = /[àâäéèêëïîôùûüÿçœæÀÂÄÉÈÊËÏÎÔÙÛÜŸÇŒÆ]/.test(cleaned);
-  const lower = text.toLowerCase();
+  // Latin-script languages — require strong evidence to avoid false positives
+  // from character names, location names, or in-game dialogue.
+  const words = text.toLowerCase().split(/\s+/).filter((w) => w.length > 0);
+  // Short messages can't reliably indicate a non-English Latin language
+  if (words.length < 4) return "English";
 
-  // French markers
-  if (hasLatinExtended && /\b(je|tu|il|elle|nous|vous|ils|les|une?|des|est|sont|avec|dans|pour|que|qui|sur|pas|mais|ou|cette?|mon|ton|son)\b/.test(lower)) {
-    return "French";
+  // Count function-word matches — require at least 2 distinct hits
+  function countMatches(pattern: RegExp): number {
+    const hits = new Set<string>();
+    for (const w of words) {
+      if (pattern.test(w)) hits.add(w);
+    }
+    return hits.size;
   }
-  // Spanish markers
-  if (/[áéíóúñ¿¡]/i.test(cleaned) || /\b(yo|tú|él|ella|nosotros|ellos|las|los|una?|del|está|son|con|para|que|pero|como|más|esta?|muy)\b/.test(lower)) {
-    return "Spanish";
-  }
-  // German markers
-  if (/[äöüß]/i.test(cleaned) || /\b(ich|du|er|sie|wir|ihr|das|die|der|den|ein|eine?|ist|sind|mit|für|auf|und|aber|oder|nicht|mein|dein)\b/.test(lower)) {
-    return "German";
-  }
-  // Portuguese markers
-  if (/[ãõçê]/i.test(cleaned) || /\b(eu|tu|ele|ela|nós|eles|uma?|das|dos|está|são|com|para|que|mas|como|mais|esta?|muito|não)\b/.test(lower)) {
-    return "Portuguese";
-  }
-  // Italian markers
-  if (/\b(io|tu|lui|lei|noi|voi|loro|una?|gli|della|delle|sono|con|per|che|ma|come|più|questa?|molto|non)\b/.test(lower)) {
-    return "Italian";
-  }
+
+  // French: require 2+ function words AND diacritics or strong word evidence
+  const frenchWords = /^(je|tu|il|elle|nous|vous|ils|elles|les|une?|des|est|sont|avec|dans|pour|qui|sur|pas|mais|cette?|mon|ton|son|mes|tes|ses|leur|aux|du|au)$/;
+  if (countMatches(frenchWords) >= 2) return "French";
+
+  // Spanish: require 2+ function words
+  const spanishWords = /^(yo|tú|él|ella|nosotros|ellos|ellas|las|los|una?|del|está|están|con|para|pero|como|más|esta|esto|muy|también|donde|cuando|tiene|tienen)$/;
+  if (countMatches(spanishWords) >= 2) return "Spanish";
+
+  // German: require 2+ function words
+  const germanWords = /^(ich|du|er|sie|wir|ihr|das|die|der|den|dem|des|ein|eine|einen|einem|ist|sind|mit|für|auf|und|aber|oder|nicht|mein|dein|sein|kein|nach|von)$/;
+  if (countMatches(germanWords) >= 2) return "German";
+
+  // Portuguese: require 2+ function words
+  const portugueseWords = /^(eu|ele|ela|nós|eles|elas|uma?|das|dos|está|estão|são|com|para|mas|como|mais|esta|muito|não|também|onde|quando|tem|têm)$/;
+  if (countMatches(portugueseWords) >= 2) return "Portuguese";
+
+  // Italian: require 2+ function words
+  const italianWords = /^(io|lui|lei|noi|voi|loro|gli|della|delle|dello|degli|sono|siamo|con|per|che|ma|come|più|questa|questo|molto|non|anche|dove|quando)$/;
+  if (countMatches(italianWords) >= 2) return "Italian";
 
   return "English";
 }
@@ -202,9 +219,9 @@ export function buildEngineContextMessage(
 ): string {
   const parts: string[] = [];
 
-  // Language detection: tell the LLM exactly what language to respond in
+  // Language detection based ONLY on the player's typed message
   const detectedLanguage = detectPlayerLanguage(playerAction);
-  parts.push(`## Response Language\nThe player's message is in **${detectedLanguage}**. You MUST write your entire narrative in **${detectedLanguage}**. Do not mix languages.`);
+  parts.push(`## Response Language\nThe player's message is in **${detectedLanguage}**. Respond ENTIRELY in **${detectedLanguage}**. Do NOT infer language from character names, NPC names, location names, or in-game terms — ONLY from the player's actual words.`);
 
   // Structured context (anchors + sliding window + retrieved)
   if (formattedContext) {
