@@ -6,6 +6,7 @@ import { useGameStore } from "@/stores/game-store";
 import { useWorldStore } from "@/stores/world-store";
 import { useKarmaStore } from "@/stores/karma-store";
 import { useCrimeStore } from "@/stores/crime-store";
+import { useLanguageStore } from "@/stores/language-store";
 import type { ChatMessage as ChatMessageType, DMResponsePayload } from "@/types/game";
 import type { WorldEvent } from "@/types/world";
 import { ChatMessage } from "./chat-message";
@@ -71,6 +72,9 @@ export function GameView() {
     markConfronted,
   } = useCrimeStore();
 
+  const languagePreference = useLanguageStore((s) => s.language);
+  const t = useLanguageStore((s) => s.t);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoStartFired = useRef(false);
 
@@ -112,6 +116,7 @@ export function GameView() {
             history: karmaHistory,
             companions,
           },
+          languagePreference: languagePreference !== "English" ? languagePreference : undefined,
         });
 
         // Retry logic for transient errors (502, 503, 504)
@@ -334,6 +339,7 @@ export function GameView() {
       addCrime,
       updateEvidence,
       markConfronted,
+      languagePreference,
     ]
   );
 
@@ -418,7 +424,7 @@ export function GameView() {
                   DM
                 </div>
                 <div className="bg-muted rounded-lg px-4 py-3 text-sm animate-pulse">
-                  The Dungeon Master is thinking...
+                  {t("game.dmThinking")}
                 </div>
               </div>
             )}
@@ -434,13 +440,13 @@ export function GameView() {
                 onClick={() => setSaveModalMode("save")}
                 className="text-[10px] text-muted-foreground/60 hover:text-foreground px-2 py-0.5 rounded transition-colors cursor-pointer"
               >
-                Save
+                {t("game.saveGame")}
               </button>
               <button
                 onClick={() => setSaveModalMode("load")}
                 className="text-[10px] text-muted-foreground/60 hover:text-foreground px-2 py-0.5 rounded transition-colors cursor-pointer"
               >
-                Load
+                {t("game.loadGame")}
               </button>
             </div>
           </div>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useLanguageStore } from "@/stores/language-store";
 import type { AppearanceFields } from "@/types/character";
 
 interface FieldConfig {
@@ -37,6 +38,7 @@ export function StepAppearance({
   onSkip,
   onBack,
 }: StepAppearanceProps) {
+  const t = useLanguageStore((s) => s.t);
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
   const filledCount = APPEARANCE_FIELD_CONFIG.filter((f) => fields[f.key].trim()).length;
@@ -55,12 +57,10 @@ export function StepAppearance({
             WebkitTextFillColor: "transparent",
           }}
         >
-          Describe Your Hero
+          {t("appearance.title")}
         </h2>
         <p className="text-sm text-[#8a8a8a] mt-1">
-          Fill in as many or as few details as you like. Your race, class, and
-          gender are already part of the portrait — these fields add the
-          finishing touches.
+          {t("appearance.description")}
         </p>
       </div>
 
@@ -102,13 +102,13 @@ export function StepAppearance({
               onClick={onBack}
               className="flex-1 bg-transparent border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-300 hover:bg-transparent"
             >
-              Back
+              {t("common.back")}
             </Button>
             <Button
               onClick={onGenerate}
               className="flex-1 bg-[#6b0000] hover:bg-[#7a0000] text-white border border-[#c9a227] font-cinzel tracking-wide transition-shadow hover:shadow-[0_0_12px_rgba(201,162,39,0.3)]"
             >
-              Generate My Portrait
+              {t("appearance.generate")}
             </Button>
           </div>
           <button
@@ -116,7 +116,7 @@ export function StepAppearance({
             onClick={onSkip}
             className="w-full text-center text-xs text-[#8a8a8a] hover:text-[#c9a227] transition-colors cursor-pointer py-1"
           >
-            Skip — Use Random Portrait
+            {t("appearance.skip")}
           </button>
         </div>
       </div>

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { SlotId, SaveSlot } from "@/stores/save-store";
 import { stashSnapshotForRestore } from "@/lib/save-snapshot";
 import { buildPollinationsUrl } from "@/lib/avatar";
+import { useLanguageStore } from "@/stores/language-store";
 
 const BG_PROMPT =
   "dark fantasy medieval landscape, dragon silhouette, dramatic stormy sky, red and gold lighting, cinematic wide shot, D&D concept art";
@@ -90,6 +91,7 @@ function formatTimeAgo(iso: string): string {
 
 export default function HomePage() {
   const router = useRouter();
+  const t = useLanguageStore((s) => s.t);
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [bgLoaded, setBgLoaded] = useState(false);
   const [saves, setSaves] = useState<SaveInfo[]>([]);
@@ -156,13 +158,13 @@ export default function HomePage() {
           </h1>
           <div className="h-px w-48 mx-auto bg-gradient-to-r from-transparent via-amber-500/50 to-transparent" />
           <p className="font-cinzel text-sm sm:text-base tracking-[0.3em] uppercase text-amber-200/70">
-            AI Dungeon Master
+            {t("landing.subtitle")}
           </p>
         </div>
 
         {/* Description */}
         <p className="text-base sm:text-lg text-gray-300/90 max-w-md mx-auto leading-relaxed">
-          Create a character, choose your path, and let the AI weave your story.
+          {t("landing.tagline")}
           <span className="block mt-1 text-amber-300/60 text-sm italic">
             Every decision matters.
           </span>
@@ -178,7 +180,7 @@ export default function HomePage() {
                 className="relative group w-full max-w-sm mx-auto px-8 py-4 font-cinzel text-base tracking-widest uppercase text-amber-100 bg-gradient-to-b from-amber-900/80 to-red-950/80 border border-amber-500/40 rounded-sm cursor-pointer transition-all duration-300 hover:border-amber-400/70 hover:from-amber-800/90 hover:to-red-900/90 animate-glow-pulse"
               >
                 <span className="absolute inset-0 rounded-sm bg-amber-400/0 group-hover:bg-amber-400/5 transition-colors duration-300" />
-                <span className="relative block">Continue Adventure</span>
+                <span className="relative block">{t("landing.continueAdventure")}</span>
               </button>
               <div className="mt-2 flex items-center justify-center gap-2 text-[11px] text-gray-400/70">
                 <span className="text-amber-300/70 font-cinzel font-semibold">
@@ -203,7 +205,7 @@ export default function HomePage() {
               >
                 <span className="absolute inset-0 rounded-sm bg-amber-400/0 group-hover:bg-amber-400/5 transition-colors duration-300" />
                 <span className="relative flex items-center gap-2">
-                  Load Game
+                  {t("landing.loadGame")}
                   <svg
                     width="12"
                     height="12"
@@ -268,7 +270,7 @@ export default function HomePage() {
               }`}
             >
               <span className="absolute inset-0 rounded-sm bg-amber-400/0 group-hover:bg-amber-400/5 transition-colors duration-300" />
-              <span className="relative">New Adventure</span>
+              <span className="relative">{t("landing.newAdventure")}</span>
             </button>
           </Link>
         </div>

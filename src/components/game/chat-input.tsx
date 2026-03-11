@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { useLanguageStore } from "@/stores/language-store";
 
 interface Props {
   onSend: (message: string) => void;
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function ChatInput({ onSend, disabled }: Props) {
+  const t = useLanguageStore((s) => s.t);
   const [value, setValue] = useState("");
 
   function handleSubmit(e: React.FormEvent) {
@@ -40,7 +42,7 @@ export function ChatInput({ onSend, disabled }: Props) {
           className="resize-none"
         />
         <Button type="submit" disabled={disabled || !value.trim()} className="self-end">
-          {disabled ? "..." : "Send"}
+          {disabled ? "..." : t("game.sendAction")}
         </Button>
       </form>
       <div className="flex gap-2">
@@ -52,7 +54,7 @@ export function ChatInput({ onSend, disabled }: Props) {
           onClick={() => onSend("I take a short rest")}
           className="text-xs"
         >
-          Short Rest
+          {t("game.shortRest")}
         </Button>
         <Button
           type="button"
@@ -62,7 +64,7 @@ export function ChatInput({ onSend, disabled }: Props) {
           onClick={() => onSend("I take a long rest and sleep for the night")}
           className="text-xs"
         >
-          Long Rest
+          {t("game.longRest")}
         </Button>
       </div>
     </div>

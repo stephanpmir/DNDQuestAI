@@ -10,6 +10,9 @@ import type { CharacterClass, Race, Gender, AbilityScores, BeginnerSurvey, Appea
 import { RACES, CLASSES, HAIR_STYLES, HAIR_COLORS, SKIN_TONES, BODY_BUILDS, HEIGHT_OPTIONS, createDefaultAppearanceFields } from "@/types/character";
 import { CLASS_DATA, FIGHTING_STYLES } from "@/lib/classes";
 import { generateRandomName } from "@/lib/descriptions";
+import { useLanguageStore, EN_STRINGS } from "@/stores/language-store";
+import type { UITranslations } from "@/stores/language-store";
+import { StepLanguage } from "./step-language";
 import { StepWelcome } from "./step-welcome";
 import { StepIdentity } from "./step-identity";
 import { StepRace } from "./step-race";
@@ -69,6 +72,9 @@ export function CharacterWizard() {
   const resetWorld = useWorldStore((s) => s.reset);
   const resetKarma = useKarmaStore((s) => s.reset);
 
+  const { language, isTranslating, setLanguage, setTranslations, setIsTranslating } = useLanguageStore();
+  const [languageConfirmed, setLanguageConfirmed] = useState(false);
+
   const [step, setStep] = useState(0);
   const [showSurvey, setShowSurvey] = useState(false);
   const [showSuggestion, setShowSuggestion] = useState(false);
@@ -76,6 +82,36 @@ export function CharacterWizard() {
   const [surveyData, setSurveyData] = useState<BeginnerSurvey | null>(null);
   const [surveyRec, setSurveyRec] = useState<SurveyRecommendation | null>(null);
   const [portraitPrompt, setPortraitPrompt] = useState<string | null>(null);
+
+  /** Handle language selection: translate UI if not English, then proceed */
+  async function handleLanguageSelect(lang: string) {
+    setLanguage(lang);
+
+    if (lang.toLowerCase() === "english") {
+      setTranslations(EN_STRINGS);
+      setLanguageConfirmed(true);
+      return;
+    }
+
+    // Translate all UI strings via LLM
+    setIsTranslating(true);
+    try {
+      const res = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ language: lang, strings: EN_STRINGS }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTranslations(data.translations as UITranslations);
+      } else {
+        setTranslations(EN_STRINGS);
+      }
+    } catch {
+      setTranslations(EN_STRINGS);
+    }
+    setLanguageConfirmed(true);
+  }
 
   // Local UI state for selections
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
@@ -375,8 +411,17 @@ export function CharacterWizard() {
         </div>
       )}
 
+      {/* Language selection — shown first before any wizard steps */}
+      {step === 0 && !languageConfirmed && (
+        <StepLanguage
+          selectedLanguage={language}
+          onSelect={handleLanguageSelect}
+          isTranslating={isTranslating}
+        />
+      )}
+
       {/* Steps */}
-      {step === 0 && !showSurvey && !showSuggestion && (
+      {step === 0 && languageConfirmed && !showSurvey && !showSuggestion && (
         <StepWelcome
           onNext={() => setStep(1)}
           onQuickStart={handleQuickStart}

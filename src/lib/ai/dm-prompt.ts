@@ -215,13 +215,16 @@ export function buildEngineContextMessage(
   playerAction: string,
   engineOutcome: EngineOutcome,
   formattedContext: string,
-  contradictionHint?: string
+  contradictionHint?: string,
+  languagePreference?: string
 ): string {
   const parts: string[] = [];
 
-  // Language detection based ONLY on the player's typed message
-  const detectedLanguage = detectPlayerLanguage(playerAction);
-  parts.push(`## Response Language\nThe player's message is in **${detectedLanguage}**. Respond ENTIRELY in **${detectedLanguage}**. Do NOT infer language from character names, NPC names, location names, or in-game terms — ONLY from the player's actual words.`);
+  // Use explicit language preference if set, otherwise auto-detect
+  const responseLanguage = (languagePreference && languagePreference.toLowerCase() !== "english")
+    ? languagePreference
+    : detectPlayerLanguage(playerAction);
+  parts.push(`## Response Language\nRespond ENTIRELY in **${responseLanguage}**. Do NOT mix languages. Do NOT infer language from character names, NPC names, location names, or in-game terms.`);
 
   // Structured context (anchors + sliding window + retrieved)
   if (formattedContext) {

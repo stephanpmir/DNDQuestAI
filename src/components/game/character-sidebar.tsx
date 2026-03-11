@@ -8,6 +8,7 @@ import { getAlignment, ALIGNMENT_LABELS } from "@/lib/karma";
 import { getItemIcon, getItemInfo } from "@/lib/items";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { useLanguageStore } from "@/stores/language-store";
 import { CharacterSheet } from "./character-sheet";
 
 export function CharacterSidebar() {
@@ -19,6 +20,7 @@ export function CharacterSidebar() {
   const [backpackOpen, setBackpackOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [portraitOpen, setPortraitOpen] = useState(false);
+  const t = useLanguageStore((s) => s.t);
 
   const alignment = getAlignment(character.karma);
   const alignmentLabel = ALIGNMENT_LABELS[alignment];
@@ -81,7 +83,7 @@ export function CharacterSidebar() {
         <div className="px-4 space-y-1.5">
           <div>
             <div className="flex justify-between text-xs mb-0.5">
-              <span className="text-red-400 font-semibold">HP</span>
+              <span className="text-red-400 font-semibold">{t("sidebar.hp")}</span>
               <span className="font-mono">{character.hp}/{character.maxHp}</span>
             </div>
             <div className="w-full bg-red-950/80 rounded-full h-3 overflow-hidden border border-red-900/50">
@@ -95,7 +97,7 @@ export function CharacterSidebar() {
           {/* XP bar */}
           <div>
             <div className="flex justify-between text-xs mb-0.5">
-              <span className="text-blue-400 font-semibold">XP</span>
+              <span className="text-blue-400 font-semibold">{t("sidebar.xp")}</span>
               <span className="font-mono text-[11px]">
                 {character.xpToNextLevel === Infinity
                   ? "MAX"
@@ -113,7 +115,7 @@ export function CharacterSidebar() {
           {/* Karma & Fame row */}
           <div className="flex gap-2">
             <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Karma</div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{t("sidebar.karma")}</div>
               <div className={cn(
                 "text-sm font-bold leading-tight",
                 character.karma > 25 ? "text-emerald-400" :
@@ -124,7 +126,7 @@ export function CharacterSidebar() {
               </div>
             </div>
             <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Fame</div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{t("sidebar.fame")}</div>
               <div className={cn(
                 "text-sm font-bold leading-tight",
                 character.fame >= 75 ? "text-amber-400" :
@@ -151,11 +153,11 @@ export function CharacterSidebar() {
           {/* AC / Gold row */}
           <div className="flex gap-2">
             <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">AC</div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{t("sidebar.ac")}</div>
               <div className="text-lg font-black leading-tight">{character.ac}</div>
             </div>
             <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
-              <div className="text-[10px] text-amber-400/80 uppercase tracking-wider">Gold</div>
+              <div className="text-[10px] text-amber-400/80 uppercase tracking-wider">{t("sidebar.gold")}</div>
               <div className="text-lg font-black text-amber-400 leading-tight">{character.gold}</div>
             </div>
           </div>
@@ -166,7 +168,7 @@ export function CharacterSidebar() {
             onClick={() => setSheetOpen(true)}
             className="w-full text-center bg-muted/40 rounded-lg py-1.5 border border-border/30 cursor-pointer hover:bg-muted/60 transition-colors"
           >
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Character Sheet</div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{t("game.characterSheet")}</div>
           </button>
         </div>
 
@@ -174,7 +176,7 @@ export function CharacterSidebar() {
 
         {/* Location */}
         <div className="px-4">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Location</div>
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">{t("sidebar.location")}</div>
           <div className="font-medium text-xs flex items-center gap-1.5">
             <span className="text-green-400">&#x25CF;</span>
             {location}
@@ -190,7 +192,7 @@ export function CharacterSidebar() {
             onClick={() => setEquippedOpen(!equippedOpen)}
             className="flex items-center justify-between w-full text-[10px] text-muted-foreground uppercase tracking-wider mb-1 hover:text-foreground transition-colors"
           >
-            <span>Worn ({equipped.length})</span>
+            <span>{t("sidebar.worn")} ({equipped.length})</span>
             <span className="text-xs">{equippedOpen ? "\u25B2" : "\u25BC"}</span>
           </button>
           {equippedOpen && (
@@ -230,7 +232,7 @@ export function CharacterSidebar() {
             onClick={() => setBackpackOpen(!backpackOpen)}
             className="flex items-center justify-between w-full text-[10px] text-muted-foreground uppercase tracking-wider mb-1 hover:text-foreground transition-colors"
           >
-            <span>Backpack ({backpack.length})</span>
+            <span>{t("sidebar.backpack")} ({backpack.length})</span>
             <span className="text-xs">{backpackOpen ? "\u25B2" : "\u25BC"}</span>
           </button>
           {backpackOpen && (
@@ -260,7 +262,7 @@ export function CharacterSidebar() {
           <>
             <Separator className="my-2" />
             <div className="px-4">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Companions</div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{t("sidebar.companions")}</div>
               <ul className="space-y-1">
                 {activeCompanions.map((comp) => (
                   <li key={comp.id} className="text-xs bg-muted/30 rounded px-2 py-1 border border-border/20">
@@ -292,7 +294,7 @@ export function CharacterSidebar() {
           <>
             <Separator className="my-2" />
             <div className="px-4 pb-3">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Quests</div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{t("sidebar.quests")}</div>
               <ul className="space-y-0.5">
                 {questLog.map((q) => (
                   <li key={q} className="text-xs text-amber-300/80 truncate">

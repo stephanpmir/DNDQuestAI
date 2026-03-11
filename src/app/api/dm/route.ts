@@ -132,6 +132,8 @@ interface RequestBody {
   };
   /** Crime log */
   crimes?: Crime[];
+  /** Player's chosen UI/game language */
+  languagePreference?: string;
   /** Karma system data */
   karmaData?: {
     karma: number;
@@ -229,7 +231,7 @@ async function callWithRetry(
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as RequestBody;
-    const { message, character, gameState, history, worldState, karmaData, crimes } = body;
+    const { message, character, gameState, history, worldState, karmaData, crimes, languagePreference } = body;
 
     if (!message || !character || !gameState) {
       return NextResponse.json(
@@ -279,7 +281,8 @@ export async function POST(request: Request) {
         message,
         preResult.engineOutcome,
         preResult.formattedContext,
-        contradictionHint
+        contradictionHint,
+        languagePreference
       );
 
       const messages: OpenAI.ChatCompletionMessageParam[] = [
