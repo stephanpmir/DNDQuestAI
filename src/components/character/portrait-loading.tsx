@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { buildAvatarPreviewUrl, nameToSeed, type AvatarPromptInput } from "@/lib/avatar";
+import { nameToSeed } from "@/lib/avatar";
 import type { Character } from "@/types/character";
 
 interface PortraitLoadingProps {
@@ -18,17 +18,18 @@ export function PortraitLoading({ character, onComplete }: PortraitLoadingProps)
   const [rerollCount, setRerollCount] = useState(0);
 
   const buildUrl = useCallback((extraSeed: number = 0) => {
-    const input: AvatarPromptInput = {
-      race: character.race,
-      class: character.class,
-      gender: character.gender,
-      avatar: character.avatar,
-    };
     // Use name seed + reroll offset for variation
     const baseSeed = nameToSeed(character.name || "adventurer");
     const seed = baseSeed + extraSeed;
     const prompt = `fantasy portrait, ${character.gender.toLowerCase()} ${character.race.toLowerCase()} ${character.class.toLowerCase()}, D&D character art, detailed painting, dark fantasy style, face visible, upper body`;
-    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=768&seed=${seed}&nologo=true&enhance=true`;
+    const params = new URLSearchParams({
+      prompt,
+      width: "768",
+      height: "768",
+      seed: String(seed),
+      enhance: "true",
+    });
+    return `/.netlify/functions/proxy-portrait?${params.toString()}`;
   }, [character]);
 
   // Build the Pollinations URL on mount
@@ -51,10 +52,10 @@ export function PortraitLoading({ character, onComplete }: PortraitLoadingProps)
     }
   }, [loaded, imageUrl, phase]);
 
-  // Safety timeout: proceed after 20s even if image fails
+  // Safety timeout: proceed after 20s with fallback if image fails
   useEffect(() => {
     const timeout = setTimeout(() => {
-      if (!loaded) onComplete(null);
+      if (!loaded) onComplete("/images/default-avatar.svg");
     }, 20000);
     return () => clearTimeout(timeout);
   }, [loaded, onComplete]);
@@ -104,6 +105,7 @@ export function PortraitLoading({ character, onComplete }: PortraitLoadingProps)
                 src={imageUrl}
                 alt={`${character.name} portrait`}
                 className="w-full h-full object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).src = "/images/default-avatar.svg"; }}
               />
               {/* Gold corner accents */}
               <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-amber-400/60" />
@@ -171,6 +173,10 @@ export function PortraitLoading({ character, onComplete }: PortraitLoadingProps)
                 loaded ? "opacity-100" : "opacity-0"
               }`}
               onLoad={() => setLoaded(true)}
+              onError={() => {
+                setImageUrl("/images/default-avatar.svg");
+                setLoaded(true);
+              }}
             />
           )}
 

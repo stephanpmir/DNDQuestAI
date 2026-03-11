@@ -24,8 +24,8 @@ function buildBgUrl(seed: number) {
 function getCachedBgUrl(): string {
   if (typeof window === "undefined") return buildBgUrl(42);
   const cached = localStorage.getItem(STORAGE_KEY);
-  // Only use cache if it's a valid Pollinations URL (invalidate stale proxy URLs)
-  if (cached && cached.startsWith("https://image.pollinations.ai/")) return cached;
+  // Only use cache if it's a valid portrait URL (invalidate stale entries)
+  if (cached && (cached.startsWith("/.netlify/functions/proxy-portrait") || cached.startsWith("https://image.pollinations.ai/"))) return cached;
   const url = buildBgUrl(42);
   localStorage.setItem(STORAGE_KEY, url);
   return url;

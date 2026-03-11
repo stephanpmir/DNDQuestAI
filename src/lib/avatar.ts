@@ -89,22 +89,30 @@ export function nameToSeed(name: string): number {
 }
 
 /**
- * Build a direct Pollinations.ai image URL.
- * Used by all client-side image tags (character preview, portrait, landing bg).
+ * Build a portrait image URL.
+ * Server-side: direct Pollinations URL with API key.
+ * Client-side: proxied via Netlify function.
  */
 export function buildPollinationsUrl(
   prompt: string,
   params: Record<string, string>
 ): string {
-  const url = new URL(
-    `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`
-  );
-  for (const [key, value] of Object.entries(params)) {
-    url.searchParams.set(key, value);
+  // Server-side callers (API routes) use the direct Pollinations URL
+  if (typeof window === "undefined") {
+    const url = new URL(
+      `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`
+    );
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.set(key, value);
+    }
+    const token = process.env.POLLINATIONS_API_KEY;
+    if (token) url.searchParams.set("token", token);
+    return url.toString();
   }
-  const token = process.env.NEXT_PUBLIC_POLLINATIONS_TOKEN;
-  if (token) url.searchParams.set("token", token);
-  return url.toString();
+
+  // Client-side callers use the Netlify proxy
+  const searchParams = new URLSearchParams({ prompt, ...params });
+  return `/.netlify/functions/proxy-portrait?${searchParams.toString()}`;
 }
 
 /** Build a Pollinations image URL for live character preview */
