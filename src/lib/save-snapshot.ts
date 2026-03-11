@@ -21,6 +21,7 @@ export interface GameSnapshot {
     questLog: string[];
     turnCount: number;
     campaignStarted: boolean;
+    groundItems?: string[];
   };
   karma: {
     karmaHistory: ReturnType<typeof useKarmaStore.getState>["karmaHistory"];
@@ -114,6 +115,7 @@ export function captureSnapshot(): GameSnapshot {
       questLog: gs.questLog,
       turnCount: gs.turnCount,
       campaignStarted: gs.campaignStarted,
+      groundItems: gs.groundItems,
     },
     karma: {
       karmaHistory: ks.karmaHistory,
@@ -145,6 +147,7 @@ export function restoreSnapshot(snap: GameSnapshot): void {
     questLog: snap.game.questLog,
     turnCount: snap.game.turnCount,
     campaignStarted: snap.game.campaignStarted,
+    groundItems: snap.game.groundItems ?? [],
     isLoading: false,
     justLoaded: true,
     loadedChatSummary: snap.chatSummary ?? null,

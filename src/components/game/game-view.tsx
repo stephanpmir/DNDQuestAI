@@ -40,6 +40,9 @@ export function GameView() {
     setLoading,
     setCampaignStarted,
     clearJustLoaded,
+    groundItems,
+    addGroundItems,
+    removeGroundItem,
   } = useGameStore();
 
   const {
@@ -117,6 +120,7 @@ export function GameView() {
             companions,
           },
           languagePreference: languagePreference !== "English" ? languagePreference : undefined,
+          groundItems: groundItems.length > 0 ? groundItems : undefined,
         });
 
         // Retry logic for transient errors (502, 503, 504)
@@ -165,6 +169,20 @@ export function GameView() {
           }
           if (u.newQuest) addQuest(u.newQuest);
           if (u.completeQuest) completeQuest(u.completeQuest);
+        }
+
+        // Apply ground item changes (loot drops, pickups)
+        if (data.addToGround?.length) {
+          addGroundItems(data.addToGround);
+        }
+        if (data.removeFromGround?.length) {
+          for (const item of data.removeFromGround) {
+            removeGroundItem(item);
+          }
+        }
+        // Clear ground items when changing location (items stay behind)
+        if (u?.locationChange && u.locationChange !== location) {
+          useGameStore.getState().clearGroundItems();
         }
 
         // Handle death save tracking
@@ -340,6 +358,9 @@ export function GameView() {
       updateEvidence,
       markConfronted,
       languagePreference,
+      groundItems,
+      addGroundItems,
+      removeGroundItem,
     ]
   );
 

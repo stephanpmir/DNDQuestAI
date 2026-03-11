@@ -134,6 +134,8 @@ interface RequestBody {
   crimes?: Crime[];
   /** Player's chosen UI/game language */
   languagePreference?: string;
+  /** Items currently on the ground at the player's location */
+  groundItems?: string[];
   /** Karma system data */
   karmaData?: {
     karma: number;
@@ -259,6 +261,7 @@ export async function POST(request: Request) {
       npcs: worldState?.npcs ?? [],
       locations: worldState?.locations ?? [],
       karma: karmaData?.karma ?? character.karma ?? 0,
+      groundItems: body.groundItems ?? [],
     };
 
     const preResult = preGenerate(pipelineInput);
@@ -269,7 +272,8 @@ export async function POST(request: Request) {
       gameState,
       karmaData ? { karma: karmaData.karma, history: karmaData.history as import("@/lib/karma").KarmaEvent[] } : undefined,
       karmaData?.companions as import("@/types/companion").Companion[] | undefined,
-      campaignThemeStr
+      campaignThemeStr,
+      body.groundItems
     );
 
     let narrative = "";
@@ -400,6 +404,8 @@ export async function POST(request: Request) {
       tradeResult: eo.tradeResult,
       pickupResult: eo.pickupResult,
       dropResult: eo.dropResult,
+      addToGround: eo.addToGround?.length ? eo.addToGround : undefined,
+      removeFromGround: eo.removeFromGround?.length ? eo.removeFromGround : undefined,
     });
   } catch (error: unknown) {
     const errMsg =

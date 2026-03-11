@@ -13,7 +13,7 @@ import { CharacterSheet } from "./character-sheet";
 
 export function CharacterSidebar() {
   const { character } = useCharacterStore();
-  const { location, questLog } = useGameStore();
+  const { location, questLog, groundItems } = useGameStore();
   const { companions } = useKarmaStore();
 
   const [equippedOpen, setEquippedOpen] = useState(false);
@@ -256,6 +256,29 @@ export function CharacterSidebar() {
             )
           )}
         </div>
+
+        {/* Ground items (loot) */}
+        {groundItems.length > 0 && (
+          <div className="px-4 pb-1">
+            <div className="text-[10px] text-amber-400/80 uppercase tracking-wider mb-1">
+              {t("sidebar.nearby")} ({groundItems.length})
+            </div>
+            <ul className="space-y-0.5">
+              {groundItems.map((item, i) => {
+                const icon = getItemIcon(item);
+                return (
+                  <li
+                    key={`${item}-${i}`}
+                    className="text-xs px-2 py-0.5 bg-amber-950/30 rounded truncate flex items-center gap-1.5 text-amber-300/80 border border-amber-500/20"
+                  >
+                    <span className="shrink-0">{icon}</span>
+                    {item}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         {/* Companions */}
         {activeCompanions.length > 0 && (

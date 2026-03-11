@@ -619,6 +619,42 @@ function getSpellDamageDice(playerInput: string, level: number): { dice: number;
 }
 
 /**
+ * Generate random combat loot appropriate for the player's level.
+ * Returns item names to place on the ground for pickup.
+ */
+function generateCombatLoot(level: number): string[] {
+  const roll = d(100);
+  // Common loot (levels 1-4): mostly consumables and basic gear
+  if (level <= 4) {
+    if (roll <= 50) return ["Healing Potion"];
+    if (roll <= 70) return ["Rations"];
+    if (roll <= 80) return ["Torch"];
+    if (roll <= 90) return ["Dagger"];
+    return ["Antitoxin"];
+  }
+  // Mid-level loot (levels 5-9): better consumables and occasional weapons
+  if (level <= 9) {
+    if (roll <= 30) return ["Healing Potion"];
+    if (roll <= 45) return ["Greater Healing Potion"];
+    if (roll <= 55) return ["Potion of Fire Resistance"];
+    if (roll <= 65) return ["Shortsword"];
+    if (roll <= 75) return ["Longsword"];
+    if (roll <= 85) return ["Scale Mail"];
+    if (roll <= 92) return ["Shield"];
+    return ["Healing Potion", "Rations"];
+  }
+  // High-level loot (10+): magical items possible
+  if (roll <= 20) return ["Greater Healing Potion"];
+  if (roll <= 35) return ["Superior Healing Potion"];
+  if (roll <= 50) return ["+1 Longsword"];
+  if (roll <= 60) return ["+1 Leather Armor"];
+  if (roll <= 70) return ["+1 Shield"];
+  if (roll <= 80) return ["Ring of Protection"];
+  if (roll <= 90) return ["Boots of Elvenkind"];
+  return ["Greater Healing Potion", "Potion of Fire Resistance"];
+}
+
+/**
  * The Rules Engine. Given a player action and game state, it produces
  * deterministic outcomes. The LLM only narrates what happened.
  */
@@ -627,7 +663,8 @@ export function resolveAction(
   character: Character,
   gameState: { location: string; questLog: string[]; turnCount: number },
   recentEvents: WorldEvent[],
-  karma?: number
+  karma?: number,
+  groundItems?: string[]
 ): EngineOutcome {
   const action = detectAction(playerInput, character);
   // Halfling Lucky trait: reroll natural 1s on d20 rolls
@@ -987,6 +1024,18 @@ export function resolveAction(
           const darkBlessing = Math.max(1, chaBonus + character.level);
           outcome.hpChange += darkBlessing;
         }
+
+        // Combat loot: defeated enemies drop gold and sometimes items
+        const lootGold = d(6) + character.level * 2;
+        outcome.goldChange += lootGold;
+        const lootRoll = d(100);
+        if (lootRoll <= 40) {
+          // 40% chance to drop a consumable or item
+          const lootTable = generateCombatLoot(character.level);
+          if (lootTable.length > 0) {
+            outcome.addToGround = [...(outcome.addToGround ?? []), ...lootTable];
+          }
+        }
       } else {
         // Enemy counterattack — enemy uses their attack bonus vs player AC
         const enemyRoll = d20();
@@ -1333,30 +1382,52 @@ export function resolveAction(
     }
 
     case "pickup": {
-      // Pickup is PURELY NARRATIVE — the DM describes what's available.
-      // The engine does NOT grant items from thin air. Items can only be gained
-      // through trade (buying), quest rewards (DM-controlled), or loot after combat.
-      // This prevents the exploit of typing "pick up longsword" to get free items.
+      // Pickup checks groundItems — items that exist in the world (loot, dropped items).
+      // Players cannot conjure items from thin air; they can only pick up what's on the ground.
       const lower = playerInput.toLowerCase();
-      const ignorePickupWords = new Set(["pick", "up", "grab", "take", "loot", "collect", "gather", "the", "a", "an", "some", "this", "that", "it"]);
+      const ignorePickupWords = new Set(["pick", "up", "grab", "take", "loot", "collect", "gather", "the", "a", "an", "some", "this", "that", "it", "all", "everything"]);
       const pickupWords = lower.replace(/[^a-z\s]/g, "").split(/\s+/).filter(w => w.length > 1 && !ignorePickupWords.has(w));
       const searchTerm = pickupWords.join(" ");
-      // Signal intent but don't mechanically grant anything
-      outcome.pickupResult = { item: searchTerm || "unknown", success: false, reason: "The DM will describe what you find, if anything" };
+      const available = groundItems ?? [];
+
+      // Check for "take all" / "loot all" / "pick up everything"
+      const wantsAll = /\b(all|everything)\b/i.test(playerInput) && available.length > 0;
+      if (wantsAll) {
+        outcome.itemsGained = [...available];
+        outcome.removeFromGround = [...available];
+        outcome.pickupResult = { item: available.join(", "), success: true };
+        break;
+      }
+
+      // Try to match a specific item from what's on the ground
+      const matchedGround = available.find((item) => {
+        const itemLow = item.toLowerCase();
+        return pickupWords.some(term => itemLow.includes(term)) || lower.includes(itemLow);
+      });
+      if (matchedGround) {
+        outcome.itemsGained = [matchedGround];
+        outcome.removeFromGround = [matchedGround];
+        outcome.pickupResult = { item: matchedGround, success: true };
+      } else if (available.length > 0) {
+        outcome.pickupResult = { item: searchTerm || "unknown", success: false, reason: `That item isn't here. Available: ${available.join(", ")}` };
+      } else {
+        outcome.pickupResult = { item: searchTerm || "unknown", success: false, reason: "There's nothing here to pick up" };
+      }
       break;
     }
 
     case "drop_item": {
-      // Drop an item from inventory
+      // Drop an item from inventory — it goes to the ground
       const lower = playerInput.toLowerCase();
       const ignoreDropWords = new Set(["drop", "discard", "throw", "away", "leave", "behind", "abandon", "the", "a", "an", "my", "this", "that"]);
       const dropWords = lower.replace(/[^a-z\s]/g, "").split(/\s+/).filter(w => w.length > 1 && !ignoreDropWords.has(w));
       const matchedItem = character.inventory.find((item) => {
         const itemLow = item.toLowerCase();
-        return dropWords.some(term => itemLow.includes(term));
+        return dropWords.some(term => itemLow.includes(term)) || lower.includes(itemLow);
       });
       if (matchedItem) {
         outcome.itemsLost = [matchedItem];
+        outcome.addToGround = [matchedItem];
         outcome.dropResult = { item: matchedItem, success: true };
       } else {
         outcome.dropResult = { item: dropWords.join(" "), success: false };

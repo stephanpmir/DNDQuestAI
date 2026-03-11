@@ -49,7 +49,8 @@ export function buildSystemPrompt(
   gameState: Pick<GameState, "location" | "questLog" | "turnCount">,
   karmaData?: { karma: number; history: KarmaEvent[] },
   companions?: Companion[],
-  campaignTheme?: string
+  campaignTheme?: string,
+  groundItems?: string[]
 ): string {
   // Build optional context sections
   const karmaSection = karmaData
@@ -91,7 +92,7 @@ ${formatResourcesForPrompt(character.resources)}
 ## Current State
 - Location: ${gameState.location || "Unknown"}
 - Turn: ${gameState.turnCount}
-- Active Quests: ${gameState.questLog.length > 0 ? gameState.questLog.join("; ") : "None"}
+- Active Quests: ${gameState.questLog.length > 0 ? gameState.questLog.join("; ") : "None"}${groundItems && groundItems.length > 0 ? `\n- Items on the ground: ${groundItems.join(", ")}` : ""}
 ${karmaSection}${companionSection}${campaignSection}
 
 ## Critical Rules
@@ -356,7 +357,14 @@ export function buildEngineContextMessage(
     }
   }
   if (o.pickupResult) {
-    outcomeParts.push(`PICKUP ATTEMPT: The player tried to pick up "${o.pickupResult.item}". Items cannot be freely picked up — only obtained through trade, quest rewards, or after combat. Narrate what they see in the scene but do NOT grant any items mechanically.`);
+    if (o.pickupResult.success) {
+      outcomeParts.push(`PICKUP: Player picked up "${o.pickupResult.item}" from the ground. Narrate them collecting the item — reaching down, scooping it up, inspecting it briefly.`);
+    } else {
+      outcomeParts.push(`PICKUP FAILED: Player tried to pick up "${o.pickupResult.item}" but failed. ${o.pickupResult.reason ?? "The item isn't here."}. Narrate the character looking around but not finding what they want.`);
+    }
+  }
+  if (o.addToGround && o.addToGround.length > 0) {
+    outcomeParts.push(`LOOT DROPPED: The following items fell to the ground: ${o.addToGround.join(", ")}. Mention these items as loot the player can pick up.`);
   }
   if (o.dropResult) {
     if (o.dropResult.success) {

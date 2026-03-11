@@ -13,6 +13,8 @@ interface GameStore {
   justLoaded: boolean;
   /** Chat summary from the loaded save for DM recap context */
   loadedChatSummary: string | null;
+  /** Items available on the ground at the current location */
+  groundItems: string[];
 
   addMessage: (msg: ChatMessage) => void;
   setLocation: (location: string) => void;
@@ -22,6 +24,9 @@ interface GameStore {
   setLoading: (loading: boolean) => void;
   setCampaignStarted: (started: boolean) => void;
   clearJustLoaded: () => void;
+  addGroundItems: (items: string[]) => void;
+  removeGroundItem: (item: string) => void;
+  clearGroundItems: () => void;
   reset: () => void;
 }
 
@@ -36,6 +41,7 @@ export const useGameStore = create<GameStore>()(
       campaignStarted: false,
       justLoaded: false,
       loadedChatSummary: null,
+      groundItems: [],
 
       addMessage: (msg) =>
         set((s) => ({ messages: [...s.messages, msg] })),
@@ -61,6 +67,20 @@ export const useGameStore = create<GameStore>()(
       setCampaignStarted: (campaignStarted) => set({ campaignStarted }),
       clearJustLoaded: () => set({ justLoaded: false, loadedChatSummary: null }),
 
+      addGroundItems: (items) =>
+        set((s) => ({ groundItems: [...s.groundItems, ...items] })),
+      removeGroundItem: (item) =>
+        set((s) => {
+          const idx = s.groundItems.findIndex(
+            (g) => g.toLowerCase() === item.toLowerCase()
+          );
+          if (idx === -1) return s;
+          const next = [...s.groundItems];
+          next.splice(idx, 1);
+          return { groundItems: next };
+        }),
+      clearGroundItems: () => set({ groundItems: [] }),
+
       reset: () =>
         set({
           messages: [],
@@ -71,6 +91,7 @@ export const useGameStore = create<GameStore>()(
           campaignStarted: false,
           justLoaded: false,
           loadedChatSummary: null,
+          groundItems: [],
         }),
     }),
     {
@@ -81,6 +102,7 @@ export const useGameStore = create<GameStore>()(
         questLog: s.questLog,
         turnCount: s.turnCount,
         campaignStarted: s.campaignStarted,
+        groundItems: s.groundItems,
       }),
     }
   )

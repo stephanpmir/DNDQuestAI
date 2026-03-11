@@ -124,4 +124,8 @@ export interface DMResponsePayload {
     item: string;
     success: boolean;
   };
+  /** Items to add to the ground (loot drops, dropped items) */
+  addToGround?: string[];
+  /** Items to remove from the ground (picked up) */
+  removeFromGround?: string[];
 }

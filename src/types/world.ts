@@ -155,6 +155,10 @@ export interface EngineOutcome {
     item: string;
     success: boolean;
   };
+  /** Items to add to the ground (loot, dropped items) */
+  addToGround?: string[];
+  /** Items to remove from the ground (picked up) */
+  removeFromGround?: string[];
   /** Item to equip (engine signals, store applies) */
   equipItem?: string;
   /** Item to add to identified list (engine signals, store applies) */

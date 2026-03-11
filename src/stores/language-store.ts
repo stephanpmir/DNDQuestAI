@@ -243,6 +243,7 @@ export const EN_STRINGS: UITranslations = {
   "sidebar.worn": "Worn",
   "sidebar.backpack": "Backpack",
   "sidebar.quests": "Quests",
+  "sidebar.nearby": "Nearby Items",
   "sidebar.companions": "Companions",
 
   // Wizard step labels
