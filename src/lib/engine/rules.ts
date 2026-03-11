@@ -803,9 +803,8 @@ export function resolveAction(
       const ability = getSkillAbility(playerInput);
       const dc = levelScaledDC(12, character.level);
       const prof = proficiencyBonus(character.level);
-      // Gnome Cunning: advantage on INT, WIS, CHA saves/checks against magic
-      const gnomeCunning = character.race === "Gnome" && ["intelligence", "wisdom", "charisma"].includes(ability);
-      const result = abilityCheck(character.abilityScores[ability], dc, ability, prof, lucky, gnomeCunning);
+      // Gnome Cunning only applies to saving throws vs magic, not skill checks
+      const result = abilityCheck(character.abilityScores[ability], dc, ability, prof, lucky);
       const skillName = ability.charAt(0).toUpperCase() + ability.slice(1);
       outcome.roll = { ...result, reason: `${skillName} check — testing your skill` };
       if (result.success) {
@@ -836,17 +835,48 @@ export function resolveAction(
             const hit = attackRoll(atkScore, enemy.ac, prof, lucky);
             // Don't set outcome.roll — travel encounters are narration-only
             if (hit.success) {
+              const isCrit = hit.rolled === 20;
               const weaponDmg = getWeaponDamage(character.equipped ?? []);
-              const dmg = damageRoll(weaponDmg.dice, weaponDmg.sides, modifier(atkScore));
-              outcome.damageDealt = Math.max(1, dmg.total);
+              let diceCount = isCrit ? weaponDmg.dice * 2 : weaponDmg.dice;
+              // Half-Orc Savage Attacks: extra weapon die on crit
+              if (isCrit && character.race === "Half-Orc") diceCount += 1;
+              const dmg = damageRoll(diceCount, weaponDmg.sides, modifier(atkScore));
+              // Rogue Sneak Attack (finesse/ranged weapons)
+              let sneakDmg = 0;
+              if (character.class === "Rogue") {
+                const equippedWeapons = character.equipped ?? [];
+                const hasValidWeapon = equippedWeapons.some(w =>
+                  FINESSE_WEAPONS.some(f => w.toLowerCase().includes(f)) ||
+                  RANGED_WEAPONS.some(r => w.toLowerCase().includes(r))
+                );
+                if (hasValidWeapon) {
+                  const sneakDice = Math.ceil(character.level / 2);
+                  sneakDmg = damageRoll(isCrit ? sneakDice * 2 : sneakDice, 6, 0).total;
+                }
+              }
+              outcome.damageDealt = Math.max(1, dmg.total + sneakDmg);
               outcome.xpGained = combatXpReward(character.level);
+              // Warlock Dark One's Blessing on kill
+              if (character.class === "Warlock") {
+                const chaBonus = modifier(character.abilityScores.charisma);
+                outcome.hpChange += Math.max(1, chaBonus + character.level);
+              }
             } else {
               const enemyRoll = d20();
               const enemyTotal = enemyRoll + enemy.attackBonus;
               if (enemyTotal >= character.ac) {
                 const enemyDmg = damageRoll(enemy.damageDice.count, enemy.damageDice.sides, enemy.damageBonus);
-                outcome.hpChange = -Math.max(1, enemyDmg.total);
-                outcome.damageTaken = Math.max(1, enemyDmg.total);
+                let dmgTaken = Math.max(1, enemyDmg.total);
+                // Barbarian Rage resistance (only while raging)
+                if (character.class === "Barbarian" && character.raging) {
+                  dmgTaken = Math.max(1, Math.floor(dmgTaken / 2));
+                }
+                // Tiefling/Dragonborn damage resistance
+                if ((character.race === "Tiefling" || character.race === "Dragonborn") && dmgTaken > 2) {
+                  dmgTaken = Math.max(1, dmgTaken - 1);
+                }
+                outcome.hpChange = -dmgTaken;
+                outcome.damageTaken = dmgTaken;
               }
             }
           } else {
@@ -1103,8 +1133,8 @@ export function resolveAction(
         };
         break;
       }
-      // Inspiration die scales: d6 at L1, d8 at L5, d10 at L9, d12 at L15
-      const inspireDie = character.level >= 15 ? 12 : character.level >= 9 ? 10 : character.level >= 5 ? 8 : 6;
+      // Inspiration die scales: d6 at L1, d8 at L5, d10 at L10, d12 at L15
+      const inspireDie = character.level >= 15 ? 12 : character.level >= 10 ? 10 : character.level >= 5 ? 8 : 6;
       const inspireRoll = d(inspireDie);
       outcome.roll = {
         type: "check",
@@ -1121,10 +1151,17 @@ export function resolveAction(
     }
 
     case "channel_divinity": {
-      // Cleric class feature: Turn Undead or Preserve Life (Life Domain)
+      // Cleric class feature: Turn Undead or Preserve Life (Life Domain) — level 2+
       if (character.class !== "Cleric") {
         outcome.actionDenied = {
           reason: `Channel Divinity is a Cleric class feature. As a ${character.class}, you don't have this ability.`,
+          attempted: "use Channel Divinity",
+        };
+        break;
+      }
+      if (character.level < 2) {
+        outcome.actionDenied = {
+          reason: "You haven't yet learned to channel divine power. Clerics gain Channel Divinity at level 2.",
           attempted: "use Channel Divinity",
         };
         break;
@@ -1185,9 +1222,8 @@ export function resolveAction(
       // Wild Shape grants temporary HP based on beast form (simulated)
       // CR scales: L2 = CR 1/4 (~7 HP), L4 = CR 1/2 (~19 HP), L8 = CR 1 (~33 HP)
       const beastHP = character.level >= 8 ? 33 : character.level >= 4 ? 19 : 7;
-      // Simulate as a heal (temp HP shield) — capped at maxHP
-      const healed = Math.min(beastHP, character.maxHp - character.hp);
-      outcome.hpChange = healed;
+      // Wild Shape acts as a temp HP buffer — can exceed maxHP since it's a separate HP pool
+      outcome.hpChange = beastHP;
       outcome.roll = {
         type: "check",
         ability: "wisdom",
@@ -1257,10 +1293,10 @@ export function resolveAction(
       outcome.roll = { ...hit, reason: "Flurry of Blows — rapid unarmed strikes" };
       if (hit.success) {
         const isCrit = hit.rolled === 20;
-        // Two strikes with Martial Arts die
+        // Two strikes with Martial Arts die — each strike adds ability modifier
         const diceCount = isCrit ? 4 : 2;
         const atkMod = modifier(atkScoreMonk);
-        const dmg = damageRoll(diceCount, martialDie, atkMod);
+        const dmg = damageRoll(diceCount, martialDie, atkMod * 2);
         outcome.damageDealt = Math.max(1, dmg.total);
         outcome.isCriticalHit = isCrit;
         outcome.xpGained = combatXpReward(character.level);
@@ -1325,23 +1361,27 @@ export function resolveAction(
         break;
       }
       // Melee attack + 2d8 radiant damage (scales: +1d8 per spell slot level above 1st)
-      const atkScore = character.abilityScores.strength;
+      // Use higher of STR/DEX if wielding a finesse weapon (e.g. rapier)
+      const equippedWeapons = character.equipped ?? [];
+      const hasFinesse = equippedWeapons.some(w => FINESSE_WEAPONS.some(f => w.toLowerCase().includes(f)));
+      const smiteAbility = hasFinesse && character.abilityScores.dexterity > character.abilityScores.strength
+        ? "dexterity" : "strength";
+      const atkScore = character.abilityScores[smiteAbility];
       const prof = proficiencyBonus(character.level);
       const enemy = scaledEnemy(character.level);
       const hit = attackRoll(atkScore, enemy.ac, prof, lucky);
       outcome.roll = { ...hit, reason: "Divine Smite — holy strike" };
       if (hit.success) {
         const isCrit = hit.rolled === 20;
-        const weaponDmg = getWeaponDamage(character.equipped ?? []);
+        const weaponDmg = getWeaponDamage(equippedWeapons);
         // Weapon damage + 2d8 radiant (3d8 vs undead, but we simplify)
         const smiteDice = character.level >= 11 ? 4 : character.level >= 5 ? 3 : 2;
-        const weaponDice = isCrit ? weaponDmg.dice * 2 : weaponDmg.dice;
+        let weaponDice = isCrit ? weaponDmg.dice * 2 : weaponDmg.dice;
         const smiteDiceCount = isCrit ? smiteDice * 2 : smiteDice;
-        let totalDiceCount = weaponDice + smiteDiceCount;
-        // Half-Orc Savage Attacks on crit
-        if (isCrit && character.race === "Half-Orc") totalDiceCount += 1;
+        // Half-Orc Savage Attacks: extra weapon die on crit
+        if (isCrit && character.race === "Half-Orc") weaponDice += 1;
         const atkMod = modifier(atkScore);
-        // Roll weapon damage
+        // Roll weapon damage (with Half-Orc extra die included)
         const weapDmgRoll = damageRoll(weaponDice, weaponDmg.sides, atkMod);
         // Roll smite damage (d8 radiant)
         const smiteDmgRoll = damageRoll(smiteDiceCount, 8, 0);
