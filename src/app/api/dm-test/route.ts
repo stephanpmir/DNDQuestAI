@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 /**
  * Diagnostic: tests server-side connectivity to the configured LLM(s).
  * Visit /api/dm-test in the browser to see JSON results.
- * Order: Cerebras → Z.ai → Groq → Moonshot
+ * Order: Cerebras → Groq → Z.ai → Moonshot
  */
 export async function GET() {
   const results: Record<string, unknown> = {
@@ -43,6 +43,36 @@ export async function GET() {
     }
   }
 
+  // Test Groq (llama-3.1-8b-instant)
+  if (process.env.GROQ_API_KEY) {
+    try {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant",
+          messages: [{ role: "user", content: "Say hi in 3 words" }],
+          max_tokens: 20,
+        }),
+        signal: AbortSignal.timeout(25_000),
+      });
+      const body = await res.text();
+      results.groq = {
+        success: res.ok,
+        status: res.status,
+        body: body.slice(0, 500),
+      };
+    } catch (error) {
+      results.groq = {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
   // Test Z.ai (glm-4.5-air — thinking disabled)
   if (process.env.ZAI_API_KEY) {
     try {
@@ -68,36 +98,6 @@ export async function GET() {
       };
     } catch (error) {
       results.zai = {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-  }
-
-  // Test Groq (llama-3.1-8b-instant)
-  if (process.env.GROQ_API_KEY) {
-    try {
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
-          messages: [{ role: "user", content: "Say hi in 3 words" }],
-          max_tokens: 20,
-        }),
-        signal: AbortSignal.timeout(25_000),
-      });
-      const body = await res.text();
-      results.groq = {
-        success: res.ok,
-        status: res.status,
-        body: body.slice(0, 500),
-      };
-    } catch (error) {
-      results.groq = {
         success: false,
         error: error instanceof Error ? error.message : String(error),
       };

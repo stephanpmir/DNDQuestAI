@@ -40,10 +40,10 @@ interface LLMProvider {
 
 /**
  * Build a prioritized list of available LLM providers.
- * Order: Cerebras → Z.ai → Groq → Moonshot
+ * Order: Cerebras → Groq → Z.ai → Moonshot
  *   1. Cerebras  — FREE (1M tokens/day), llama3.1-8b
- *   2. Z.ai      — glm-4.5-air ($0.20/M in, $1.10/M out, thinking disabled)
- *   3. Groq      — FREE tier (rate-limited), llama-3.1-8b-instant
+ *   2. Groq      — FREE tier (fast but TPM-limited), llama-3.1-8b-instant
+ *   3. Z.ai      — glm-4.5-air (cheap but ~7s latency, thinking disabled)
  *   4. Moonshot   — PAID last resort, moonshot-v1-8k
  * All use the OpenAI SDK interface.
  */
@@ -66,7 +66,22 @@ function getProviders(): LLMProvider[] {
     });
   }
 
-  // 2. Z.ai — glm-4.5-air (thinking disabled for normal chat completions)
+  // 2. Groq — FREE tier (fast but TPM-limited ~30k TPM for 8B model)
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    providers.push({
+      client: new OpenAI({
+        baseURL: "https://api.groq.com/openai/v1",
+        apiKey: groqKey,
+        timeout: 30_000,
+        fetch: proxyFetch,
+      }),
+      model: "llama-3.1-8b-instant",
+      name: "Groq",
+    });
+  }
+
+  // 3. Z.ai — glm-4.5-air (cheap but ~7s latency, thinking disabled)
   const zaiKey = process.env.ZAI_API_KEY;
   if (zaiKey) {
     providers.push({
@@ -79,21 +94,6 @@ function getProviders(): LLMProvider[] {
       model: "glm-4.5-air",
       name: "Z.ai",
       extraBody: { thinking: { type: "disabled" } },
-    });
-  }
-
-  // 3. Groq — FREE tier (rate-limited ~30k TPM for 8B model)
-  const groqKey = process.env.GROQ_API_KEY;
-  if (groqKey) {
-    providers.push({
-      client: new OpenAI({
-        baseURL: "https://api.groq.com/openai/v1",
-        apiKey: groqKey,
-        timeout: 30_000,
-        fetch: proxyFetch,
-      }),
-      model: "llama-3.1-8b-instant",
-      name: "Groq",
     });
   }
 

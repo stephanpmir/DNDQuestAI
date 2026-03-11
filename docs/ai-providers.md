@@ -4,10 +4,10 @@ Last updated: March 2026
 
 ## Provider Cascade Order
 
-1. Cerebras (primary)
-2. Z.ai (first fallback)
-3. Groq (second fallback)
-4. Moonshot (last resort)
+1. Cerebras (primary — best sustained free, 1M tokens/day)
+2. Groq (first fallback — fast but TPM limit hits in active sessions)
+3. Z.ai (second fallback — free but ~7s response time)
+4. Moonshot (last resort — paid but reliable)
 
 ## Confirmed Working Models
 

@@ -22,17 +22,17 @@ const PROVIDERS: ProviderConfig[] = [
     keyEnv: "CEREBRAS_API_KEY",
   },
   {
+    name: "Groq",
+    url: "https://api.groq.com/openai/v1/chat/completions",
+    model: "llama-3.1-8b-instant",
+    keyEnv: "GROQ_API_KEY",
+  },
+  {
     name: "Z.ai",
     url: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
     model: "glm-4.5-air",
     keyEnv: "ZAI_API_KEY",
     extraBody: { thinking: { type: "disabled" } },
-  },
-  {
-    name: "Groq",
-    url: "https://api.groq.com/openai/v1/chat/completions",
-    model: "llama-3.1-8b-instant",
-    keyEnv: "GROQ_API_KEY",
   },
   {
     name: "Moonshot",
