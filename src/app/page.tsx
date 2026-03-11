@@ -24,7 +24,8 @@ function buildBgUrl(seed: number) {
 function getCachedBgUrl(): string {
   if (typeof window === "undefined") return buildBgUrl(42);
   const cached = localStorage.getItem(STORAGE_KEY);
-  if (cached) return cached;
+  // Invalidate stale direct-Pollinations URLs from before the proxy switch
+  if (cached && cached.startsWith("/api/")) return cached;
   const url = buildBgUrl(42);
   localStorage.setItem(STORAGE_KEY, url);
   return url;

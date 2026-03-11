@@ -42,13 +42,8 @@ export function CharacterAvatar({
   const accent = CLASS_ACCENT[characterClass];
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [imgStatus, setImgStatus] = useState<string>("waiting");
-  const [testStatus, setTestStatus] = useState<string>("loading...");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const urlCacheRef = useRef<Map<string, string>>(new Map());
-
-  // Hardcoded test image — no token, no dynamic prompt
-  const TEST_URL = "https://image.pollinations.ai/prompt/fantasy%20portrait%20warrior%20dark%20background?width=256&height=256&nologo=true";
 
   // Debounce preview generation — wait 800ms after the last change
   useEffect(() => {
@@ -60,7 +55,6 @@ export function CharacterAvatar({
       if (cached) {
         if (cached !== imageUrl) {
           setImageUrl(cached);
-          console.debug("[AvatarPreview] Using cached URL:", cached);
         }
         return;
       }
@@ -69,7 +63,6 @@ export function CharacterAvatar({
         name,
         512
       );
-      console.debug("[AvatarPreview] Generated URL:", url);
       urlCacheRef.current.set(cacheKey, url);
       setLoading(true);
       setImageUrl(url);
@@ -95,20 +88,8 @@ export function CharacterAvatar({
               src={imageUrl}
               alt={`${name || "Character"} preview`}
               className="w-full h-full object-cover"
-              onLoad={() => {
-                setLoading(false);
-                setImgStatus("LOADED OK");
-              }}
-              onError={() => {
-                setImgStatus("LOAD FAILED");
-                if (imageUrl.includes("&token=")) {
-                  const fallbackUrl = imageUrl.replace(/&token=[^&]+/, "");
-                  setImgStatus("RETRY no-token...");
-                  setImageUrl(fallbackUrl);
-                } else {
-                  setLoading(false);
-                }
-              }}
+              onLoad={() => setLoading(false)}
+              onError={() => setLoading(false)}
             />
             {loading && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/60">
@@ -124,31 +105,6 @@ export function CharacterAvatar({
             </div>
           </div>
         )}
-      </div>
-
-      {/* DEBUG: Dynamic image status + URL */}
-      <div className="w-full space-y-1">
-        <p className="text-[9px] text-gray-500 font-mono break-all">
-          <span className="text-gray-400">Dynamic [{imgStatus}]:</span>{" "}
-          {imageUrl ?? "(none yet)"}
-        </p>
-      </div>
-
-      {/* DEBUG: Hardcoded test image */}
-      <div className="w-full border border-dashed border-gray-600 rounded p-2 space-y-1">
-        <p className="text-[9px] text-gray-400">Test image (hardcoded, no token):</p>
-        <div className="w-24 h-24 mx-auto bg-black/30 overflow-hidden rounded">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={TEST_URL}
-            alt="Test"
-            className="w-full h-full object-cover"
-            onLoad={() => setTestStatus("LOADED OK")}
-            onError={() => setTestStatus("FAILED")}
-          />
-        </div>
-        <p className="text-[9px] text-gray-500 font-mono">Status: {testStatus}</p>
-        <p className="text-[9px] text-gray-500 font-mono break-all">{TEST_URL}</p>
       </div>
 
       {/* Name label */}

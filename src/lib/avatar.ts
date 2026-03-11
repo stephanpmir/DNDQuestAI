@@ -88,30 +88,25 @@ export function nameToSeed(name: string): number {
   return Math.abs(hash);
 }
 
-/** Get the Pollinations token (client-side from NEXT_PUBLIC env, server-side from POLLINATIONS_API_KEY).
- *  Returns undefined if not set — URLs work without a token, just without priority. */
-export function getPollinationsToken(): string | undefined {
-  const token = process.env.NEXT_PUBLIC_POLLINATIONS_TOKEN ?? process.env.POLLINATIONS_API_KEY;
-  return token || undefined; // treat empty string as missing
-}
-
-/** Build a Pollinations.ai image URL with token auth via query param */
+/**
+ * Build an image URL that goes through our /api/image-proxy route.
+ * The proxy fetches from Pollinations server-side (avoids browser blocks).
+ * Token is added server-side — clients never need it.
+ */
 export function buildPollinationsUrl(
   prompt: string,
   params: Record<string, string>
 ): string {
-  const url = new URL(
-    `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`
-  );
+  const url = new URL("/api/image-proxy", "http://placeholder");
+  url.searchParams.set("prompt", prompt);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
-  const token = getPollinationsToken();
-  if (token) url.searchParams.set("token", token);
-  return url.toString();
+  // Return only pathname + search (relative URL)
+  return `${url.pathname}${url.search}`;
 }
 
-/** Build a Pollinations.ai image URL for live preview (client-side) */
+/** Build a proxied image URL for live character preview (client-side) */
 export function buildAvatarPreviewUrl(
   data: AvatarPromptInput,
   name: string,

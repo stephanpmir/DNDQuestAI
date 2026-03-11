@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { Race, CharacterClass, Gender, AvatarCustomization } from "@/types/character";
-import { buildAvatarPrompt, nameToSeed, buildPollinationsUrl } from "@/lib/avatar";
+import { buildAvatarPrompt, nameToSeed } from "@/lib/avatar";
 
 interface AvatarRequest {
   name: string;
@@ -23,17 +23,21 @@ export async function POST(request: Request) {
 
     const prompt = buildAvatarPrompt(body);
     const seed = nameToSeed(body.name);
+    const token = process.env.POLLINATIONS_API_KEY;
 
-    const imageUrl = buildPollinationsUrl(prompt, {
-      width: "512",
-      height: "512",
-      seed: String(seed),
-      nologo: "true",
-      enhance: "true",
-      private: "true",
-    });
+    // Build upstream URL directly (server-side, not through proxy)
+    const upstream = new URL(
+      `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`
+    );
+    upstream.searchParams.set("width", "512");
+    upstream.searchParams.set("height", "512");
+    upstream.searchParams.set("seed", String(seed));
+    upstream.searchParams.set("nologo", "true");
+    upstream.searchParams.set("enhance", "true");
+    upstream.searchParams.set("private", "true");
+    if (token) upstream.searchParams.set("token", token);
 
-    const response = await fetch(imageUrl, {
+    const response = await fetch(upstream.toString(), {
       signal: AbortSignal.timeout(30_000),
     });
 
