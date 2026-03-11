@@ -11,7 +11,7 @@ Last updated: March 2026
 
 ## Confirmed Working Models
 
-### Cerebras
+### Cerebras (confirmed working)
 
 - Base URL: https://api.cerebras.ai/v1
 - Env var: `CEREBRAS_API_KEY`
@@ -19,7 +19,7 @@ Last updated: March 2026
 - Available models: `llama3.1-8b`, `gpt-oss-120b`
 - Notes: `llama-3.3-70b` does NOT exist — returns 404
 
-### Z.ai (Zhipu AI)
+### Z.ai (Zhipu AI) (confirmed working)
 
 - Base URL: https://open.bigmodel.cn/api/paas/v4
 - Env var: `ZAI_API_KEY`
@@ -28,13 +28,13 @@ Last updated: March 2026
 - **IMPORTANT**: All models default to reasoning mode which returns empty `content` and fills `reasoning_content` instead. You MUST pass `"thinking": {"type": "disabled"}` in the request body to get normal chat completions.
 - Avoid: `GLM-4-32B-0414-128K` — does NOT exist (400 "model does not exist")
 
-### Groq
+### Groq (confirmed working)
 
 - Base URL: https://api.groq.com/openai/v1
 - Env var: `GROQ_API_KEY`
 - Working model: `llama-3.1-8b-instant`
 
-### Moonshot
+### Moonshot (confirmed working)
 
 - Base URL: https://api.moonshot.ai/v1
 - Env var: `MOONSHOT_API_KEY`
