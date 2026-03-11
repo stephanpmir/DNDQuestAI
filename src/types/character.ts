@@ -71,6 +71,33 @@ export interface AvatarCustomization {
   height: HeightOption;
 }
 
+/** Structured appearance fields filled in by the player during character creation */
+export interface AppearanceFields {
+  heightSize: string;
+  weight: string;
+  hairColor: string;
+  facialHair: string;
+  scars: string;
+  clothing: string;
+  eyeColor: string;
+  lipColor: string;
+  accessories: string;
+}
+
+export function createDefaultAppearanceFields(): AppearanceFields {
+  return {
+    heightSize: "",
+    weight: "",
+    hairColor: "",
+    facialHair: "",
+    scars: "",
+    clothing: "",
+    eyeColor: "",
+    lipColor: "",
+    accessories: "",
+  };
+}
+
 export interface BeginnerSurvey {
   playstyle: "fighting" | "sneaking" | "magic" | "talking";
   teamRole: "lone-wolf" | "team-player" | "leader";

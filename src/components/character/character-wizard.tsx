@@ -6,8 +6,8 @@ import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
 import { useWorldStore } from "@/stores/world-store";
 import { useKarmaStore } from "@/stores/karma-store";
-import type { CharacterClass, Race, Gender, AbilityScores, BeginnerSurvey } from "@/types/character";
-import { RACES, CLASSES, HAIR_STYLES, HAIR_COLORS, SKIN_TONES, BODY_BUILDS, HEIGHT_OPTIONS } from "@/types/character";
+import type { CharacterClass, Race, Gender, AbilityScores, BeginnerSurvey, AppearanceFields } from "@/types/character";
+import { RACES, CLASSES, HAIR_STYLES, HAIR_COLORS, SKIN_TONES, BODY_BUILDS, HEIGHT_OPTIONS, createDefaultAppearanceFields } from "@/types/character";
 import { CLASS_DATA, FIGHTING_STYLES } from "@/lib/classes";
 import { generateRandomName } from "@/lib/descriptions";
 import { StepWelcome } from "./step-welcome";
@@ -84,7 +84,7 @@ export function CharacterWizard() {
   const [selectedFightingStyle, setSelectedFightingStyle] = useState("");
   const [halfElfBonus1, setHalfElfBonus1] = useState("");
   const [halfElfBonus2, setHalfElfBonus2] = useState("");
-  const [appearanceText, setAppearanceText] = useState("");
+  const [appearanceFields, setAppearanceFields] = useState<AppearanceFields>(createDefaultAppearanceFields());
 
   const classData = CLASS_DATA[character.class as CharacterClass];
 
@@ -228,16 +228,22 @@ export function CharacterWizard() {
     setStep(7);
   }
 
-  /** Generate portrait from player's appearance description via LLM */
+  /** Build a flat description string from structured fields (for fallback / storage) */
+  function buildFlatDescription(fields: AppearanceFields): string {
+    return Object.values(fields).filter((v) => v.trim()).join(", ");
+  }
+
+  /** Generate portrait from player's structured appearance fields via LLM */
   async function handleGeneratePortrait() {
-    setAppearanceDescription(appearanceText);
+    const flatDesc = buildFlatDescription(appearanceFields);
+    setAppearanceDescription(flatDesc);
 
     try {
       const res = await fetch("/api/portrait-prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          description: appearanceText,
+          appearanceFields,
           race: character.race,
           characterClass: character.class,
           gender: character.gender,
@@ -253,8 +259,8 @@ export function CharacterWizard() {
       // Fall through to fallback
     }
 
-    // Fallback: embed the description directly
-    const fallback = `fantasy portrait, ${character.gender.toLowerCase()} ${character.race.toLowerCase()} ${character.class.toLowerCase()}, ${appearanceText}, D&D character art, detailed painting, dark fantasy style, face visible, upper body, dramatic lighting`;
+    // Fallback: embed the flat description directly
+    const fallback = `fantasy portrait, ${character.gender.toLowerCase()} ${character.race.toLowerCase()} ${character.class.toLowerCase()}, ${flatDesc}, D&D character art, detailed painting, dark fantasy style, face visible, upper body, dramatic lighting`;
     finalizeAndShowPortrait(fallback);
   }
 
@@ -481,8 +487,10 @@ export function CharacterWizard() {
       )}
       {step === 7 && (
         <StepAppearance
-          description={appearanceText}
-          onDescriptionChange={setAppearanceText}
+          fields={appearanceFields}
+          onFieldChange={(key, value) =>
+            setAppearanceFields((prev) => ({ ...prev, [key]: value }))
+          }
           onGenerate={handleGeneratePortrait}
           onSkip={handleSkipAppearance}
           onBack={() => setStep(6)}
