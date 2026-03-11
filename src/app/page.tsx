@@ -22,13 +22,57 @@ function getCachedBgUrl(): string {
   return url;
 }
 
+interface SaveInfo {
+  characterName: string;
+  characterLevel: number;
+  location: string;
+  lastSavedAt: string;
+}
+
+/** Read save metadata from localStorage (avoids Zustand hydration issues) */
+function getSaveInfo(): SaveInfo | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("dndquest-save");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const state = parsed?.state;
+    if (
+      !state?.lastSavedAt ||
+      !state?.characterName
+    ) return null;
+    return {
+      characterName: state.characterName,
+      characterLevel: state.characterLevel ?? 1,
+      location: state.location ?? "Unknown",
+      lastSavedAt: state.lastSavedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Format a relative time string */
+function formatTimeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 export default function HomePage() {
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [bgLoaded, setBgLoaded] = useState(false);
+  const [saveInfo, setSaveInfo] = useState<SaveInfo | null>(null);
 
   // Hydrate from localStorage on mount
   useEffect(() => {
     setBgUrl(getCachedBgUrl());
+    setSaveInfo(getSaveInfo());
   }, []);
 
   const handleRegenerate = useCallback(() => {
@@ -95,11 +139,41 @@ export default function HomePage() {
           </span>
         </p>
 
-        {/* CTA Button */}
-        <div className="pt-4">
+        {/* Action Buttons */}
+        <div className="pt-4 space-y-4">
+          {/* Continue Adventure — only shown if a save exists */}
+          {saveInfo && (
+            <div>
+              <Link href="/game">
+                <button className="relative group w-full max-w-sm mx-auto px-8 py-4 font-cinzel text-base tracking-widest uppercase text-amber-100 bg-gradient-to-b from-amber-900/80 to-red-950/80 border border-amber-500/40 rounded-sm cursor-pointer transition-all duration-300 hover:border-amber-400/70 hover:from-amber-800/90 hover:to-red-900/90 animate-glow-pulse">
+                  <span className="absolute inset-0 rounded-sm bg-amber-400/0 group-hover:bg-amber-400/5 transition-colors duration-300" />
+                  <span className="relative block">Continue Adventure</span>
+                </button>
+              </Link>
+              {/* Save details */}
+              <div className="mt-2 flex items-center justify-center gap-2 text-[11px] text-gray-400/70">
+                <span className="text-amber-300/70 font-cinzel font-semibold">
+                  {saveInfo.characterName}
+                </span>
+                <span className="text-gray-600">·</span>
+                <span>Lvl {saveInfo.characterLevel}</span>
+                <span className="text-gray-600">·</span>
+                <span>{saveInfo.location}</span>
+                <span className="text-gray-600">·</span>
+                <span>{formatTimeAgo(saveInfo.lastSavedAt)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* New Adventure */}
           <Link href="/character">
-            <button className="relative group px-10 py-4 font-cinzel text-lg tracking-widest uppercase text-amber-100 bg-gradient-to-b from-amber-900/80 to-red-950/80 border border-amber-500/40 rounded-sm cursor-pointer transition-all duration-300 hover:border-amber-400/70 hover:from-amber-800/90 hover:to-red-900/90 animate-glow-pulse">
-              {/* Inner glow on hover */}
+            <button
+              className={`relative group px-10 py-4 font-cinzel text-lg tracking-widest uppercase cursor-pointer transition-all duration-300 rounded-sm ${
+                saveInfo
+                  ? "text-gray-300/80 bg-white/5 border border-white/10 hover:border-amber-500/30 hover:text-amber-200/90 hover:bg-white/10"
+                  : "text-amber-100 bg-gradient-to-b from-amber-900/80 to-red-950/80 border border-amber-500/40 hover:border-amber-400/70 hover:from-amber-800/90 hover:to-red-900/90 animate-glow-pulse"
+              }`}
+            >
               <span className="absolute inset-0 rounded-sm bg-amber-400/0 group-hover:bg-amber-400/5 transition-colors duration-300" />
               <span className="relative">New Adventure</span>
             </button>
