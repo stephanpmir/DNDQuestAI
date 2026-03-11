@@ -77,6 +77,13 @@ export interface EngineOutcome {
   lastRestTurn?: number;
   /** Type of rest taken (short or long) */
   restType?: import("@/lib/resources").RestType;
+  /** Encounter during rest in unsafe location */
+  restEncounter?: {
+    type: "combat" | "environmental" | "social";
+    description: string;
+    /** True if the rest was interrupted (no rest benefits) */
+    interrupted: boolean;
+  };
   /** Death save result for unconscious characters */
   deathSaveResult?: "nat20" | "nat1" | "success" | "failure";
   /** Damage dealt by player attack */

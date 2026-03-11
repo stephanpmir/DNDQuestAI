@@ -216,10 +216,18 @@ export function buildEngineContextMessage(
     outcomeParts.push(`Quest Completed: ${o.completeQuest}`);
   }
 
-  if (o.restDenied) {
-    outcomeParts.push("REST DENIED: The character attempted to rest too soon after their last rest. Narrate that they are too restless, the area feels unsafe, or they haven't exerted themselves enough to sleep. Make it clear they need to adventure more before resting again.");
+  if (o.restEncounter) {
+    const enc = o.restEncounter;
+    if (enc.interrupted) {
+      outcomeParts.push(`REST INTERRUPTED: ${enc.description}. The character's rest was cut short by ${enc.type === "combat" ? "an attack" : "a disturbance"}. They gain NO rest benefits. Narrate the encounter dramatically — they were settling in when danger struck.${enc.type === "combat" && o.damageTaken ? ` They took ${o.damageTaken} damage from the surprise attack.` : ""}`);
+    } else {
+      outcomeParts.push(`REST EVENT: During the rest, ${enc.description.toLowerCase()}. The rest still succeeds, but narrate this encounter as part of the rest scene.`);
+    }
   }
-  if (o.restType === "long") {
+  if (o.restDenied && !o.restEncounter) {
+    outcomeParts.push("REST DENIED: The character isn't tired enough to rest. Narrate that they feel restless, too alert, or haven't exerted themselves enough. They need to adventure more before they can settle down.");
+  }
+  if (o.restType === "long" && !o.restDenied) {
     outcomeParts.push("LONG REST: The character settles in for a full night's rest. Narrate them finding a safe camp, sleeping through the night, and waking refreshed. All HP restored and all abilities recharged.");
   }
   if (o.restType === "short" && !o.restDenied) {

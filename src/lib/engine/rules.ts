@@ -80,6 +80,101 @@ const SELF_HARM_PATTERNS = [
 /** Minimum turns between rests to prevent rest abuse */
 const MIN_TURNS_BETWEEN_RESTS = 5;
 
+// ── Rest Safety: location-based encounter risk ──
+
+type RestSafety = "sanctuary" | "sheltered" | "neutral" | "dangerous";
+
+/** Keywords in a location name that indicate safety level */
+const SANCTUARY_KEYWORDS = [
+  "inn", "tavern", "temple", "church", "chapel", "shrine", "guild hall",
+  "home", "house", "palace", "castle", "keep", "barracks", "safe house",
+  "camp", "campsite", "campfire", "haven", "sanctuary",
+];
+const SHELTERED_KEYWORDS = [
+  "cabin", "hut", "shack", "barn", "stable", "tent", "cave", "shelter",
+  "ruin", "ruins", "tower", "outpost", "farmhouse", "cottage", "lodge",
+  "warehouse", "cellar", "attic",
+];
+const DANGEROUS_KEYWORDS = [
+  "dungeon", "crypt", "tomb", "lair", "sewers", "swamp", "wasteland",
+  "abyss", "underdark", "shadowfell", "battlefield", "arena", "pit",
+  "cursed", "haunted", "infested", "necropolis",
+];
+
+function classifyRestSafety(location: string): RestSafety {
+  const loc = location.toLowerCase();
+  for (const kw of DANGEROUS_KEYWORDS) {
+    if (loc.includes(kw)) return "dangerous";
+  }
+  for (const kw of SANCTUARY_KEYWORDS) {
+    if (loc.includes(kw)) return "sanctuary";
+  }
+  for (const kw of SHELTERED_KEYWORDS) {
+    if (loc.includes(kw)) return "sheltered";
+  }
+  // Generic locations like "forest", "road", "mountains" — neutral
+  return "neutral";
+}
+
+/** Chance of encounter interrupting rest (0-1) by safety level */
+const REST_ENCOUNTER_CHANCE: Record<RestSafety, number> = {
+  sanctuary: 0,        // Safe — no encounters
+  sheltered: 0.15,     // Low chance — basic shelter
+  neutral: 0.35,       // Moderate chance — open wilderness
+  dangerous: 0.6,      // High chance — hostile territory
+};
+
+/** Generate a rest encounter based on location danger level */
+function getRestEncounter(level: number, safety: RestSafety): {
+  type: "combat" | "environmental" | "social";
+  description: string;
+  interrupted: boolean;
+} | null {
+  const chance = REST_ENCOUNTER_CHANCE[safety];
+  if (chance <= 0 || Math.random() >= chance) return null;
+
+  const combatEncounters = [
+    "Creatures stir in the darkness, drawn by the light of your campfire",
+    "A patrol of enemies stumbles upon your resting spot",
+    "Predators circle your camp, emboldened by the quiet",
+    "Undead emerge from the shadows as night falls",
+    "Bandits attempt to rob you while you sleep",
+  ];
+  const envEncounters = [
+    "A sudden storm forces you to abandon your rest and seek better shelter",
+    "Strange sounds echo nearby, keeping you on edge all night",
+    "The ground trembles — something large moves underground",
+    "Poisonous insects invade your resting area",
+  ];
+  const socialEncounters = [
+    "A stranger approaches your camp asking for shelter",
+    "A wounded traveler stumbles into your rest area begging for help",
+    "A patrol of guards questions why you're camping here",
+  ];
+
+  // Weight toward combat in dangerous areas, social in sheltered
+  const roll = Math.random();
+  if (safety === "dangerous") {
+    if (roll < 0.7) {
+      const desc = combatEncounters[Math.floor(Math.random() * combatEncounters.length)];
+      return { type: "combat", description: desc, interrupted: true };
+    }
+    const desc = envEncounters[Math.floor(Math.random() * envEncounters.length)];
+    return { type: "environmental", description: desc, interrupted: true };
+  }
+  // Neutral / sheltered — mix of all types
+  if (roll < 0.4) {
+    const desc = combatEncounters[Math.floor(Math.random() * combatEncounters.length)];
+    return { type: "combat", description: desc, interrupted: true };
+  }
+  if (roll < 0.7) {
+    const desc = envEncounters[Math.floor(Math.random() * envEncounters.length)];
+    return { type: "environmental", description: desc, interrupted: false };
+  }
+  const desc = socialEncounters[Math.floor(Math.random() * socialEncounters.length)];
+  return { type: "social", description: desc, interrupted: false };
+}
+
 /** Minimum turns between healing spells to prevent heal-spam bypassing rest cooldown */
 const MIN_TURNS_BETWEEN_HEALS = 3;
 
@@ -628,7 +723,7 @@ export function resolveAction(
           : Infinity;
         if (turnsSinceLastHeal < MIN_TURNS_BETWEEN_HEALS) {
           outcome.actionDenied = {
-            reason: `You've expended your healing magic recently. You need ${MIN_TURNS_BETWEEN_HEALS - turnsSinceLastHeal} more turn(s) before you can cast another healing spell.`,
+            reason: "Your healing magic hasn't recovered yet. Give it some time before attempting another healing spell.",
             attempted: "cast a healing spell",
           };
           break;
@@ -1042,12 +1137,51 @@ export function resolveAction(
 
       if (turnsSinceLastRest < MIN_TURNS_BETWEEN_RESTS) {
         outcome.restDenied = true;
-        const turnsRemaining = MIN_TURNS_BETWEEN_RESTS - turnsSinceLastRest;
         outcome.actionDenied = {
-          reason: `You rested recently and aren't tired enough yet. You need ${turnsRemaining} more turn${turnsRemaining === 1 ? "" : "s"} of activity before you can rest again.`,
+          reason: "You aren't tired enough to rest yet. Continue adventuring for a while before settling down.",
           attempted: "rest",
         };
         break;
+      }
+
+      // ── Location safety check ──
+      const restSafety = classifyRestSafety(gameState.location);
+      const restEncounter = getRestEncounter(character.level, restSafety);
+
+      if (restEncounter) {
+        outcome.restEncounter = restEncounter;
+
+        if (restEncounter.interrupted) {
+          // Rest interrupted by combat/danger — no rest benefits
+          outcome.restDenied = true;
+
+          // Combat encounter deals damage
+          if (restEncounter.type === "combat") {
+            const enemy = scaledEnemy(character.level);
+            const enemyRoll = d20();
+            const enemyTotal = enemyRoll + enemy.attackBonus;
+            // Surprise attack — player is resting so AC is reduced
+            const restingAC = Math.max(10, character.ac - 2);
+            if (enemyTotal >= restingAC) {
+              const enemyDmg = damageRoll(enemy.damageDice.count, enemy.damageDice.sides, enemy.damageBonus);
+              outcome.hpChange = -Math.max(1, enemyDmg.total);
+              outcome.damageTaken = Math.max(1, enemyDmg.total);
+            }
+          }
+
+          outcome.roll = {
+            type: "check",
+            ability: "wisdom",
+            rolled: 0,
+            modifier: 0,
+            total: 0,
+            dc: 0,
+            success: false,
+            reason: `Rest interrupted! ${restEncounter.description}`,
+          };
+          break;
+        }
+        // Non-interrupting encounter — rest still succeeds but with flavor
       }
 
       // Detect long rest vs short rest
