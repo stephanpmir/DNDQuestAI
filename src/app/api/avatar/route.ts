@@ -23,23 +23,20 @@ export async function POST(request: Request) {
 
     const prompt = buildAvatarPrompt(body);
     const seed = nameToSeed(body.name);
-    const token = process.env.POLLINATIONS_API_KEY;
+    const key = process.env.NEXT_PUBLIC_POLLINATIONS_TOKEN || "";
 
     // Build upstream URL directly (server-side, not through proxy)
-    const upstream = new URL(
-      `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`
-    );
-    upstream.searchParams.set("width", "512");
-    upstream.searchParams.set("height", "512");
-    upstream.searchParams.set("seed", String(seed));
-    upstream.searchParams.set("nologo", "true");
-    upstream.searchParams.set("enhance", "true");
-    upstream.searchParams.set("private", "true");
-    if (token) upstream.searchParams.set("token", token);
+    let upstreamUrl =
+      `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}` +
+      `?model=flux&width=512&height=768&seed=${seed}&enhance=true&nologo=true`;
+    if (key) upstreamUrl += `&key=${key}`;
 
-    const response = await fetch(upstream.toString(), {
-      signal: AbortSignal.timeout(30_000),
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const response = await fetch(upstreamUrl, {
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       console.error("[Avatar API] Pollinations error:", response.status, response.statusText);

@@ -89,7 +89,7 @@ export function nameToSeed(name: string): number {
 }
 
 /**
- * Build a portrait image URL.
+ * Build a portrait image URL using gen.pollinations.ai.
  * Server-side: direct Pollinations URL with API key.
  * Client-side: proxied via Netlify function.
  */
@@ -97,21 +97,22 @@ export function buildPollinationsUrl(
   prompt: string,
   params: Record<string, string>
 ): string {
+  const seed = params.seed || String(Math.floor(Math.random() * 999999999));
+  const width = params.width || "512";
+  const height = params.height || "768";
+
   // Server-side callers (API routes) use the direct Pollinations URL
   if (typeof window === "undefined") {
-    const url = new URL(
-      `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`
-    );
-    for (const [key, value] of Object.entries(params)) {
-      url.searchParams.set(key, value);
-    }
-    const token = process.env.POLLINATIONS_API_KEY;
-    if (token) url.searchParams.set("token", token);
-    return url.toString();
+    const key = process.env.NEXT_PUBLIC_POLLINATIONS_TOKEN || "";
+    let url =
+      `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}` +
+      `?model=flux&width=${width}&height=${height}&seed=${seed}&enhance=true&nologo=true`;
+    if (key) url += `&key=${key}`;
+    return url;
   }
 
   // Client-side callers use the Netlify proxy
-  const searchParams = new URLSearchParams({ prompt, ...params });
+  const searchParams = new URLSearchParams({ prompt, seed });
   return `/.netlify/functions/proxy-portrait?${searchParams.toString()}`;
 }
 
