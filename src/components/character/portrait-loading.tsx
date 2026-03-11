@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { buildAvatarPreviewUrl, type AvatarPromptInput } from "@/lib/avatar";
+import { useState, useEffect, useCallback } from "react";
+import { buildAvatarPreviewUrl, nameToSeed, type AvatarPromptInput } from "@/lib/avatar";
 import type { Character } from "@/types/character";
 
 interface PortraitLoadingProps {
@@ -15,18 +15,26 @@ export function PortraitLoading({ character, onComplete }: PortraitLoadingProps)
   const [loaded, setLoaded] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [phase, setPhase] = useState<"generating" | "reveal">("generating");
+  const [rerollCount, setRerollCount] = useState(0);
 
-  // Build the Pollinations URL once on mount
-  useEffect(() => {
+  const buildUrl = useCallback((extraSeed: number = 0) => {
     const input: AvatarPromptInput = {
       race: character.race,
       class: character.class,
       gender: character.gender,
       avatar: character.avatar,
     };
-    const url = buildAvatarPreviewUrl(input, character.name, 768);
-    setImageUrl(url);
+    // Use name seed + reroll offset for variation
+    const baseSeed = nameToSeed(character.name || "adventurer");
+    const seed = baseSeed + extraSeed;
+    const prompt = `fantasy portrait, ${character.gender.toLowerCase()} ${character.race.toLowerCase()} ${character.class.toLowerCase()}, D&D character art, detailed painting, dark fantasy style, face visible, upper body`;
+    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=768&seed=${seed}&nologo=true&enhance=true`;
   }, [character]);
+
+  // Build the Pollinations URL on mount
+  useEffect(() => {
+    setImageUrl(buildUrl(0));
+  }, [buildUrl]);
 
   // Tick elapsed seconds for flavour text
   useEffect(() => {
@@ -50,6 +58,15 @@ export function PortraitLoading({ character, onComplete }: PortraitLoadingProps)
     }, 20000);
     return () => clearTimeout(timeout);
   }, [loaded, onComplete]);
+
+  function handleReroll() {
+    const next = rerollCount + 1;
+    setRerollCount(next);
+    setLoaded(false);
+    setPhase("generating");
+    setElapsed(0);
+    setImageUrl(buildUrl(next * 1000));
+  }
 
   const FLAVOUR_TEXTS = [
     "The fates are weaving your destiny...",
@@ -106,14 +123,22 @@ export function PortraitLoading({ character, onComplete }: PortraitLoadingProps)
             </p>
           </div>
 
-          {/* Begin Adventure button */}
-          <button
-            onClick={() => onComplete(imageUrl)}
-            className="relative group px-10 py-3 font-cinzel text-base tracking-widest uppercase text-amber-100 bg-gradient-to-b from-amber-900/80 to-red-950/80 border border-amber-500/40 rounded-sm cursor-pointer transition-all duration-300 hover:border-amber-400/70 hover:from-amber-800/90 hover:to-red-900/90 animate-glow-pulse"
-          >
-            <span className="absolute inset-0 rounded-sm bg-amber-400/0 group-hover:bg-amber-400/5 transition-colors duration-300" />
-            <span className="relative">Begin Adventure</span>
-          </button>
+          {/* Action buttons */}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleReroll}
+              className="px-6 py-2.5 font-cinzel text-sm tracking-wider uppercase text-amber-300/70 border border-amber-500/30 rounded-sm cursor-pointer transition-all duration-300 hover:text-amber-200 hover:border-amber-400/60 hover:bg-amber-900/20"
+            >
+              Reroll Portrait
+            </button>
+            <button
+              onClick={() => onComplete(imageUrl)}
+              className="relative group px-10 py-3 font-cinzel text-base tracking-widest uppercase text-amber-100 bg-gradient-to-b from-amber-900/80 to-red-950/80 border border-amber-500/40 rounded-sm cursor-pointer transition-all duration-300 hover:border-amber-400/70 hover:from-amber-800/90 hover:to-red-900/90 animate-glow-pulse"
+            >
+              <span className="absolute inset-0 rounded-sm bg-amber-400/0 group-hover:bg-amber-400/5 transition-colors duration-300" />
+              <span className="relative">Begin Adventure</span>
+            </button>
+          </div>
 
           {/* Decorative bottom rule */}
           <div className="flex items-center justify-center gap-4">

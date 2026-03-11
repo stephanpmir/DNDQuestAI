@@ -89,24 +89,25 @@ export function nameToSeed(name: string): number {
 }
 
 /**
- * Build an image URL that goes through our /api/image-proxy route.
- * The proxy fetches from Pollinations server-side (avoids browser blocks).
- * Token is added server-side — clients never need it.
+ * Build a direct Pollinations.ai image URL.
+ * Used by all client-side image tags (character preview, portrait, landing bg).
  */
 export function buildPollinationsUrl(
   prompt: string,
   params: Record<string, string>
 ): string {
-  const url = new URL("/api/image-proxy", "http://placeholder");
-  url.searchParams.set("prompt", prompt);
+  const url = new URL(
+    `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`
+  );
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
-  // Return only pathname + search (relative URL)
-  return `${url.pathname}${url.search}`;
+  const token = process.env.NEXT_PUBLIC_POLLINATIONS_TOKEN;
+  if (token) url.searchParams.set("token", token);
+  return url.toString();
 }
 
-/** Build a proxied image URL for live character preview (client-side) */
+/** Build a Pollinations image URL for live character preview */
 export function buildAvatarPreviewUrl(
   data: AvatarPromptInput,
   name: string,

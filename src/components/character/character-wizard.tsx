@@ -19,10 +19,29 @@ import { StepAbilities } from "./step-abilities";
 import { StepSkills } from "./step-skills";
 import { StepReview } from "./step-review";
 import { StepSurvey } from "./step-survey";
-import { CharacterAvatar } from "./character-avatar";
+import { AvatarCustomizer } from "./avatar-customizer";
 import { StepSuggestion } from "./step-suggestion";
 import { recommend, type SurveyRecommendation } from "@/lib/survey-recommend";
 import { PortraitLoading } from "./portrait-loading";
+import type { AvatarCustomization } from "@/types/character";
+
+/** Appearance customizer panel (no image preview — portrait shown at reveal) */
+function AvatarCustomizerPanel({
+  avatar,
+  onAvatarChange,
+}: {
+  avatar: AvatarCustomization;
+  onAvatarChange: (updates: Partial<AvatarCustomization>) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider text-center">
+        Appearance
+      </h3>
+      <AvatarCustomizer avatar={avatar} onChange={onAvatarChange} />
+    </div>
+  );
+}
 
 const STEP_LABELS = [
   "Welcome",
@@ -436,15 +455,11 @@ export function CharacterWizard() {
         )}
       </div>
 
-      {/* Avatar panel — sticky on the right, hidden on small screens */}
+      {/* Avatar customizer — sticky on the right, hidden on small screens */}
       {showAvatar && (
         <div className="hidden lg:block w-56 shrink-0">
           <div className="sticky top-24">
-            <CharacterAvatar
-              name={character.name}
-              race={character.race}
-              characterClass={character.class}
-              gender={character.gender}
+            <AvatarCustomizerPanel
               avatar={character.avatar}
               onAvatarChange={setAvatar}
             />
