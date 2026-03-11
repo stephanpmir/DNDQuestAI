@@ -36,6 +36,53 @@ export interface GameSnapshot {
   crime: {
     crimes: ReturnType<typeof useCrimeStore.getState>["crimes"];
   };
+  /** Condensed summary of the session for DM context on reload */
+  chatSummary?: string;
+}
+
+/**
+ * Build a condensed summary from the chat log and game state.
+ * Captures the last ~20 exchanges plus key game context so the DM
+ * can recap the session when the player returns.
+ */
+function buildChatSummary(
+  messages: ReturnType<typeof useGameStore.getState>["messages"],
+  location: string,
+  questLog: string[],
+  turnCount: number,
+  characterName: string,
+  characterClass: string,
+  characterRace: string,
+  hp: number,
+  maxHp: number,
+  level: number,
+): string {
+  const lines: string[] = [];
+
+  lines.push(`Character: ${characterName}, Level ${level} ${characterRace} ${characterClass} (HP: ${hp}/${maxHp})`);
+  lines.push(`Current Location: ${location}`);
+  lines.push(`Turn: ${turnCount}`);
+
+  if (questLog.length > 0) {
+    lines.push(`Active Quests: ${questLog.join("; ")}`);
+  }
+
+  // Take the last 20 messages and condense them
+  const recent = messages.slice(-20);
+  if (recent.length > 0) {
+    lines.push("");
+    lines.push("Recent events:");
+    for (const msg of recent) {
+      const prefix = msg.role === "user" ? "Player" : "DM";
+      // Truncate long narratives to keep summary compact
+      const text = msg.narrative.length > 300
+        ? msg.narrative.slice(0, 300) + "..."
+        : msg.narrative;
+      lines.push(`[${prefix}]: ${text}`);
+    }
+  }
+
+  return lines.join("\n");
 }
 
 /** Capture the current state of all stores into a snapshot. */
@@ -45,6 +92,19 @@ export function captureSnapshot(): GameSnapshot {
   const ks = useKarmaStore.getState();
   const ws = useWorldStore.getState();
   const cr = useCrimeStore.getState();
+
+  const chatSummary = buildChatSummary(
+    gs.messages,
+    gs.location,
+    gs.questLog,
+    gs.turnCount,
+    cs.character.name,
+    cs.character.class,
+    cs.character.race,
+    cs.character.hp,
+    cs.character.maxHp,
+    cs.character.level,
+  );
 
   return {
     character: { character: cs.character, isCreated: cs.isCreated },
@@ -67,6 +127,7 @@ export function captureSnapshot(): GameSnapshot {
       facts: ws.facts,
     },
     crime: { crimes: cr.crimes },
+    chatSummary,
   };
 }
 
@@ -85,6 +146,8 @@ export function restoreSnapshot(snap: GameSnapshot): void {
     turnCount: snap.game.turnCount,
     campaignStarted: snap.game.campaignStarted,
     isLoading: false,
+    justLoaded: true,
+    loadedChatSummary: snap.chatSummary ?? null,
   });
 
   useKarmaStore.setState({

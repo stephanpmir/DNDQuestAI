@@ -29,6 +29,8 @@ export function GameView() {
     turnCount,
     isLoading,
     campaignStarted,
+    justLoaded,
+    loadedChatSummary,
     addMessage,
     setLocation,
     addQuest,
@@ -36,6 +38,7 @@ export function GameView() {
     incrementTurn,
     setLoading,
     setCampaignStarted,
+    clearJustLoaded,
   } = useGameStore();
 
   const {
@@ -354,6 +357,28 @@ export function GameView() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignStarted, character.name]);
+
+  // Welcome-back recap after loading a saved game
+  const loadRecapFired = useRef(false);
+  useEffect(() => {
+    if (justLoaded && !loadRecapFired.current) {
+      loadRecapFired.current = true;
+      clearJustLoaded();
+
+      const summary = loadedChatSummary ?? "";
+      const recapPrompt = [
+        `[SYSTEM: The player has returned to a saved game. Welcome them back in character as the Dungeon Master.`,
+        `Provide a brief, atmospheric recap of where they are, what they were doing, and what happened recently.`,
+        `Then ask what they want to do next. Keep the recap to 2-3 short paragraphs.]`,
+        ``,
+        `Session context:`,
+        summary,
+      ].join("\n");
+
+      callDMApi(recapPrompt, false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [justLoaded]);
 
   const isDead = character.isDead;
   const [saveModalMode, setSaveModalMode] = useState<"save" | "load" | null>(null);

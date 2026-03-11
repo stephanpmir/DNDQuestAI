@@ -9,6 +9,10 @@ interface GameStore {
   turnCount: number;
   isLoading: boolean;
   campaignStarted: boolean;
+  /** Set to true after restoring a save; cleared after welcome-back fires */
+  justLoaded: boolean;
+  /** Chat summary from the loaded save for DM recap context */
+  loadedChatSummary: string | null;
 
   addMessage: (msg: ChatMessage) => void;
   setLocation: (location: string) => void;
@@ -17,6 +21,7 @@ interface GameStore {
   incrementTurn: () => void;
   setLoading: (loading: boolean) => void;
   setCampaignStarted: (started: boolean) => void;
+  clearJustLoaded: () => void;
   reset: () => void;
 }
 
@@ -29,6 +34,8 @@ export const useGameStore = create<GameStore>()(
       turnCount: 0,
       isLoading: false,
       campaignStarted: false,
+      justLoaded: false,
+      loadedChatSummary: null,
 
       addMessage: (msg) =>
         set((s) => ({ messages: [...s.messages, msg] })),
@@ -52,6 +59,7 @@ export const useGameStore = create<GameStore>()(
 
       setLoading: (isLoading) => set({ isLoading }),
       setCampaignStarted: (campaignStarted) => set({ campaignStarted }),
+      clearJustLoaded: () => set({ justLoaded: false, loadedChatSummary: null }),
 
       reset: () =>
         set({
@@ -61,6 +69,8 @@ export const useGameStore = create<GameStore>()(
           turnCount: 0,
           isLoading: false,
           campaignStarted: false,
+          justLoaded: false,
+          loadedChatSummary: null,
         }),
     }),
     {
