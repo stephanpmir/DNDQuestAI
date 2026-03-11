@@ -143,6 +143,8 @@ export function GameView() {
             xpGained: u.xpGained,
             lastRestTurn: u.lastRestTurn,
             raging: u.raging,
+            lastHealTurn: u.lastHealTurn,
+            lastTravelEncounterTurn: u.lastTravelEncounterTurn,
           });
           if (u.locationChange) {
             setLocation(u.locationChange);

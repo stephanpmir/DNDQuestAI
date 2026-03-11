@@ -144,6 +144,10 @@ export interface Character {
   relentlessUsed?: boolean;
   /** Barbarian Rage active (cleared on rest) */
   raging?: boolean;
+  /** Turn number of last healing spell (-1 = never used) */
+  lastHealTurn?: number;
+  /** Turn number of last travel with encounter */
+  lastTravelEncounterTurn?: number;
 }
 
 /** D&D 5e XP thresholds for levels 1-20 */

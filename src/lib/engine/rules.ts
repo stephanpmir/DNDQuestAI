@@ -55,7 +55,7 @@ const ACTION_PATTERNS: [RegExp, ActionType][] = [
   [/\b(divine smite|smite|holy smite|radiant smite)\b/i, "divine_smite"],
   [/\b(identify|appraise|examine closely|inspect item|study item)\b/i, "identify_item"],
   [/\b(attack|strike|hit|fight|slash|stab|shoot|swing)\b/i, "attack"],
-  [/\b(cast|spell|magic|fireball|heal|cure)\b/i, "cast_spell"],
+  [/\b(cast|spell|fireball|fire bolt|eldritch blast|magic missile|sacred flame|cure wounds|healing word|goodberry|thunderwave|burning hands|chromatic orb|guiding bolt|inflict wounds|ray of sickness|hellish rebuke|shocking grasp|acid splash|poison spray|vicious mockery|chill touch|ray of frost|thorn whip|produce flame|shillelagh|witch bolt)\b/i, "cast_spell"],
   [/\b(pick lock|sneak|hide|stealth|climb|swim|jump|search|investigate|persuade|intimidate|deceive|perception|check)\b/i, "skill_check"],
   [/\b(rest|sleep|camp|long rest|short rest)\b/i, "rest"],
   [/\b(talk|speak|ask|greet|negotiate|converse|say)\b/i, "talk"],
@@ -77,6 +77,12 @@ const SELF_HARM_PATTERNS = [
 
 /** Minimum turns between rests to prevent rest abuse */
 const MIN_TURNS_BETWEEN_RESTS = 5;
+
+/** Minimum turns between healing spells to prevent heal-spam bypassing rest cooldown */
+const MIN_TURNS_BETWEEN_HEALS = 3;
+
+/** Minimum turns between travel encounters to prevent XP farming via back-and-forth travel */
+const MIN_TURNS_BETWEEN_TRAVEL_ENCOUNTERS = 4;
 
 function detectAction(playerInput: string, character: Character): ActionType {
   // If character is unconscious at 0 HP, force death save
@@ -535,6 +541,16 @@ export function resolveAction(
     return outcome;
   }
 
+  // ── Unconscious gate — only death saves allowed at 0 HP ──
+  // Prevents unconscious characters from trading, exploring, talking, etc.
+  if (character.isUnconscious && action !== "death_save") {
+    outcome.actionDenied = {
+      reason: "You are unconscious and cannot take actions. You must make death saving throws to stabilize.",
+      attempted: "act while unconscious",
+    };
+    return outcome;
+  }
+
   switch (action) {
     case "death_save": {
       // D&D 5e death saving throws — DC 10, no modifiers
@@ -583,7 +599,7 @@ export function resolveAction(
 
       // ── Healing spell detection: Cure Wounds, Healing Word, Goodberry, etc. ──
       // Note: Lay on Hands is handled separately as a Paladin class feature
-      if (isSpell && /\b(cure wounds|healing word|heal|goodberry)\b/i.test(playerInput)) {
+      if (isSpell && /\b(cure wounds|healing word|goodberry)\b/i.test(playerInput)) {
         const isCaster = FULL_CASTERS.includes(character.class) || HALF_CASTERS.includes(character.class);
         if (!isCaster) {
           outcome.actionDenied = {
@@ -592,6 +608,18 @@ export function resolveAction(
           };
           break;
         }
+        // Healing spell cooldown: prevent heal-spam bypassing rest cooldown
+        const turnsSinceLastHeal = (character.lastHealTurn ?? -1) >= 0
+          ? gameState.turnCount - (character.lastHealTurn ?? -1)
+          : Infinity;
+        if (turnsSinceLastHeal < MIN_TURNS_BETWEEN_HEALS) {
+          outcome.actionDenied = {
+            reason: `You've expended your healing magic recently. You need ${MIN_TURNS_BETWEEN_HEALS - turnsSinceLastHeal} more turn(s) before you can cast another healing spell.`,
+            attempted: "cast a healing spell",
+          };
+          break;
+        }
+        outcome.lastHealTurn = gameState.turnCount;
         // Goodberry: flat 10 HP healing (10 berries × 1 HP each)
         if (/\bgoodberry\b/i.test(playerInput)) {
           const healed = Math.min(10, character.maxHp - character.hp);
@@ -632,6 +660,28 @@ export function resolveAction(
         break;
       }
 
+      // ── Non-caster spell gate ──
+      // Non-casters cannot cast ANY spells (damage or utility). This prevents
+      // exploits like a Barbarian typing "cast fireball" to deal spell damage.
+      if (isSpell) {
+        const isCaster = FULL_CASTERS.includes(character.class) || HALF_CASTERS.includes(character.class);
+        if (!isCaster) {
+          outcome.actionDenied = {
+            reason: `As a ${character.class}, you don't have the ability to cast spells. Your class relies on martial prowess, not magic.`,
+            attempted: "cast a spell",
+          };
+          break;
+        }
+        // Half-casters (Paladin, Ranger) can't cast until level 2
+        if (HALF_CASTERS.includes(character.class) && character.level < 2) {
+          outcome.actionDenied = {
+            reason: `You haven't developed your spellcasting abilities yet. ${character.class}s gain spellcasting at level 2.`,
+            attempted: "cast a spell",
+          };
+          break;
+        }
+      }
+
       // ── Utility/non-damage cantrip detection ──
       // These cantrips have no damage component; narrate as flavor, no combat
       if (isSpell) {
@@ -649,6 +699,25 @@ export function resolveAction(
           };
           break;
         }
+      }
+
+      // ── Magic Missile: auto-hit, no attack roll (D&D 5e PHB p.257) ──
+      // Magic Missile always hits — 3d4+3 force damage, no save, no counterattack
+      if (isSpell && /\bmagic missile\b/i.test(playerInput)) {
+        const dmg = damageRoll(3, 4, 3);
+        outcome.roll = {
+          type: "attack",
+          ability: getAttackAbility(character, playerInput, true, false),
+          rolled: 20, // auto-hit, display as guaranteed
+          modifier: 0,
+          total: 20,
+          dc: 0,
+          success: true,
+          reason: "Magic Missile — darts of magical force unerringly strike the target (auto-hit)",
+        };
+        outcome.damageDealt = dmg.total;
+        outcome.xpGained = combatXpReward(character.level);
+        break;
       }
 
       // D&D 5e attack: d20 + ability modifier + proficiency bonus vs enemy AC
@@ -809,6 +878,12 @@ export function resolveAction(
       outcome.roll = { ...result, reason: `${skillName} check — testing your skill` };
       if (result.success) {
         outcome.xpGained = skillCheckXpReward(character.level);
+      } else if (result.rolled <= 3) {
+        // Critical failure: mishap causes minor damage (prevents zero-risk XP farming)
+        const mishapDmg = Math.max(1, d(4));
+        outcome.hpChange = -mishapDmg;
+        outcome.damageTaken = mishapDmg;
+        outcome.roll = { ...result, reason: `${skillName} check — critical failure! A mishap occurs` };
       }
       break;
     }
@@ -818,11 +893,18 @@ export function resolveAction(
       // (e.g. entering an inn next to you should NOT trigger a wilderness encounter)
       const isOverlandTravel = outcome.locationChange && locationInfo?.isTravel;
       if (isOverlandTravel) {
+        // Travel encounter cooldown: prevent XP farming by traveling back and forth
+        const turnsSinceLastTravel = (character.lastTravelEncounterTurn ?? -1) >= 0
+          ? gameState.turnCount - (character.lastTravelEncounterTurn ?? -1)
+          : Infinity;
+        const travelCooledDown = turnsSinceLastTravel >= MIN_TURNS_BETWEEN_TRAVEL_ENCOUNTERS;
+
         const encounterRoll = d20();
-        // 30% chance of travel encounter (roll 1-6 on d20)
+        // 30% chance of travel encounter (roll 1-6 on d20), but only if cooldown has passed
         // Travel encounters are resolved in the background — no DC check shown
         // to the player. The DM narrates the encounter seamlessly.
-        if (encounterRoll <= 6) {
+        if (encounterRoll <= 6 && travelCooledDown) {
+          outcome.lastTravelEncounterTurn = gameState.turnCount;
           const encounterType = getRandomTravelEncounter(character.level);
           outcome.travelEncounter = encounterType;
 
@@ -1068,6 +1150,12 @@ export function resolveAction(
       outcome.roll = { ...socialResult, reason: `${skillLabel} check — social interaction` };
       if (socialResult.success) {
         outcome.xpGained = skillCheckXpReward(character.level);
+      } else if (socialResult.rolled <= 3) {
+        // Critical social failure: offend the NPC, lose some reputation
+        outcome.fameChange = -1;
+        outcome.fameReason = "A badly botched social interaction";
+        outcome.fameCategory = "social";
+        outcome.roll = { ...socialResult, reason: `${skillLabel} check — social blunder! You deeply offend them` };
       }
       break;
     }
@@ -1126,6 +1214,7 @@ export function resolveAction(
 
     case "bardic_inspiration": {
       // Bard class feature: inspire self or allies with a d6 (scales at higher levels)
+      // Requires a CHA performance check to succeed — prevents zero-risk XP farming
       if (character.class !== "Bard") {
         outcome.actionDenied = {
           reason: `Bardic Inspiration is a Bard class feature. As a ${character.class}, you don't have this ability.`,
@@ -1135,18 +1224,28 @@ export function resolveAction(
       }
       // Inspiration die scales: d6 at L1, d8 at L5, d10 at L10, d12 at L15
       const inspireDie = character.level >= 15 ? 12 : character.level >= 10 ? 10 : character.level >= 5 ? 8 : 6;
-      const inspireRoll = d(inspireDie);
-      outcome.roll = {
-        type: "check",
-        ability: "charisma",
-        rolled: inspireRoll,
-        modifier: 0,
-        total: inspireRoll,
-        dc: 0,
-        success: true,
-        reason: `Bardic Inspiration — a d${inspireDie} of musical encouragement`,
-      };
-      outcome.xpGained = skillCheckXpReward(character.level);
+      const inspireProf = proficiencyBonus(character.level);
+      const inspireDC = levelScaledDC(12, character.level);
+      const inspireCheck = abilityCheck(character.abilityScores.charisma, inspireDC, "charisma", inspireProf, lucky);
+      if (inspireCheck.success) {
+        const inspireRoll = d(inspireDie);
+        outcome.roll = {
+          type: "check",
+          ability: "charisma",
+          rolled: inspireCheck.rolled,
+          modifier: inspireCheck.modifier,
+          total: inspireCheck.total,
+          dc: inspireDC,
+          success: true,
+          reason: `Bardic Inspiration — a rousing d${inspireDie} performance (CHA check DC ${inspireDC})`,
+        };
+        outcome.xpGained = explorationXpReward(character.level);
+      } else {
+        outcome.roll = {
+          ...inspireCheck,
+          reason: `Bardic Inspiration — your performance falls flat (CHA check DC ${inspireDC})`,
+        };
+      }
       break;
     }
 

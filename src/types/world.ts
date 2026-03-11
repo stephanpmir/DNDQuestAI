@@ -152,6 +152,10 @@ export interface EngineOutcome {
   identifyItem?: string;
   /** Barbarian rage state change */
   raging?: boolean;
+  /** Turn of last healing spell (for cooldown tracking) */
+  lastHealTurn?: number;
+  /** Turn of last travel encounter (for XP farming prevention) */
+  lastTravelEncounterTurn?: number;
 }
 
 /** What the LLM receives to narrate — it does NOT decide outcomes. */

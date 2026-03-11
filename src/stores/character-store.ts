@@ -37,6 +37,8 @@ interface CharacterStore {
     karmaChange?: number;
     fameChange?: number;
     raging?: boolean;
+    lastHealTurn?: number;
+    lastTravelEncounterTurn?: number;
   }) => void;
   reset: () => void;
 }
@@ -368,6 +370,16 @@ export const useCharacterStore = create<CharacterStore>()(
           // Barbarian rage state
           if (updates.raging !== undefined) {
             c.raging = updates.raging;
+          }
+
+          // Healing spell cooldown tracking
+          if (updates.lastHealTurn !== undefined) {
+            c.lastHealTurn = updates.lastHealTurn;
+          }
+
+          // Travel encounter cooldown tracking
+          if (updates.lastTravelEncounterTurn !== undefined) {
+            c.lastTravelEncounterTurn = updates.lastTravelEncounterTurn;
           }
 
           // Rest tracking

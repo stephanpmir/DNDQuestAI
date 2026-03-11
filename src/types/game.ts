@@ -37,6 +37,8 @@ export interface DMResponsePayload {
     xpGained?: number;
     lastRestTurn?: number;
     raging?: boolean;
+    lastHealTurn?: number;
+    lastTravelEncounterTurn?: number;
   };
   /** Engine outcome details */
   engineOutcome?: {
