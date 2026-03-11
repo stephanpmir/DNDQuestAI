@@ -7,20 +7,18 @@ import { useKarmaStore } from "@/stores/karma-store";
 import { useWorldStore } from "@/stores/world-store";
 import { useCrimeStore } from "@/stores/crime-store";
 import { useSaveStore } from "@/stores/save-store";
+import { captureSnapshot } from "@/lib/save-snapshot";
 
 /** Debounce interval in ms — avoids saving on every keystroke */
 const SAVE_DEBOUNCE_MS = 1500;
 
 /**
- * Invisible component that subscribes to all game stores and records a
- * unified auto-save timestamp whenever meaningful state changes.
- *
- * Must be mounted inside the game page (only saves while a game is active).
+ * Invisible component that subscribes to all game stores and auto-saves
+ * to the "auto" slot whenever meaningful state changes.
  */
 export function AutoSaveProvider() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Subscribe to the specific slices that matter for game state
   const character = useCharacterStore((s) => s.character);
   const isCreated = useCharacterStore((s) => s.isCreated);
   const messages = useGameStore((s) => s.messages);
@@ -32,21 +30,22 @@ export function AutoSaveProvider() {
   const companions = useKarmaStore((s) => s.companions);
   const worldEvents = useWorldStore((s) => s.events);
   const crimes = useCrimeStore((s) => s.crimes);
-  const recordSave = useSaveStore((s) => s.recordSave);
+  const saveToSlot = useSaveStore((s) => s.saveToSlot);
 
   useEffect(() => {
-    // Don't save if no character has been created yet
     if (!isCreated) return;
 
-    // Debounce: clear any pending save, schedule a new one
     if (timerRef.current) clearTimeout(timerRef.current);
 
     timerRef.current = setTimeout(() => {
-      recordSave({
+      const snapshot = captureSnapshot();
+      saveToSlot("auto", {
+        savedAt: new Date().toISOString(),
         characterName: character.name,
         characterLevel: character.level,
         location,
         turnCount,
+        snapshot,
       });
     }, SAVE_DEBOUNCE_MS);
 
@@ -54,7 +53,6 @@ export function AutoSaveProvider() {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [
-    // Game-relevant state that should trigger a save
     isCreated,
     character.hp,
     character.maxHp,
@@ -75,9 +73,8 @@ export function AutoSaveProvider() {
     companions,
     worldEvents.length,
     crimes.length,
-    recordSave,
+    saveToSlot,
   ]);
 
-  // This component renders nothing
   return null;
 }

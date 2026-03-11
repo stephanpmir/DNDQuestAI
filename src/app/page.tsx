@@ -2,17 +2,18 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import type { SlotId, SaveSlot } from "@/stores/save-store";
+import { restoreSnapshot } from "@/lib/save-snapshot";
 
 const BG_PROMPT =
   "dark fantasy medieval landscape, dragon silhouette, dramatic stormy sky, red and gold lighting, cinematic wide shot, D&D concept art";
 const STORAGE_KEY = "dndquest-landing-bg";
 
-/** Build a Pollinations URL with a random seed */
 function buildBgUrl(seed: number) {
   return `https://image.pollinations.ai/prompt/${encodeURIComponent(BG_PROMPT)}?width=1920&height=1080&seed=${seed}&nologo=true&enhance=true`;
 }
 
-/** Get or create a cached background URL */
 function getCachedBgUrl(): string {
   if (typeof window === "undefined") return buildBgUrl(42);
   const cached = localStorage.getItem(STORAGE_KEY);
@@ -23,36 +24,51 @@ function getCachedBgUrl(): string {
 }
 
 interface SaveInfo {
+  slotId: SlotId;
   characterName: string;
   characterLevel: number;
   location: string;
-  lastSavedAt: string;
+  savedAt: string;
+  snapshot: SaveSlot["snapshot"];
 }
 
-/** Read save metadata from localStorage (avoids Zustand hydration issues) */
-function getSaveInfo(): SaveInfo | null {
-  if (typeof window === "undefined") return null;
+const SLOT_LABELS: Record<SlotId, string> = {
+  auto: "Auto-Save",
+  "slot-1": "Slot 1",
+  "slot-2": "Slot 2",
+  "slot-3": "Slot 3",
+};
+
+/** Read all save slots from localStorage (raw read, no Zustand import) */
+function getAllSaves(): SaveInfo[] {
+  if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem("dndquest-save");
-    if (!raw) return null;
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    const state = parsed?.state;
-    if (
-      !state?.lastSavedAt ||
-      !state?.characterName
-    ) return null;
-    return {
-      characterName: state.characterName,
-      characterLevel: state.characterLevel ?? 1,
-      location: state.location ?? "Unknown",
-      lastSavedAt: state.lastSavedAt,
-    };
+    const slots = parsed?.state?.slots;
+    if (!slots || typeof slots !== "object") return [];
+    const saves: SaveInfo[] = [];
+    for (const [slotId, slot] of Object.entries(slots)) {
+      const s = slot as SaveSlot;
+      if (s?.savedAt && s?.characterName && s?.snapshot) {
+        saves.push({
+          slotId: slotId as SlotId,
+          characterName: s.characterName,
+          characterLevel: s.characterLevel ?? 1,
+          location: s.location ?? "Unknown",
+          savedAt: s.savedAt,
+          snapshot: s.snapshot,
+        });
+      }
+    }
+    saves.sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
+    return saves;
   } catch {
-    return null;
+    return [];
   }
 }
 
-/** Format a relative time string */
 function formatTimeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60_000);
@@ -65,14 +81,15 @@ function formatTimeAgo(iso: string): string {
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [bgLoaded, setBgLoaded] = useState(false);
-  const [saveInfo, setSaveInfo] = useState<SaveInfo | null>(null);
+  const [saves, setSaves] = useState<SaveInfo[]>([]);
+  const [showLoadMenu, setShowLoadMenu] = useState(false);
 
-  // Hydrate from localStorage on mount
   useEffect(() => {
     setBgUrl(getCachedBgUrl());
-    setSaveInfo(getSaveInfo());
+    setSaves(getAllSaves());
   }, []);
 
   const handleRegenerate = useCallback(() => {
@@ -82,6 +99,14 @@ export default function HomePage() {
     setBgLoaded(false);
     setBgUrl(url);
   }, []);
+
+  const mostRecent = saves[0] ?? null;
+  const hasMultipleSaves = saves.length > 1;
+
+  function handleLoadSave(save: SaveInfo) {
+    restoreSnapshot(save.snapshot);
+    router.push("/game");
+  }
 
   return (
     <main className="relative min-h-[calc(100vh-4rem)] overflow-hidden flex items-center justify-center">
@@ -99,16 +124,12 @@ export default function HomePage() {
         />
       )}
 
-      {/* Loading shimmer while image loads */}
       {!bgLoaded && (
         <div className="absolute inset-0 bg-[#0a0a0f] animate-shimmer" />
       )}
 
-      {/* Dark overlay gradient */}
       <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/80" />
       <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-transparent to-black/40" />
-
-      {/* Vignette */}
       <div className="absolute inset-0 shadow-[inset_0_0_200px_60px_rgba(0,0,0,0.8)]" />
 
       {/* Content */}
@@ -141,27 +162,91 @@ export default function HomePage() {
 
         {/* Action Buttons */}
         <div className="pt-4 space-y-4">
-          {/* Continue Adventure — only shown if a save exists */}
-          {saveInfo && (
+          {/* Continue Adventure — most recent save */}
+          {mostRecent && (
             <div>
-              <Link href="/game">
-                <button className="relative group w-full max-w-sm mx-auto px-8 py-4 font-cinzel text-base tracking-widest uppercase text-amber-100 bg-gradient-to-b from-amber-900/80 to-red-950/80 border border-amber-500/40 rounded-sm cursor-pointer transition-all duration-300 hover:border-amber-400/70 hover:from-amber-800/90 hover:to-red-900/90 animate-glow-pulse">
-                  <span className="absolute inset-0 rounded-sm bg-amber-400/0 group-hover:bg-amber-400/5 transition-colors duration-300" />
-                  <span className="relative block">Continue Adventure</span>
-                </button>
-              </Link>
-              {/* Save details */}
+              <button
+                onClick={() => handleLoadSave(mostRecent)}
+                className="relative group w-full max-w-sm mx-auto px-8 py-4 font-cinzel text-base tracking-widest uppercase text-amber-100 bg-gradient-to-b from-amber-900/80 to-red-950/80 border border-amber-500/40 rounded-sm cursor-pointer transition-all duration-300 hover:border-amber-400/70 hover:from-amber-800/90 hover:to-red-900/90 animate-glow-pulse"
+              >
+                <span className="absolute inset-0 rounded-sm bg-amber-400/0 group-hover:bg-amber-400/5 transition-colors duration-300" />
+                <span className="relative block">Continue Adventure</span>
+              </button>
               <div className="mt-2 flex items-center justify-center gap-2 text-[11px] text-gray-400/70">
                 <span className="text-amber-300/70 font-cinzel font-semibold">
-                  {saveInfo.characterName}
+                  {mostRecent.characterName}
                 </span>
                 <span className="text-gray-600">·</span>
-                <span>Lvl {saveInfo.characterLevel}</span>
+                <span>Lvl {mostRecent.characterLevel}</span>
                 <span className="text-gray-600">·</span>
-                <span>{saveInfo.location}</span>
+                <span>{mostRecent.location}</span>
                 <span className="text-gray-600">·</span>
-                <span>{formatTimeAgo(saveInfo.lastSavedAt)}</span>
+                <span>{formatTimeAgo(mostRecent.savedAt)}</span>
               </div>
+            </div>
+          )}
+
+          {/* Load Game — shows when multiple saves exist */}
+          {hasMultipleSaves && (
+            <div>
+              <button
+                onClick={() => setShowLoadMenu((v) => !v)}
+                className="relative group px-8 py-3 font-cinzel text-sm tracking-widest uppercase text-gray-300/80 bg-white/5 border border-white/10 rounded-sm cursor-pointer transition-all duration-300 hover:border-amber-500/30 hover:text-amber-200/90 hover:bg-white/10"
+              >
+                <span className="absolute inset-0 rounded-sm bg-amber-400/0 group-hover:bg-amber-400/5 transition-colors duration-300" />
+                <span className="relative flex items-center gap-2">
+                  Load Game
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className={`transition-transform duration-200 ${showLoadMenu ? "rotate-180" : ""}`}
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </span>
+              </button>
+
+              {/* Save slots list */}
+              {showLoadMenu && (
+                <div className="mt-3 max-w-sm mx-auto bg-black/60 border border-white/10 rounded-lg overflow-hidden backdrop-blur-sm">
+                  {saves.map((save) => (
+                    <button
+                      key={save.slotId}
+                      onClick={() => handleLoadSave(save)}
+                      className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-white/5 transition-colors border-b border-white/5 last:border-0 cursor-pointer"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-gray-200">
+                            {SLOT_LABELS[save.slotId]}
+                          </span>
+                          {save.slotId === "auto" && (
+                            <span className="text-[9px] bg-emerald-500/15 text-emerald-400 px-1.5 py-0.5 rounded-full border border-emerald-500/30">
+                              AUTO
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-gray-400/70">
+                          <span className="text-amber-300/70 font-semibold truncate">
+                            {save.characterName}
+                          </span>
+                          <span className="text-gray-600">·</span>
+                          <span>Lvl {save.characterLevel}</span>
+                          <span className="text-gray-600">·</span>
+                          <span className="truncate">{save.location}</span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-gray-500 shrink-0 ml-3">
+                        {formatTimeAgo(save.savedAt)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -169,7 +254,7 @@ export default function HomePage() {
           <Link href="/character">
             <button
               className={`relative group px-10 py-4 font-cinzel text-lg tracking-widest uppercase cursor-pointer transition-all duration-300 rounded-sm ${
-                saveInfo
+                mostRecent
                   ? "text-gray-300/80 bg-white/5 border border-white/10 hover:border-amber-500/30 hover:text-amber-200/90 hover:bg-white/10"
                   : "text-amber-100 bg-gradient-to-b from-amber-900/80 to-red-950/80 border border-amber-500/40 hover:border-amber-400/70 hover:from-amber-800/90 hover:to-red-900/90 animate-glow-pulse"
               }`}
@@ -195,7 +280,7 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* Regenerate background button — bottom-right corner */}
+      {/* Regenerate background button */}
       <button
         onClick={handleRegenerate}
         title="Generate new background"

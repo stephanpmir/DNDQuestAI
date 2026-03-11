@@ -1,45 +1,62 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { GameSnapshot } from "@/lib/save-snapshot";
 
-interface SaveMetadata {
-  /** ISO timestamp of the last auto-save */
-  lastSavedAt: string | null;
+/** Slot identifiers — "auto" is reserved for auto-save */
+export type SlotId = "auto" | "slot-1" | "slot-2" | "slot-3";
+export const MANUAL_SLOTS: SlotId[] = ["slot-1", "slot-2", "slot-3"];
+export const ALL_SLOTS: SlotId[] = ["auto", ...MANUAL_SLOTS];
+
+export interface SaveSlot {
+  /** Which slot this occupies */
+  slotId: SlotId;
+  /** ISO timestamp when saved */
+  savedAt: string;
   /** Character name at time of save */
-  characterName: string | null;
+  characterName: string;
   /** Character level at time of save */
-  characterLevel: number | null;
+  characterLevel: number;
   /** Current location at time of save */
-  location: string | null;
+  location: string;
   /** Turn count at time of save */
-  turnCount: number | null;
+  turnCount: number;
+  /** Full game state snapshot */
+  snapshot: GameSnapshot;
 }
 
-interface SaveStore extends SaveMetadata {
-  /** Record that an auto-save just occurred */
-  recordSave: (meta: Omit<SaveMetadata, "lastSavedAt">) => void;
+interface SaveStore {
+  /** All occupied save slots keyed by slotId */
+  slots: Partial<Record<SlotId, SaveSlot>>;
+
+  /** Save a snapshot to a specific slot */
+  saveToSlot: (slotId: SlotId, slot: Omit<SaveSlot, "slotId">) => void;
+  /** Delete a save slot */
+  deleteSlot: (slotId: SlotId) => void;
+  /** Reset all slots */
   reset: () => void;
 }
-
-const DEFAULT_STATE: SaveMetadata = {
-  lastSavedAt: null,
-  characterName: null,
-  characterLevel: null,
-  location: null,
-  turnCount: null,
-};
 
 export const useSaveStore = create<SaveStore>()(
   persist(
     (set) => ({
-      ...DEFAULT_STATE,
+      slots: {},
 
-      recordSave: (meta) =>
-        set({
-          lastSavedAt: new Date().toISOString(),
-          ...meta,
+      saveToSlot: (slotId, data) =>
+        set((s) => ({
+          slots: {
+            ...s.slots,
+            [slotId]: { ...data, slotId },
+          },
+        })),
+
+      deleteSlot: (slotId) =>
+        set((s) => {
+          const next = { ...s.slots };
+          delete next[slotId];
+          return { slots: next };
         }),
 
-      reset: () => set(DEFAULT_STATE),
+      reset: () => set({ slots: {} }),
     }),
     { name: "dndquest-save" }
   )

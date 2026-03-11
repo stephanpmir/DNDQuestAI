@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
 import { useWorldStore } from "@/stores/world-store";
@@ -14,6 +14,7 @@ import { CharacterSidebar } from "./character-sidebar";
 import { DeathScreen } from "./death-screen";
 import { AutoSaveProvider } from "./auto-save-provider";
 import { AutoSaveIndicator } from "./auto-save-indicator";
+import { SaveSlotsModal } from "./save-slots-modal";
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -355,11 +356,21 @@ export function GameView() {
   }, [campaignStarted, character.name]);
 
   const isDead = character.isDead;
+  const [saveModalMode, setSaveModalMode] = useState<"save" | "load" | null>(null);
 
   return (
     <div className="flex h-[100dvh] gap-4 p-4 overflow-hidden">
       {/* Auto-save listener (renders nothing) */}
       <AutoSaveProvider />
+
+      {/* Save/Load modal */}
+      {saveModalMode && (
+        <SaveSlotsModal
+          mode={saveModalMode}
+          open
+          onClose={() => setSaveModalMode(null)}
+        />
+      )}
 
       {/* Death screen overlay */}
       {isDead && <DeathScreen />}
@@ -393,6 +404,20 @@ export function GameView() {
         <div className="pt-3 border-t">
           <div className="flex items-center justify-between mb-1">
             <AutoSaveIndicator />
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setSaveModalMode("save")}
+                className="text-[10px] text-muted-foreground/60 hover:text-foreground px-2 py-0.5 rounded transition-colors cursor-pointer"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setSaveModalMode("load")}
+                className="text-[10px] text-muted-foreground/60 hover:text-foreground px-2 py-0.5 rounded transition-colors cursor-pointer"
+              >
+                Load
+              </button>
+            </div>
           </div>
           <ChatInput onSend={sendToDM} disabled={isLoading || isDead} />
         </div>

@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useSaveStore } from "@/stores/save-store";
 
-/** Format a relative time string like "just now", "2m ago", etc. */
 function formatRelative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const seconds = Math.floor(diff / 1000);
@@ -15,13 +14,12 @@ function formatRelative(iso: string): string {
   return `${hours}h ago`;
 }
 
-/** Small indicator that shows when the game was last auto-saved. */
 export function AutoSaveIndicator() {
-  const lastSavedAt = useSaveStore((s) => s.lastSavedAt);
+  const autoSlot = useSaveStore((s) => s.slots.auto);
+  const lastSavedAt = autoSlot?.savedAt ?? null;
   const [display, setDisplay] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
 
-  // Update the relative time display every 15s
   useEffect(() => {
     if (!lastSavedAt) return;
     setDisplay(formatRelative(lastSavedAt));
@@ -31,7 +29,6 @@ export function AutoSaveIndicator() {
     return () => clearInterval(interval);
   }, [lastSavedAt]);
 
-  // Flash animation when a new save occurs
   useEffect(() => {
     if (!lastSavedAt) return;
     setFlash(true);
@@ -47,7 +44,6 @@ export function AutoSaveIndicator() {
         flash ? "opacity-100" : "opacity-60"
       }`}
     >
-      {/* Dot indicator */}
       <span
         className={`inline-block w-1.5 h-1.5 rounded-full transition-colors duration-700 ${
           flash ? "bg-emerald-400" : "bg-muted-foreground/40"
