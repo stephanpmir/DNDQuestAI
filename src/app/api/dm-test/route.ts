@@ -6,40 +6,10 @@ import { NextResponse } from "next/server";
  */
 export async function GET() {
   const results: Record<string, unknown> = {
-    groqKeySet: !!process.env.GROQ_API_KEY,
     cerebrasKeySet: !!process.env.CEREBRAS_API_KEY,
     zaiKeySet: !!process.env.ZAI_API_KEY,
+    moonshotKeySet: !!process.env.MOONSHOT_API_KEY,
   };
-
-  // Test Groq
-  if (process.env.GROQ_API_KEY) {
-    try {
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
-          messages: [{ role: "user", content: "Say hi in 3 words" }],
-          max_tokens: 20,
-        }),
-        signal: AbortSignal.timeout(25_000),
-      });
-      const body = await res.text();
-      results.groq = {
-        success: res.ok,
-        status: res.status,
-        body: body.slice(0, 500),
-      };
-    } catch (error) {
-      results.groq = {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-  }
 
   // Test Cerebras
   if (process.env.CEREBRAS_API_KEY) {
@@ -95,6 +65,36 @@ export async function GET() {
       };
     } catch (error) {
       results.zai = {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  // Test Moonshot
+  if (process.env.MOONSHOT_API_KEY) {
+    try {
+      const res = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.MOONSHOT_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "moonshot-v1-8k",
+          messages: [{ role: "user", content: "Say hi in 3 words" }],
+          max_tokens: 20,
+        }),
+        signal: AbortSignal.timeout(25_000),
+      });
+      const body = await res.text();
+      results.moonshot = {
+        success: res.ok,
+        status: res.status,
+        body: body.slice(0, 500),
+      };
+    } catch (error) {
+      results.moonshot = {
         success: false,
         error: error instanceof Error ? error.message : String(error),
       };

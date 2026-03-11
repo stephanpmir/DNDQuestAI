@@ -38,29 +38,14 @@ interface LLMProvider {
 
 /**
  * Build a prioritized list of available LLM providers.
- * Order: Groq > Cerebras > Z.ai
+ * Order: Cerebras > Z.ai > Moonshot
  * All use the OpenAI SDK interface.
  */
 function getProviders(): LLMProvider[] {
   const proxyFetch = getProxyFetch();
   const providers: LLMProvider[] = [];
 
-  // Groq — free, fast, reliable
-  const groqKey = process.env.GROQ_API_KEY;
-  if (groqKey) {
-    providers.push({
-      client: new OpenAI({
-        baseURL: "https://api.groq.com/openai/v1",
-        apiKey: groqKey,
-        timeout: 30_000,
-        fetch: proxyFetch,
-      }),
-      model: "llama-3.1-8b-instant",
-      name: "Groq",
-    });
-  }
-
-  // Cerebras — fast inference
+  // 1. Cerebras — fast inference, free tier
   const cerebrasKey = process.env.CEREBRAS_API_KEY;
   if (cerebrasKey) {
     providers.push({
@@ -75,7 +60,7 @@ function getProviders(): LLMProvider[] {
     });
   }
 
-  // Z.ai — GLM-4
+  // 2. Z.ai — GLM-4
   const zaiKey = process.env.ZAI_API_KEY;
   if (zaiKey) {
     providers.push({
@@ -90,8 +75,23 @@ function getProviders(): LLMProvider[] {
     });
   }
 
+  // 3. Moonshot — cheapest model (moonshot-v1-8k: $0.20/M in, $2.00/M out)
+  const moonshotKey = process.env.MOONSHOT_API_KEY;
+  if (moonshotKey) {
+    providers.push({
+      client: new OpenAI({
+        baseURL: "https://api.moonshot.ai/v1",
+        apiKey: moonshotKey,
+        timeout: 30_000,
+        fetch: proxyFetch,
+      }),
+      model: "moonshot-v1-8k",
+      name: "Moonshot",
+    });
+  }
+
   if (providers.length === 0) {
-    throw new Error("No LLM API key set. Set GROQ_API_KEY, CEREBRAS_API_KEY, or ZAI_API_KEY.");
+    throw new Error("No LLM API key set. Set CEREBRAS_API_KEY, ZAI_API_KEY, or MOONSHOT_API_KEY.");
   }
 
   return providers;
