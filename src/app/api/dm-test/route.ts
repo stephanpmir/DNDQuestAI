@@ -13,7 +13,7 @@ export async function GET() {
     moonshotKeySet: !!process.env.MOONSHOT_API_KEY,
   };
 
-  // Test Cerebras (llama-3.3-70b)
+  // Test Cerebras (llama3.1-8b)
   if (process.env.CEREBRAS_API_KEY) {
     try {
       const res = await fetch("https://api.cerebras.ai/v1/chat/completions", {
@@ -23,7 +23,7 @@ export async function GET() {
           "Authorization": `Bearer ${process.env.CEREBRAS_API_KEY}`,
         },
         body: JSON.stringify({
-          model: "llama-3.3-70b",
+          model: "llama3.1-8b",
           messages: [{ role: "user", content: "Say hi in 3 words" }],
           max_tokens: 20,
         }),
@@ -43,7 +43,7 @@ export async function GET() {
     }
   }
 
-  // Test Z.ai (GLM-4.5-Flash — free, non-reasoning)
+  // Test Z.ai (GLM-4-32B-0414-128K — non-reasoning)
   if (process.env.ZAI_API_KEY) {
     try {
       const res = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
@@ -53,7 +53,7 @@ export async function GET() {
           "Authorization": `Bearer ${process.env.ZAI_API_KEY}`,
         },
         body: JSON.stringify({
-          model: "GLM-4.5-Flash",
+          model: "GLM-4-32B-0414-128K",
           messages: [{ role: "user", content: "Say hi in 3 words" }],
           max_tokens: 20,
         }),

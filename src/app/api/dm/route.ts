@@ -39,8 +39,8 @@ interface LLMProvider {
 /**
  * Build a prioritized list of available LLM providers.
  * Order: Cerebras → Z.ai → Groq → Moonshot
- *   1. Cerebras  — FREE (1M tokens/day), llama-3.3-70b
- *   2. Z.ai      — FREE (GLM-4.5-Flash, $0 unlimited, non-reasoning)
+ *   1. Cerebras  — FREE (1M tokens/day), llama3.1-8b
+ *   2. Z.ai      — GLM-4-32B-0414-128K ($0.10/M flat, non-reasoning)
  *   3. Groq      — FREE tier (rate-limited), llama-3.1-8b-instant
  *   4. Moonshot   — PAID last resort, moonshot-v1-8k
  * All use the OpenAI SDK interface.
@@ -49,7 +49,7 @@ function getProviders(): LLMProvider[] {
   const proxyFetch = getProxyFetch();
   const providers: LLMProvider[] = [];
 
-  // 1. Cerebras — FREE (1M tokens/day), llama-3.3-70b
+  // 1. Cerebras — FREE (1M tokens/day), llama3.1-8b
   const cerebrasKey = process.env.CEREBRAS_API_KEY;
   if (cerebrasKey) {
     providers.push({
@@ -59,12 +59,12 @@ function getProviders(): LLMProvider[] {
         timeout: 30_000,
         fetch: proxyFetch,
       }),
-      model: "llama-3.3-70b",
+      model: "llama3.1-8b",
       name: "Cerebras",
     });
   }
 
-  // 2. Z.ai — FREE (GLM-4.5-Flash: $0, non-reasoning model, no empty-content issue)
+  // 2. Z.ai — GLM-4-32B-0414-128K ($0.10/M flat, non-reasoning)
   const zaiKey = process.env.ZAI_API_KEY;
   if (zaiKey) {
     providers.push({
@@ -74,7 +74,7 @@ function getProviders(): LLMProvider[] {
         timeout: 30_000,
         fetch: proxyFetch,
       }),
-      model: "GLM-4.5-Flash",
+      model: "GLM-4-32B-0414-128K",
       name: "Z.ai",
     });
   }
