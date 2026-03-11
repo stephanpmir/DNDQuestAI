@@ -12,6 +12,8 @@ import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
 import { CharacterSidebar } from "./character-sidebar";
 import { DeathScreen } from "./death-screen";
+import { AutoSaveProvider } from "./auto-save-provider";
+import { AutoSaveIndicator } from "./auto-save-indicator";
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -356,6 +358,9 @@ export function GameView() {
 
   return (
     <div className="flex h-[100dvh] gap-4 p-4 overflow-hidden">
+      {/* Auto-save listener (renders nothing) */}
+      <AutoSaveProvider />
+
       {/* Death screen overlay */}
       {isDead && <DeathScreen />}
 
@@ -386,6 +391,9 @@ export function GameView() {
         </div>
 
         <div className="pt-3 border-t">
+          <div className="flex items-center justify-between mb-1">
+            <AutoSaveIndicator />
+          </div>
           <ChatInput onSend={sendToDM} disabled={isLoading || isDead} />
         </div>
       </div>
