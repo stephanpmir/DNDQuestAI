@@ -7,9 +7,11 @@ import { useHighScoreStore, type HighScoreEntry } from "@/stores/highscore-store
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
+import { useLanguageStore } from "@/stores/language-store";
 
 export function DeathScreen() {
   const router = useRouter();
+  const t = useLanguageStore((s) => s.t);
   const { character, reset: resetCharacter } = useCharacterStore();
   const { turnCount, reset: resetGame } = useGameStore();
   const resetKarma = useKarmaStore((s) => s.reset);
@@ -51,27 +53,27 @@ export function DeathScreen() {
         {/* Death header */}
         <div className="space-y-2">
           <div className="text-6xl font-black text-red-500 tracking-wider animate-pulse">
-            YOU DIED
+            {t("death.title")}
           </div>
           <div className="text-lg text-red-300/70">
-            {character.name} the {character.race} {character.class} has fallen.
+            {character.name} — {character.race} {character.class} — {t("death.hasFallen")}
           </div>
           <div className="text-sm text-muted-foreground italic">
-            You lie still on the cold ground, your adventure at an end...
+            {t("death.description")}
           </div>
         </div>
 
         {/* Final stats */}
         <div className="bg-red-950/30 border border-red-900/50 rounded-lg p-4 space-y-2">
-          <div className="text-xs text-red-400/70 uppercase tracking-wider font-semibold">Final Record</div>
+          <div className="text-xs text-red-400/70 uppercase tracking-wider font-semibold">{t("death.finalRecord")}</div>
           <div className="grid grid-cols-2 gap-2 text-sm">
-            <div className="text-muted-foreground">Level</div>
+            <div className="text-muted-foreground">{t("death.level")}</div>
             <div className="font-bold text-foreground">{character.level}</div>
-            <div className="text-muted-foreground">XP Earned</div>
+            <div className="text-muted-foreground">{t("death.xpEarned")}</div>
             <div className="font-bold text-foreground">{character.xp}</div>
-            <div className="text-muted-foreground">Gold Collected</div>
+            <div className="text-muted-foreground">{t("death.goldCollected")}</div>
             <div className="font-bold text-amber-400">{character.gold}</div>
-            <div className="text-muted-foreground">Turns Survived</div>
+            <div className="text-muted-foreground">{t("death.turnsSurvived")}</div>
             <div className="font-bold text-foreground">{turnCount}</div>
           </div>
         </div>
@@ -79,7 +81,7 @@ export function DeathScreen() {
         {/* High scores */}
         {topScores.length > 0 && (
           <div className="bg-muted/20 border border-border/30 rounded-lg p-4 space-y-2">
-            <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Hall of the Fallen</div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{t("death.hallOfFallen")}</div>
             <div className="space-y-1">
               {topScores.map((score, i) => (
                 <div key={score.id} className="flex items-center justify-between text-xs">
@@ -89,7 +91,7 @@ export function DeathScreen() {
                       {score.name} <span className="text-muted-foreground">Lv{score.level} {score.class}</span>
                     </span>
                   </div>
-                  <span className="text-muted-foreground">{score.turns} turns</span>
+                  <span className="text-muted-foreground">{score.turns} {t("death.turns")}</span>
                 </div>
               ))}
             </div>
@@ -102,7 +104,7 @@ export function DeathScreen() {
           variant="outline"
           className="border-red-700 text-red-300 hover:bg-red-950/50 hover:text-red-200"
         >
-          Begin a New Adventure
+          {t("death.newAdventure")}
         </Button>
       </div>
     </div>

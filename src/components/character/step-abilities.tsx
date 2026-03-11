@@ -6,6 +6,7 @@ import { RACIAL_DATA } from "@/lib/races";
 import { ABILITY_DESCRIPTIONS } from "@/lib/descriptions";
 import { InfoTip } from "./info-tip";
 import { Button } from "@/components/ui/button";
+import { useLanguageStore } from "@/stores/language-store";
 
 const ABILITY_NAMES: (keyof AbilityScores)[] = [
   "strength", "dexterity", "constitution", "wisdom", "intelligence", "charisma",
@@ -58,6 +59,7 @@ export function StepAbilities({
   onNext,
   onBack,
 }: StepAbilitiesProps) {
+  const t = useLanguageStore((s) => s.t);
   const [rolls, setRolls] = useState<DiceRoll[]>(() => rollFullSet());
   const [hasRolled, setHasRolled] = useState(false);
   const [fullRerollsUsed, setFullRerollsUsed] = useState(0);
@@ -117,14 +119,13 @@ export function StepAbilities({
             WebkitTextFillColor: "transparent",
           }}
         >
-          Roll Your Ability Scores
+          {t("abilities.title")}
           <span style={{ WebkitTextFillColor: "initial", background: "none" }}>
-            <InfoTip text="Ability scores are your character's core stats (like Strength and Intelligence). Higher scores make you better at related tasks. We roll 4 dice and drop the lowest for each stat." />
+            <InfoTip text={t("abilities.tip")} />
           </span>
         </h2>
         <p className="text-sm text-[#8a8a8a] mt-1">
-          Click &quot;Roll Dice&quot; to generate your stats. You get 1 full
-          reroll and 2 individual rerolls.
+          {t("abilities.description")}
         </p>
       </div>
       <div className="px-6 pb-6 space-y-4">
@@ -139,14 +140,14 @@ export function StepAbilities({
           }
         >
           {hasRolled
-            ? `Reroll All (${MAX_FULL_REROLLS - fullRerollsUsed} left)`
-            : "Roll Dice"}
+            ? `${t("abilities.rerollAll")} (${MAX_FULL_REROLLS - fullRerollsUsed} ${t("abilities.left")})`
+            : t("abilities.rollDice")}
         </Button>
 
         {hasRolled && (
           <>
             <div className="text-[10px] text-[#c9a227] text-center font-cinzel tracking-wide">
-              Individual rerolls remaining: {MAX_INDIVIDUAL_REROLLS - individualRerollsUsed}
+              {t("abilities.individualRemaining")}: {MAX_INDIVIDUAL_REROLLS - individualRerollsUsed}
             </div>
             <div className="grid grid-cols-2 gap-3">
               {ABILITY_NAMES.map((ability, i) => {
@@ -184,7 +185,7 @@ export function StepAbilities({
                         </span>
                         {racialBonus > 0 && (
                           <div className="text-[10px] text-emerald-400">
-                            +{racialBonus} from {race}
+                            +{racialBonus} {t("abilities.from")} {race}
                           </div>
                         )}
                       </div>
@@ -210,7 +211,7 @@ export function StepAbilities({
                         onClick={() => handleRerollOne(i)}
                         disabled={!canIndividualReroll}
                       >
-                        Reroll
+                        {t("abilities.reroll")}
                       </Button>
                     </div>
                   </div>
@@ -226,14 +227,14 @@ export function StepAbilities({
             onClick={onBack}
             className="flex-1 bg-transparent border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-300 hover:bg-transparent"
           >
-            Back
+            {t("common.back")}
           </Button>
           <Button
             onClick={onNext}
             disabled={!hasRolled}
             className="flex-1 bg-[#6b0000] hover:bg-[#7a0000] text-white border border-[#c9a227] font-cinzel tracking-wide disabled:opacity-40 transition-shadow hover:shadow-[0_0_12px_rgba(201,162,39,0.3)]"
           >
-            Next — Choose Skills
+            {t("abilities.next")}
           </Button>
         </div>
       </div>

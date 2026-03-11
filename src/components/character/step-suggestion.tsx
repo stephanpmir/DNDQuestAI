@@ -13,6 +13,7 @@ import type { BeginnerSurvey, Race, CharacterClass, Gender, AbilityScores } from
 import { RACES, CLASSES } from "@/types/character";
 import { RACE_SUMMARIES, CLASS_SUMMARIES } from "@/lib/descriptions";
 import type { GeneratedProfile } from "@/app/api/profile/route";
+import { useLanguageStore } from "@/stores/language-store";
 
 interface StepSuggestionProps {
   survey: BeginnerSurvey;
@@ -51,6 +52,7 @@ export function StepSuggestion({
   onSkip,
   onBack,
 }: StepSuggestionProps) {
+  const t = useLanguageStore((s) => s.t);
   const [status, setStatus] = useState<Status>("loading");
   const [profile, setProfile] = useState<GeneratedProfile | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
@@ -104,9 +106,9 @@ export function StepSuggestion({
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Generating Your Character...</CardTitle>
+          <CardTitle className="text-lg">{t("suggestion.generating")}</CardTitle>
           <CardDescription className="text-xs">
-            Our AI is crafting a character based on your preferences.
+            {t("suggestion.generatingDesc")}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col items-center gap-4 py-8">
@@ -119,9 +121,9 @@ export function StepSuggestion({
               />
             ))}
           </div>
-          <p className="text-xs text-muted-foreground">This takes a few seconds...</p>
+          <p className="text-xs text-muted-foreground">{t("suggestion.wait")}</p>
           <Button variant="ghost" size="sm" onClick={onSkip} className="text-xs">
-            Skip — I&apos;ll choose manually
+            {t("suggestion.skipManual")}
           </Button>
         </CardContent>
       </Card>
@@ -133,20 +135,20 @@ export function StepSuggestion({
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Couldn&apos;t Generate Profile</CardTitle>
+          <CardTitle className="text-lg">{t("suggestion.errorTitle")}</CardTitle>
           <CardDescription className="text-xs">
-            {errorMsg || "Something went wrong. You can retry or choose manually."}
+            {errorMsg || t("suggestion.errorDesc")}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <Button onClick={fetchProfile} className="w-full">
-            Try Again
+            {t("suggestion.tryAgain")}
           </Button>
           <Button variant="outline" onClick={onSkip} className="w-full">
-            Choose Manually Instead
+            {t("suggestion.chooseManually")}
           </Button>
           <Button variant="ghost" onClick={onBack} className="w-full text-xs">
-            Back to Survey
+            {t("suggestion.backToSurvey")}
           </Button>
         </CardContent>
       </Card>
@@ -162,10 +164,9 @@ export function StepSuggestion({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Meet Your Character</CardTitle>
+        <CardTitle className="text-lg">{t("suggestion.meetCharacter")}</CardTitle>
         <CardDescription className="text-xs">
-          The AI suggested this based on your answers. Accept it, tweak it in
-          the next steps, or generate a new one.
+          {t("suggestion.meetDesc")}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -213,7 +214,7 @@ export function StepSuggestion({
         {/* Backstory */}
         <div className="bg-muted/20 rounded-lg p-3 border border-border/20">
           <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">
-            Backstory
+            {t("suggestion.backstory")}
           </p>
           <p className="text-xs leading-relaxed">{profile.backstory}</p>
         </div>
@@ -221,13 +222,13 @@ export function StepSuggestion({
         {/* Actions */}
         <div className="flex flex-col gap-2 pt-1">
           <Button onClick={handleAccept} className="w-full">
-            Accept &amp; Start Adventure
+            {t("suggestion.accept")}
           </Button>
           <Button variant="outline" onClick={onSkip} className="w-full">
-            Modify — Let Me Tweak It
+            {t("suggestion.modify")}
           </Button>
           <Button variant="ghost" onClick={fetchProfile} className="w-full text-xs">
-            Generate a Different Character
+            {t("suggestion.generateDifferent")}
           </Button>
         </div>
       </CardContent>

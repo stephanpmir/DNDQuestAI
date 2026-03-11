@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { BeginnerSurvey } from "@/types/character";
+import { useLanguageStore } from "@/stores/language-store";
 
 interface StepSurveyProps {
   onComplete: (survey: BeginnerSurvey) => void;
@@ -18,9 +19,9 @@ interface StepSurveyProps {
 
 interface QuestionDef<K extends keyof BeginnerSurvey> {
   key: K;
-  title: string;
-  subtitle: string;
-  options: { value: BeginnerSurvey[K]; label: string; desc: string }[];
+  titleKey: string;
+  subtitleKey: string;
+  options: { value: BeginnerSurvey[K]; labelKey: string; descKey: string }[];
 }
 
 const QUESTIONS: [
@@ -32,60 +33,61 @@ const QUESTIONS: [
 ] = [
   {
     key: "playstyle",
-    title: "How do you want to solve problems?",
-    subtitle: "Pick the approach that sounds most fun to you.",
+    titleKey: "survey.q1Title",
+    subtitleKey: "survey.q1Subtitle",
     options: [
-      { value: "fighting", label: "Fight!", desc: "Charge in, swing a weapon, and overpower enemies." },
-      { value: "sneaking", label: "Sneak", desc: "Stay in the shadows, pick locks, and strike unseen." },
-      { value: "magic", label: "Cast spells", desc: "Harness arcane or divine power to reshape reality." },
-      { value: "talking", label: "Talk it out", desc: "Charm, persuade, or intimidate your way through." },
+      { value: "fighting", labelKey: "survey.q1Fight", descKey: "survey.q1FightDesc" },
+      { value: "sneaking", labelKey: "survey.q1Sneak", descKey: "survey.q1SneakDesc" },
+      { value: "magic", labelKey: "survey.q1Magic", descKey: "survey.q1MagicDesc" },
+      { value: "talking", labelKey: "survey.q1Talk", descKey: "survey.q1TalkDesc" },
     ],
   },
   {
     key: "teamRole",
-    title: "Are you a lone wolf or a team player?",
-    subtitle: "This shapes how your character interacts with NPCs.",
+    titleKey: "survey.q2Title",
+    subtitleKey: "survey.q2Subtitle",
     options: [
-      { value: "lone-wolf", label: "Lone wolf", desc: "Self-reliant and independent — you work best alone." },
-      { value: "team-player", label: "Team player", desc: "You support allies and share the spotlight." },
-      { value: "leader", label: "Natural leader", desc: "You take charge and inspire others to follow." },
+      { value: "lone-wolf", labelKey: "survey.q2Lone", descKey: "survey.q2LoneDesc" },
+      { value: "team-player", labelKey: "survey.q2Team", descKey: "survey.q2TeamDesc" },
+      { value: "leader", labelKey: "survey.q2Leader", descKey: "survey.q2LeaderDesc" },
     ],
   },
   {
     key: "riskStyle",
-    title: "How do you handle danger?",
-    subtitle: "There's no wrong answer — it's about your play style.",
+    titleKey: "survey.q3Title",
+    subtitleKey: "survey.q3Subtitle",
     options: [
-      { value: "cautious", label: "Think first", desc: "Plan carefully, avoid unnecessary fights, stay safe." },
-      { value: "balanced", label: "Go with the flow", desc: "Adapt to the situation — fight or flee as needed." },
-      { value: "reckless", label: "Dive in!", desc: "Fortune favors the bold — take risks for big rewards." },
+      { value: "cautious", labelKey: "survey.q3Cautious", descKey: "survey.q3CautiousDesc" },
+      { value: "balanced", labelKey: "survey.q3Balanced", descKey: "survey.q3BalancedDesc" },
+      { value: "reckless", labelKey: "survey.q3Reckless", descKey: "survey.q3RecklessDesc" },
     ],
   },
   {
     key: "theme",
-    title: "What fantasy flavor appeals to you?",
-    subtitle: "This helps us pick a class theme you'll enjoy.",
+    titleKey: "survey.q4Title",
+    subtitleKey: "survey.q4Subtitle",
     options: [
-      { value: "martial", label: "Steel & strength", desc: "Swords, armor, and physical prowess." },
-      { value: "arcane", label: "Arcane mystery", desc: "Ancient spells, forbidden knowledge, raw power." },
-      { value: "holy", label: "Divine purpose", desc: "Faith, healing, and smiting evil." },
-      { value: "nature", label: "The wild", desc: "Animals, forests, and primal forces." },
-      { value: "shadow", label: "Shadows & cunning", desc: "Stealth, trickery, and dark bargains." },
+      { value: "martial", labelKey: "survey.q4Martial", descKey: "survey.q4MartialDesc" },
+      { value: "arcane", labelKey: "survey.q4Arcane", descKey: "survey.q4ArcaneDesc" },
+      { value: "holy", labelKey: "survey.q4Holy", descKey: "survey.q4HolyDesc" },
+      { value: "nature", labelKey: "survey.q4Nature", descKey: "survey.q4NatureDesc" },
+      { value: "shadow", labelKey: "survey.q4Shadow", descKey: "survey.q4ShadowDesc" },
     ],
   },
   {
     key: "complexity",
-    title: "How complex do you want your character?",
-    subtitle: "Simpler characters are easier to learn with.",
+    titleKey: "survey.q5Title",
+    subtitleKey: "survey.q5Subtitle",
     options: [
-      { value: "simple", label: "Keep it simple", desc: "Fewer decisions in combat — great for beginners." },
-      { value: "moderate", label: "A bit of depth", desc: "Some special abilities to manage each turn." },
-      { value: "complex", label: "Give me everything", desc: "Lots of spells and options — I like choices!" },
+      { value: "simple", labelKey: "survey.q5Simple", descKey: "survey.q5SimpleDesc" },
+      { value: "moderate", labelKey: "survey.q5Moderate", descKey: "survey.q5ModerateDesc" },
+      { value: "complex", labelKey: "survey.q5Complex", descKey: "survey.q5ComplexDesc" },
     ],
   },
 ];
 
 export function StepSurvey({ onComplete, onBack }: StepSurveyProps) {
+  const t = useLanguageStore((s) => s.t);
   const [qi, setQi] = useState(0);
   const [answers, setAnswers] = useState<Partial<BeginnerSurvey>>({});
 
@@ -119,7 +121,7 @@ export function StepSurvey({ onComplete, onBack }: StepSurveyProps) {
       <CardHeader>
         <div className="flex items-center justify-between mb-1">
           <span className="text-[10px] text-muted-foreground">
-            Question {qi + 1} of {totalQ}
+            {t("survey.question")} {qi + 1} {t("survey.of")} {totalQ}
           </span>
           <div className="flex gap-1">
             {Array.from({ length: totalQ }).map((_, i) => (
@@ -136,9 +138,9 @@ export function StepSurvey({ onComplete, onBack }: StepSurveyProps) {
             ))}
           </div>
         </div>
-        <CardTitle className="text-lg">{question.title}</CardTitle>
+        <CardTitle className="text-lg">{t(question.titleKey)}</CardTitle>
         <CardDescription className="text-xs">
-          {question.subtitle}
+          {t(question.subtitleKey)}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -153,14 +155,14 @@ export function StepSurvey({ onComplete, onBack }: StepSurveyProps) {
                 : "border-border/40 bg-muted/20 hover:bg-muted/40 hover:border-border/60"
             }`}
           >
-            <p className="text-sm font-medium">{opt.label}</p>
-            <p className="text-xs text-muted-foreground">{opt.desc}</p>
+            <p className="text-sm font-medium">{t(opt.labelKey)}</p>
+            <p className="text-xs text-muted-foreground">{t(opt.descKey)}</p>
           </button>
         ))}
 
         <div className="flex gap-3 pt-3">
           <Button variant="outline" onClick={handleBack} className="flex-1">
-            Back
+            {t("common.back")}
           </Button>
           {qi < totalQ - 1 && currentAnswer && (
             <Button
@@ -168,7 +170,7 @@ export function StepSurvey({ onComplete, onBack }: StepSurveyProps) {
               onClick={() => setQi(qi + 1)}
               className="flex-1 text-xs"
             >
-              Skip
+              {t("survey.skip")}
             </Button>
           )}
         </div>

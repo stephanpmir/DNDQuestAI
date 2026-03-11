@@ -72,7 +72,7 @@ export function CharacterWizard() {
   const resetWorld = useWorldStore((s) => s.reset);
   const resetKarma = useKarmaStore((s) => s.reset);
 
-  const { language, isTranslating, setLanguage, setTranslations, setIsTranslating } = useLanguageStore();
+  const { language, isTranslating, setLanguage, setTranslations, setIsTranslating, t } = useLanguageStore();
   const [languageConfirmed, setLanguageConfirmed] = useState(false);
 
   const [step, setStep] = useState(0);
@@ -396,7 +396,7 @@ export function CharacterWizard() {
       {step > 0 && (
         <div className="space-y-1.5 mb-6">
           <div className="flex justify-between text-[10px] font-cinzel tracking-wider">
-            <span className="text-[#c9a227]">Step {step} of {STEP_LABELS.length - 1}</span>
+            <span className="text-[#c9a227]">{t("wizard.step")} {step} {t("wizard.of")} {STEP_LABELS.length - 1}</span>
             <span className="text-[#c9a227]">{STEP_LABELS[step]}</span>
           </div>
           <div className="relative h-1.5 w-full rounded-full bg-[#1a1a1a] overflow-hidden">

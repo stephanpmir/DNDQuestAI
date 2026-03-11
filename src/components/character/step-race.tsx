@@ -15,6 +15,7 @@ import { RACIAL_DATA, HALF_ELF_BONUS_CHOICES } from "@/lib/races";
 import { RACE_SUMMARIES } from "@/lib/descriptions";
 import { InfoTip } from "./info-tip";
 import { cn } from "@/lib/utils";
+import { useLanguageStore } from "@/stores/language-store";
 
 interface StepRaceProps {
   selectedRace: Race;
@@ -37,6 +38,7 @@ export function StepRace({
   onNext,
   onBack,
 }: StepRaceProps) {
+  const t = useLanguageStore((s) => s.t);
   const halfElfValid =
     selectedRace !== "Half-Elf" ||
     (halfElfBonus1 !== "" &&
@@ -57,13 +59,13 @@ export function StepRace({
             WebkitTextFillColor: "transparent",
           }}
         >
-          Choose Your Race
+          {t("race.title")}
           <span style={{ WebkitTextFillColor: "initial", background: "none" }}>
-            <InfoTip text="Your race determines your character's species — like human, elf, or dwarf. Each race gets special abilities and stat bonuses that help in different ways." />
+            <InfoTip text={t("race.tip")} />
           </span>
         </h2>
         <p className="text-sm text-[#8a8a8a] mt-1">
-          Each race has unique traits and ability bonuses. Tap any race to select it.
+          {t("race.description")}
         </p>
       </div>
       <div className="px-6 pb-6 space-y-4">
@@ -120,18 +122,18 @@ export function StepRace({
         {selectedRace === "Half-Elf" && (
           <div className="bg-[#0f0f0f] rounded-lg p-3 border border-[#2a2a2a] space-y-2">
             <p className="text-xs font-medium text-[#c9a227] font-cinzel">
-              Half-Elf Bonus: Choose two abilities to gain +1
-              <InfoTip text="Half-Elves get +2 Charisma automatically, plus +1 to two other abilities of your choice. Pick stats that help your class." />
+              {t("race.halfElfTitle")}
+              <InfoTip text={t("race.halfElfTip")} />
             </p>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <Label className="text-xs text-[#8a8a8a]">First +1</Label>
+                <Label className="text-xs text-[#8a8a8a]">{t("race.firstBonus")}</Label>
                 <Select
                   value={halfElfBonus1}
                   onValueChange={(v) => v && onHalfElfBonus1Change(v)}
                 >
                   <SelectTrigger className="bg-[#0f0f0f] border-[#333] text-white focus:border-[#c9a227]">
-                    <SelectValue placeholder="Choose..." />
+                    <SelectValue placeholder={t("race.choose")} />
                   </SelectTrigger>
                   <SelectContent className="bg-[#111111] border-[#c9a227]">
                     {HALF_ELF_BONUS_CHOICES.filter(
@@ -145,13 +147,13 @@ export function StepRace({
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-[#8a8a8a]">Second +1</Label>
+                <Label className="text-xs text-[#8a8a8a]">{t("race.secondBonus")}</Label>
                 <Select
                   value={halfElfBonus2}
                   onValueChange={(v) => v && onHalfElfBonus2Change(v)}
                 >
                   <SelectTrigger className="bg-[#0f0f0f] border-[#333] text-white focus:border-[#c9a227]">
-                    <SelectValue placeholder="Choose..." />
+                    <SelectValue placeholder={t("race.choose")} />
                   </SelectTrigger>
                   <SelectContent className="bg-[#111111] border-[#c9a227]">
                     {HALF_ELF_BONUS_CHOICES.filter(
@@ -174,14 +176,14 @@ export function StepRace({
             onClick={onBack}
             className="flex-1 bg-transparent border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-300 hover:bg-transparent"
           >
-            Back
+            {t("common.back")}
           </Button>
           <Button
             onClick={onNext}
             disabled={!halfElfValid}
             className="flex-1 bg-[#6b0000] hover:bg-[#7a0000] text-white border border-[#c9a227] font-cinzel tracking-wide disabled:opacity-40 transition-shadow hover:shadow-[0_0_12px_rgba(201,162,39,0.3)]"
           >
-            Next — Choose Class
+            {t("race.next")}
           </Button>
         </div>
       </div>

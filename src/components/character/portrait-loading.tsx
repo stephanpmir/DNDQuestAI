@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { nameToSeed } from "@/lib/avatar";
 import type { Character } from "@/types/character";
+import { useLanguageStore } from "@/stores/language-store";
 
 interface PortraitLoadingProps {
   character: Character;
@@ -13,6 +14,7 @@ interface PortraitLoadingProps {
 
 /** Full-screen interstitial shown while Pollinations generates the character portrait. */
 export function PortraitLoading({ character, customPrompt, onComplete }: PortraitLoadingProps) {
+  const t = useLanguageStore((s) => s.t);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -90,10 +92,10 @@ export function PortraitLoading({ character, customPrompt, onComplete }: Portrai
   }
 
   const FLAVOUR_TEXTS = [
-    "The fates are weaving your destiny...",
-    "A new hero steps into the light...",
-    "The realm holds its breath...",
-    "Ancient magic stirs...",
+    t("portrait.flavour1"),
+    t("portrait.flavour2"),
+    t("portrait.flavour3"),
+    t("portrait.flavour4"),
   ];
   const flavour = FLAVOUR_TEXTS[Math.min(Math.floor(elapsed / 3), FLAVOUR_TEXTS.length - 1)];
 
@@ -112,7 +114,7 @@ export function PortraitLoading({ character, customPrompt, onComplete }: Portrai
           </div>
 
           <h2 className="font-cinzel text-lg sm:text-xl tracking-[0.3em] uppercase text-amber-200/80">
-            Your Hero
+            {t("portrait.yourHero")}
           </h2>
 
           {/* Large portrait with ornate frame */}
@@ -151,7 +153,7 @@ export function PortraitLoading({ character, customPrompt, onComplete }: Portrai
               onClick={handleReroll}
               className="px-6 py-2.5 font-cinzel text-sm tracking-wider uppercase text-amber-300/70 border border-amber-500/30 rounded-sm cursor-pointer transition-all duration-300 hover:text-amber-200 hover:border-amber-400/60 hover:bg-amber-900/20"
             >
-              Reroll Portrait
+              {t("portrait.reroll")}
             </button>
             <button
               onClick={async () => {
@@ -161,7 +163,7 @@ export function PortraitLoading({ character, customPrompt, onComplete }: Portrai
               className="relative group px-10 py-3 font-cinzel text-base tracking-widest uppercase text-amber-100 bg-gradient-to-b from-amber-900/80 to-red-950/80 border border-amber-500/40 rounded-sm cursor-pointer transition-all duration-300 hover:border-amber-400/70 hover:from-amber-800/90 hover:to-red-900/90 animate-glow-pulse"
             >
               <span className="absolute inset-0 rounded-sm bg-amber-400/0 group-hover:bg-amber-400/5 transition-colors duration-300" />
-              <span className="relative">Begin Adventure</span>
+              <span className="relative">{t("portrait.beginAdventure")}</span>
             </button>
           </div>
 
@@ -207,7 +209,7 @@ export function PortraitLoading({ character, customPrompt, onComplete }: Portrai
           {!loaded && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 animate-shimmer">
               <div className="w-10 h-10 border-2 border-amber-500/60 border-t-transparent rounded-full animate-spin" />
-              <p className="text-xs text-amber-300/60">Generating portrait...</p>
+              <p className="text-xs text-amber-300/60">{t("portrait.generating")}</p>
             </div>
           )}
 

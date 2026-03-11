@@ -14,6 +14,7 @@ import { GENDERS } from "@/types/character";
 import type { Gender } from "@/types/character";
 import { MAX_NAME_LENGTH } from "@/lib/constants";
 import { generateRandomName } from "@/lib/descriptions";
+import { useLanguageStore } from "@/stores/language-store";
 
 interface StepIdentityProps {
   name: string;
@@ -32,6 +33,7 @@ export function StepIdentity({
   onNext,
   onBack,
 }: StepIdentityProps) {
+  const t = useLanguageStore((s) => s.t);
   const nameValid = name.trim().length >= 2;
 
   return (
@@ -48,15 +50,15 @@ export function StepIdentity({
             WebkitTextFillColor: "transparent",
           }}
         >
-          Who Are You?
+          {t("identity.title")}
         </h2>
         <p className="text-sm text-[#8a8a8a] mt-1">
-          Give your character a name and choose their gender.
+          {t("identity.description")}
         </p>
       </div>
       <div className="px-6 pb-6 space-y-4">
         <div className="space-y-1">
-          <Label htmlFor="name" className="text-[#c9a227] text-xs font-cinzel tracking-wide">Character Name</Label>
+          <Label htmlFor="name" className="text-[#c9a227] text-xs font-cinzel tracking-wide">{t("identity.nameLabel")}</Label>
           <div className="flex gap-2">
             <Input
               id="name"
@@ -64,7 +66,7 @@ export function StepIdentity({
               onChange={(e) =>
                 onNameChange(e.target.value.slice(0, MAX_NAME_LENGTH))
               }
-              placeholder="Enter a name..."
+              placeholder={t("identity.namePlaceholder")}
               autoFocus
               className="bg-[#0f0f0f] border-[#333] text-white placeholder:text-[#555] focus:border-[#c9a227] focus:ring-[#c9a227]/20"
             />
@@ -75,18 +77,18 @@ export function StepIdentity({
               className="shrink-0 text-xs bg-[#111] border-[#c9a227] text-[#c9a227] hover:bg-[#6b0000] hover:text-white hover:border-[#c9a227]"
               onClick={() => onNameChange(generateRandomName())}
             >
-              Random
+              {t("identity.random")}
             </Button>
           </div>
           {!nameValid && name.length > 0 && (
             <p className="text-xs text-amber-400">
-              Name must be at least 2 characters.
+              {t("identity.nameValidation")}
             </p>
           )}
         </div>
 
         <div className="space-y-1">
-          <Label className="text-[#c9a227] text-xs font-cinzel tracking-wide">Gender</Label>
+          <Label className="text-[#c9a227] text-xs font-cinzel tracking-wide">{t("identity.genderLabel")}</Label>
           <Select
             value={gender}
             onValueChange={(v) => onGenderChange(v as Gender)}
@@ -110,14 +112,14 @@ export function StepIdentity({
             onClick={onBack}
             className="flex-1 bg-transparent border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-300 hover:bg-transparent"
           >
-            Back
+            {t("common.back")}
           </Button>
           <Button
             onClick={onNext}
             disabled={!nameValid}
             className="flex-1 bg-[#6b0000] hover:bg-[#7a0000] text-white border border-[#c9a227] font-cinzel tracking-wide disabled:opacity-40 transition-shadow hover:shadow-[0_0_12px_rgba(201,162,39,0.3)]"
           >
-            Next — Choose Race
+            {t("identity.next")}
           </Button>
         </div>
       </div>

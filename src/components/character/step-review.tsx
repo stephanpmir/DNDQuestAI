@@ -5,6 +5,7 @@ import { RACIAL_DATA } from "@/lib/races";
 import { CLASS_DATA } from "@/lib/classes";
 import { RACE_SUMMARIES, CLASS_SUMMARIES } from "@/lib/descriptions";
 import { Button } from "@/components/ui/button";
+import { useLanguageStore } from "@/stores/language-store";
 
 const ABILITY_LABELS: Record<keyof AbilityScores, string> = {
   strength: "STR",
@@ -38,6 +39,7 @@ export function StepReview({
   const classData = CLASS_DATA[character.class];
   const raceSummary = RACE_SUMMARIES[character.race];
   const classSummary = CLASS_SUMMARIES[character.class];
+  const t = useLanguageStore((s) => s.t);
 
   function getRacialBonus(ability: string): number {
     let bonus = raceData.abilityBonuses[ability] ?? 0;
@@ -62,19 +64,19 @@ export function StepReview({
           {character.name} the {character.race} {character.class}
         </h2>
         <p className="text-sm text-[#8a8a8a] mt-1">
-          Review your character before starting the adventure.
+          {t("review.description")}
         </p>
       </div>
       <div className="px-6 pb-6 space-y-4">
         {/* Identity */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-[#0f0f0f] rounded-lg p-3 border border-[#2a2a2a]">
-            <p className="text-[10px] text-[#c9a227] uppercase tracking-wider font-cinzel">Race</p>
+            <p className="text-[10px] text-[#c9a227] uppercase tracking-wider font-cinzel">{t("review.race")}</p>
             <p className="text-sm font-cinzel font-semibold text-white">{character.race}</p>
             <p className="text-[10px] text-[#c9a227]">{raceSummary.tagline}</p>
           </div>
           <div className="bg-[#0f0f0f] rounded-lg p-3 border border-[#2a2a2a]">
-            <p className="text-[10px] text-[#c9a227] uppercase tracking-wider font-cinzel">Class</p>
+            <p className="text-[10px] text-[#c9a227] uppercase tracking-wider font-cinzel">{t("review.class")}</p>
             <p className="text-sm font-cinzel font-semibold text-white">{character.class}</p>
             <p className="text-[10px] text-[#c9a227]">{classSummary.tagline}</p>
           </div>
@@ -82,7 +84,7 @@ export function StepReview({
 
         {/* Ability Scores */}
         <div>
-          <p className="text-xs font-medium mb-2 text-[#c9a227] font-cinzel tracking-wide">Ability Scores</p>
+          <p className="text-xs font-medium mb-2 text-[#c9a227] font-cinzel tracking-wide">{t("review.abilityScores")}</p>
           <div className="grid grid-cols-3 gap-2">
             {(Object.keys(ABILITY_LABELS) as (keyof AbilityScores)[]).map((ability) => {
               const base = character.abilityScores[ability];
@@ -107,7 +109,7 @@ export function StepReview({
                     </span>
                   </p>
                   {racial > 0 && (
-                    <p className="text-[9px] text-emerald-400">+{racial} racial</p>
+                    <p className="text-[9px] text-emerald-400">+{racial} {t("review.racial")}</p>
                   )}
                 </div>
               );
@@ -117,7 +119,7 @@ export function StepReview({
 
         {/* Skills */}
         <div>
-          <p className="text-xs font-medium mb-1 text-[#c9a227] font-cinzel tracking-wide">Skills</p>
+          <p className="text-xs font-medium mb-1 text-[#c9a227] font-cinzel tracking-wide">{t("review.skills")}</p>
           <div className="flex flex-wrap gap-1">
             {selectedSkills.map((skill) => (
               <span key={skill} className="text-[10px] bg-[#1a1a1a] text-[#c9a227] px-2 py-0.5 rounded-full border border-[#c9a227]">
@@ -130,7 +132,7 @@ export function StepReview({
         {/* Fighting Style */}
         {selectedFightingStyle && (
           <div>
-            <p className="text-xs font-medium mb-1 text-[#c9a227] font-cinzel tracking-wide">Fighting Style</p>
+            <p className="text-xs font-medium mb-1 text-[#c9a227] font-cinzel tracking-wide">{t("review.fightingStyle")}</p>
             <span className="text-[10px] bg-[#1a1a1a] text-[#c9a227] px-2 py-0.5 rounded-full border border-[#c9a227]">
               {selectedFightingStyle}
             </span>
@@ -140,7 +142,7 @@ export function StepReview({
         {/* Cantrips */}
         {selectedCantrips.length > 0 && (
           <div>
-            <p className="text-xs font-medium mb-1 text-[#c9a227] font-cinzel tracking-wide">Cantrips</p>
+            <p className="text-xs font-medium mb-1 text-[#c9a227] font-cinzel tracking-wide">{t("review.cantrips")}</p>
             <div className="flex flex-wrap gap-1">
               {selectedCantrips.map((c) => (
                 <span key={c} className="text-[10px] bg-purple-950/40 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/40">
@@ -154,7 +156,7 @@ export function StepReview({
         {/* Spells */}
         {selectedSpells.length > 0 && (
           <div>
-            <p className="text-xs font-medium mb-1 text-[#c9a227] font-cinzel tracking-wide">Spells</p>
+            <p className="text-xs font-medium mb-1 text-[#c9a227] font-cinzel tracking-wide">{t("review.spells")}</p>
             <div className="flex flex-wrap gap-1">
               {selectedSpells.map((s) => (
                 <span key={s} className="text-[10px] bg-blue-950/40 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/40">
@@ -167,13 +169,13 @@ export function StepReview({
 
         {/* Class Features & Racial Traits */}
         <div>
-          <p className="text-xs font-medium mb-1 text-[#c9a227] font-cinzel tracking-wide">Features & Traits</p>
+          <p className="text-xs font-medium mb-1 text-[#c9a227] font-cinzel tracking-wide">{t("review.features")}</p>
           <div className="flex flex-wrap gap-1">
             {classData.features.map((f) => (
               <span key={f} className="text-[10px] bg-[#1a1a1a] text-[#c9a227] px-2 py-0.5 rounded-full border border-[#c9a227]">{f}</span>
             ))}
-            {raceData.traits.map((t) => (
-              <span key={t} className="text-[10px] bg-[#1a1a1a] text-[#c9a227] px-2 py-0.5 rounded-full border border-[#c9a227]">{t}</span>
+            {raceData.traits.map((trait) => (
+              <span key={trait} className="text-[10px] bg-[#1a1a1a] text-[#c9a227] px-2 py-0.5 rounded-full border border-[#c9a227]">{trait}</span>
             ))}
           </div>
         </div>
@@ -184,14 +186,14 @@ export function StepReview({
             onClick={onBack}
             className="flex-1 bg-transparent border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-300 hover:bg-transparent"
           >
-            Back
+            {t("common.back")}
           </Button>
           <Button
             onClick={onSubmit}
             size="lg"
             className="flex-1 bg-[#6b0000] hover:bg-[#7a0000] text-white border border-[#c9a227] font-cinzel tracking-wide text-base transition-shadow hover:shadow-[0_0_12px_rgba(201,162,39,0.3)]"
           >
-            Begin Adventure!
+            {t("review.beginAdventure")}
           </Button>
         </div>
       </div>

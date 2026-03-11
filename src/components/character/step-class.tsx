@@ -7,6 +7,7 @@ import { CLASS_DATA } from "@/lib/classes";
 import { CLASS_SUMMARIES } from "@/lib/descriptions";
 import { InfoTip } from "./info-tip";
 import { cn } from "@/lib/utils";
+import { useLanguageStore } from "@/stores/language-store";
 
 interface StepClassProps {
   selectedClass: CharacterClass;
@@ -27,6 +28,7 @@ export function StepClass({
   onNext,
   onBack,
 }: StepClassProps) {
+  const t = useLanguageStore((s) => s.t);
   return (
     <div
       className="rounded-lg border border-[#c9a227] bg-[#111111] overflow-hidden"
@@ -41,13 +43,13 @@ export function StepClass({
             WebkitTextFillColor: "transparent",
           }}
         >
-          Choose Your Class
+          {t("class.title")}
           <span style={{ WebkitTextFillColor: "initial", background: "none" }}>
-            <InfoTip text="Your class is your character's profession and fighting style. It determines what weapons you use, what spells you can cast, and how you approach combat." />
+            <InfoTip text={t("class.tip")} />
           </span>
         </h2>
         <p className="text-sm text-[#8a8a8a] mt-1">
-          Your class defines your abilities in combat and exploration.
+          {t("class.description")}
         </p>
       </div>
       <div className="px-6 pb-6 space-y-4">
@@ -104,8 +106,8 @@ export function StepClass({
                       ))}
                     </div>
                     <p className="text-[10px] text-[#8a8a8a] mt-1.5">
-                      Hit Die: d{data.hitDie} &middot; Primary:{" "}
-                      {data.primaryAbility} &middot; Saves:{" "}
+                      {t("class.hitDie")}: d{data.hitDie} &middot; {t("class.primary")}:{" "}
+                      {data.primaryAbility} &middot; {t("class.saves")}:{" "}
                       {data.savingThrows.join(", ")}
                     </p>
                   </div>
@@ -121,13 +123,13 @@ export function StepClass({
             onClick={onBack}
             className="flex-1 bg-transparent border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-300 hover:bg-transparent"
           >
-            Back
+            {t("common.back")}
           </Button>
           <Button
             onClick={onNext}
             className="flex-1 bg-[#6b0000] hover:bg-[#7a0000] text-white border border-[#c9a227] font-cinzel tracking-wide transition-shadow hover:shadow-[0_0_12px_rgba(201,162,39,0.3)]"
           >
-            Next — Roll Abilities
+            {t("class.next")}
           </Button>
         </div>
       </div>

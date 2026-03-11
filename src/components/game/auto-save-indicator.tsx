@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSaveStore } from "@/stores/save-store";
+import { useLanguageStore } from "@/stores/language-store";
 
 function formatRelative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -15,6 +16,7 @@ function formatRelative(iso: string): string {
 }
 
 export function AutoSaveIndicator() {
+  const t = useLanguageStore((s) => s.t);
   const autoSlot = useSaveStore((s) => s.slots.auto);
   const lastSavedAt = autoSlot?.savedAt ?? null;
   const [display, setDisplay] = useState<string | null>(null);
@@ -49,7 +51,7 @@ export function AutoSaveIndicator() {
           flash ? "bg-emerald-400" : "bg-muted-foreground/40"
         }`}
       />
-      Saved {display}
+      {t("autosave.saved")} {display}
     </div>
   );
 }

@@ -7,19 +7,13 @@ import { restoreSnapshot } from "@/lib/save-snapshot";
 import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
 import { Button } from "@/components/ui/button";
+import { useLanguageStore } from "@/stores/language-store";
 
 interface SaveSlotsModalProps {
   mode: "save" | "load";
   open: boolean;
   onClose: () => void;
 }
-
-const SLOT_LABELS: Record<SlotId, string> = {
-  auto: "Auto-Save",
-  "slot-1": "Slot 1",
-  "slot-2": "Slot 2",
-  "slot-3": "Slot 3",
-};
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -38,6 +32,12 @@ function SlotCard({
   onSave,
   onLoad,
   onDelete,
+  slotLabel,
+  emptyLabel,
+  saveLabel,
+  overwriteLabel,
+  loadLabel,
+  deleteLabel,
 }: {
   slotId: SlotId;
   slot: SaveSlot | undefined;
@@ -45,6 +45,12 @@ function SlotCard({
   onSave: () => void;
   onLoad: () => void;
   onDelete: () => void;
+  slotLabel: string;
+  emptyLabel: string;
+  saveLabel: string;
+  overwriteLabel: string;
+  loadLabel: string;
+  deleteLabel: string;
 }) {
   const isAuto = slotId === "auto";
   const isEmpty = !slot;
@@ -55,7 +61,7 @@ function SlotCard({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-foreground">
-            {SLOT_LABELS[slotId]}
+            {slotLabel}
           </span>
           {isAuto && (
             <span className="text-[9px] bg-emerald-500/15 text-emerald-400 px-1.5 py-0.5 rounded-full border border-emerald-500/30">
@@ -68,15 +74,15 @@ function SlotCard({
             <span className="text-amber-300/70 font-semibold truncate">
               {slot.characterName}
             </span>
-            <span className="text-gray-600">·</span>
+            <span className="text-gray-600">&middot;</span>
             <span>Lvl {slot.characterLevel}</span>
-            <span className="text-gray-600">·</span>
+            <span className="text-gray-600">&middot;</span>
             <span className="truncate">{slot.location}</span>
-            <span className="text-gray-600">·</span>
+            <span className="text-gray-600">&middot;</span>
             <span className="shrink-0">{formatDate(slot.savedAt)}</span>
           </div>
         ) : (
-          <p className="text-[11px] text-muted-foreground/50 mt-0.5">Empty</p>
+          <p className="text-[11px] text-muted-foreground/50 mt-0.5">{emptyLabel}</p>
         )}
       </div>
 
@@ -89,7 +95,7 @@ function SlotCard({
             className="h-7 text-xs px-3"
             onClick={onSave}
           >
-            {isEmpty ? "Save" : "Overwrite"}
+            {isEmpty ? saveLabel : overwriteLabel}
           </Button>
         )}
         {mode === "load" && !isEmpty && (
@@ -99,7 +105,7 @@ function SlotCard({
             className="h-7 text-xs px-3"
             onClick={onLoad}
           >
-            Load
+            {loadLabel}
           </Button>
         )}
         {!isEmpty && !isAuto && (
@@ -109,7 +115,7 @@ function SlotCard({
             className="h-7 text-xs px-2 text-destructive hover:text-destructive"
             onClick={onDelete}
           >
-            Delete
+            {deleteLabel}
           </Button>
         )}
       </div>
@@ -118,11 +124,19 @@ function SlotCard({
 }
 
 export function SaveSlotsModal({ mode, open, onClose }: SaveSlotsModalProps) {
+  const t = useLanguageStore((s) => s.t);
   const { slots, saveToSlot, deleteSlot } = useSaveStore();
   const [confirmDelete, setConfirmDelete] = useState<SlotId | null>(null);
   const character = useCharacterStore((s) => s.character);
   const location = useGameStore((s) => s.location);
   const turnCount = useGameStore((s) => s.turnCount);
+
+  const SLOT_LABELS: Record<SlotId, string> = {
+    auto: t("save.autoSave"),
+    "slot-1": t("save.slot1"),
+    "slot-2": t("save.slot2"),
+    "slot-3": t("save.slot3"),
+  };
 
   if (!open) return null;
 
@@ -171,7 +185,7 @@ export function SaveSlotsModal({ mode, open, onClose }: SaveSlotsModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/30">
           <h2 className="font-cinzel text-lg font-semibold tracking-wide">
-            {mode === "save" ? "Save Game" : "Load Game"}
+            {mode === "save" ? t("save.saveGame") : t("save.loadGame")}
           </h2>
           <button
             onClick={onClose}
@@ -195,13 +209,19 @@ export function SaveSlotsModal({ mode, open, onClose }: SaveSlotsModalProps) {
               onSave={() => handleSave(id)}
               onLoad={() => handleLoad(id)}
               onDelete={() => handleDelete(id)}
+              slotLabel={SLOT_LABELS[id]}
+              emptyLabel={t("save.empty")}
+              saveLabel={t("save.save")}
+              overwriteLabel={t("save.overwrite")}
+              loadLabel={t("save.load")}
+              deleteLabel={t("save.delete")}
             />
           ))}
 
           {/* Delete confirmation hint */}
           {confirmDelete && (
             <p className="text-[11px] text-destructive/80 text-center pt-1">
-              Click Delete again to confirm removal of {SLOT_LABELS[confirmDelete]}.
+              {t("save.confirmDelete")} {SLOT_LABELS[confirmDelete]}.
             </p>
           )}
         </div>
@@ -209,7 +229,7 @@ export function SaveSlotsModal({ mode, open, onClose }: SaveSlotsModalProps) {
         {/* Footer */}
         <div className="px-5 py-3 border-t border-border/30 flex justify-end">
           <Button variant="ghost" size="sm" onClick={onClose}>
-            Cancel
+            {t("save.cancel")}
           </Button>
         </div>
       </div>

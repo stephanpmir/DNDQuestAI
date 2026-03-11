@@ -11,6 +11,7 @@ import {
 import { InfoTip } from "./info-tip";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useLanguageStore } from "@/stores/language-store";
 
 interface StepSkillsProps {
   characterClass: CharacterClass;
@@ -59,6 +60,7 @@ export function StepSkills({
   onNext,
   onBack,
 }: StepSkillsProps) {
+  const t = useLanguageStore((s) => s.t);
   const classData = CLASS_DATA[characterClass];
   const fightingStyles = FIGHTING_STYLES[characterClass] ?? [];
 
@@ -92,16 +94,16 @@ export function StepSkills({
             className="text-base font-cinzel font-bold tracking-wide flex items-center gap-1"
             style={goldGradientStyle}
           >
-            Skill Proficiencies
+            {t("skills.title")}
             <span style={{ WebkitTextFillColor: "initial", background: "none" }}>
-              <InfoTip text="Skills represent what your character is trained in. Being proficient in a skill means you add a bonus when attempting related actions." />
+              <InfoTip text={t("skills.tip")} />
             </span>
           </h3>
           <p className="text-sm text-[#8a8a8a] mt-1">
-            Choose {totalSkillChoices} skills.
+            {t("skills.choose")} {totalSkillChoices} {t("skills.skills")}.
             {selectedSkills.length < totalSkillChoices && (
               <span className="text-[#c9a227] ml-1">
-                ({totalSkillChoices - selectedSkills.length} remaining)
+                ({totalSkillChoices - selectedSkills.length} {t("skills.remaining")})
               </span>
             )}
           </p>
@@ -157,12 +159,12 @@ export function StepSkills({
               className="text-base font-cinzel font-bold tracking-wide flex items-center gap-1"
               style={goldGradientStyle}
             >
-              Fighting Style
+              {t("skills.fightingStyleTitle")}
               <span style={{ WebkitTextFillColor: "initial", background: "none" }}>
-                <InfoTip text="Your preferred way of fighting. This gives you a permanent bonus based on your combat preference." />
+                <InfoTip text={t("skills.fightingStyleTip")} />
               </span>
             </h3>
-            <p className="text-sm text-[#8a8a8a] mt-1">Choose your combat specialization.</p>
+            <p className="text-sm text-[#8a8a8a] mt-1">{t("skills.fightingStyleDesc")}</p>
           </div>
           <div className="px-6 pb-5">
             <div className="space-y-1.5">
@@ -207,16 +209,16 @@ export function StepSkills({
               className="text-base font-cinzel font-bold tracking-wide flex items-center gap-1"
               style={goldGradientStyle}
             >
-              Cantrips
+              {t("skills.cantripsTitle")}
               <span style={{ WebkitTextFillColor: "initial", background: "none" }}>
-                <InfoTip text="Cantrips are minor spells you can cast anytime without using a spell slot. Think of them as your magical basics." />
+                <InfoTip text={t("skills.cantripsTip")} />
               </span>
             </h3>
             <p className="text-sm text-[#8a8a8a] mt-1">
-              Choose {classData.cantripsKnown} cantrips.
+              {t("skills.choose")} {classData.cantripsKnown} {t("skills.cantrips")}.
               {selectedCantrips.length < classData.cantripsKnown && (
                 <span className="text-[#c9a227] ml-1">
-                  ({classData.cantripsKnown - selectedCantrips.length} remaining)
+                  ({classData.cantripsKnown - selectedCantrips.length} {t("skills.remaining")})
                 </span>
               )}
             </p>
@@ -270,16 +272,16 @@ export function StepSkills({
               className="text-base font-cinzel font-bold tracking-wide flex items-center gap-1"
               style={goldGradientStyle}
             >
-              1st-Level Spells
+              {t("skills.spellsTitle")}
               <span style={{ WebkitTextFillColor: "initial", background: "none" }}>
-                <InfoTip text="These are more powerful spells that use spell slots. You can only cast them a limited number of times before resting." />
+                <InfoTip text={t("skills.spellsTip")} />
               </span>
             </h3>
             <p className="text-sm text-[#8a8a8a] mt-1">
-              Choose {classData.spellsKnown} spells.
+              {t("skills.choose")} {classData.spellsKnown} {t("skills.spells")}.
               {selectedSpells.length < classData.spellsKnown && (
                 <span className="text-[#c9a227] ml-1">
-                  ({classData.spellsKnown - selectedSpells.length} remaining)
+                  ({classData.spellsKnown - selectedSpells.length} {t("skills.remaining")})
                 </span>
               )}
             </p>
@@ -327,14 +329,14 @@ export function StepSkills({
           onClick={onBack}
           className="flex-1 bg-transparent border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-300 hover:bg-transparent"
         >
-          Back
+          {t("common.back")}
         </Button>
         <Button
           onClick={onNext}
           disabled={!isValid}
           className="flex-1 bg-[#6b0000] hover:bg-[#7a0000] text-white border border-[#c9a227] font-cinzel tracking-wide disabled:opacity-40 transition-shadow hover:shadow-[0_0_12px_rgba(201,162,39,0.3)]"
         >
-          Next — Review Character
+          {t("skills.next")}
         </Button>
       </div>
     </div>
