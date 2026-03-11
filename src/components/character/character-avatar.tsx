@@ -43,24 +43,35 @@ export function CharacterAvatar({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const urlCacheRef = useRef<Map<string, string>>(new Map());
 
-  // Debounce preview generation — wait 1.5s after the last change
+  // Debounce preview generation — wait 800ms after the last change
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     debounceRef.current = setTimeout(() => {
+      const cacheKey = `${gender}-${race}-${characterClass}-${avatar.hairStyle}-${avatar.hairColor}-${avatar.skinTone}-${avatar.bodyBuild}-${avatar.height}`;
+      const cached = urlCacheRef.current.get(cacheKey);
+      if (cached) {
+        if (cached !== imageUrl) {
+          setImageUrl(cached);
+        }
+        return;
+      }
       const url = buildAvatarPreviewUrl(
         { race, class: characterClass, gender, avatar },
         name,
         512
       );
+      urlCacheRef.current.set(cacheKey, url);
       setLoading(true);
       setImageUrl(url);
-    }, 1500);
+    }, 800);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [race, characterClass, gender, avatar, name]);
 
   return (

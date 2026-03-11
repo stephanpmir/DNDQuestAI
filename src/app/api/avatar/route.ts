@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { Race, CharacterClass, Gender, AvatarCustomization } from "@/types/character";
-import { buildAvatarPrompt, nameToSeed } from "@/lib/avatar";
+import { buildAvatarPrompt, nameToSeed, buildPollinationsUrl } from "@/lib/avatar";
 
 interface AvatarRequest {
   name: string;
@@ -23,26 +23,17 @@ export async function POST(request: Request) {
 
     const prompt = buildAvatarPrompt(body);
     const seed = nameToSeed(body.name);
-    const apiKey = process.env.POLLINATIONS_API_KEY;
 
-    const imageUrl = new URL(
-      `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`
-    );
-    imageUrl.searchParams.set("width", "512");
-    imageUrl.searchParams.set("height", "512");
-    imageUrl.searchParams.set("seed", String(seed));
-    imageUrl.searchParams.set("nologo", "true");
-    imageUrl.searchParams.set("enhance", "true");
-    imageUrl.searchParams.set("private", "true");
+    const imageUrl = buildPollinationsUrl(prompt, {
+      width: "512",
+      height: "512",
+      seed: String(seed),
+      nologo: "true",
+      enhance: "true",
+      private: "true",
+    });
 
-    // Fetch the image server-side (keeps API key private)
-    const headers: Record<string, string> = {};
-    if (apiKey) {
-      headers["Authorization"] = `Bearer ${apiKey}`;
-    }
-
-    const response = await fetch(imageUrl.toString(), {
-      headers,
+    const response = await fetch(imageUrl, {
       signal: AbortSignal.timeout(30_000),
     });
 

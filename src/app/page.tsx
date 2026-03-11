@@ -5,13 +5,20 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { SlotId, SaveSlot } from "@/stores/save-store";
 import { restoreSnapshot } from "@/lib/save-snapshot";
+import { buildPollinationsUrl } from "@/lib/avatar";
 
 const BG_PROMPT =
   "dark fantasy medieval landscape, dragon silhouette, dramatic stormy sky, red and gold lighting, cinematic wide shot, D&D concept art";
 const STORAGE_KEY = "dndquest-landing-bg";
 
 function buildBgUrl(seed: number) {
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(BG_PROMPT)}?width=1920&height=1080&seed=${seed}&nologo=true&enhance=true`;
+  return buildPollinationsUrl(BG_PROMPT, {
+    width: "1920",
+    height: "1080",
+    seed: String(seed),
+    nologo: "true",
+    enhance: "true",
+  });
 }
 
 function getCachedBgUrl(): string {

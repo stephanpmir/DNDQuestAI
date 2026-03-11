@@ -61,19 +61,19 @@ export function buildAvatarPrompt(data: AvatarPromptInput): string {
   const classFeatures = CLASS_FEATURES[cls] ?? "";
 
   const parts = [
-    `Fantasy D&D character portrait`,
-    `${gender.toLowerCase()} ${race}`,
-    `${cls} class`,
-    `${skinTone} skin tone`,
+    `fantasy portrait`,
+    `${gender.toLowerCase()} ${race.toLowerCase()} ${cls.toLowerCase()}`,
     hairDesc,
+    `${skinTone} skin`,
     `${avatar.bodyBuild} build`,
+    `${avatar.height} height`,
     raceFeatures,
     classFeatures,
-    `medieval fantasy setting`,
-    `dramatic lighting`,
-    `detailed face close-up portrait`,
-    `painterly digital art style`,
-    `RPG character art`,
+    `D&D character art`,
+    `detailed painting`,
+    `dark fantasy style`,
+    `face visible`,
+    `upper body`,
   ].filter(Boolean);
 
   return parts.join(", ");
@@ -88,7 +88,28 @@ export function nameToSeed(name: string): number {
   return Math.abs(hash);
 }
 
-/** Build a Pollinations.ai image URL for live preview (client-side, no auth needed) */
+/** Get the Pollinations token (client-side from NEXT_PUBLIC env, server-side from POLLINATIONS_API_KEY) */
+export function getPollinationsToken(): string | undefined {
+  return process.env.NEXT_PUBLIC_POLLINATIONS_TOKEN ?? process.env.POLLINATIONS_API_KEY;
+}
+
+/** Build a Pollinations.ai image URL with token auth via query param */
+export function buildPollinationsUrl(
+  prompt: string,
+  params: Record<string, string>
+): string {
+  const url = new URL(
+    `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`
+  );
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+  const token = getPollinationsToken();
+  if (token) url.searchParams.set("token", token);
+  return url.toString();
+}
+
+/** Build a Pollinations.ai image URL for live preview (client-side) */
 export function buildAvatarPreviewUrl(
   data: AvatarPromptInput,
   name: string,
@@ -96,15 +117,13 @@ export function buildAvatarPreviewUrl(
 ): string {
   const prompt = buildAvatarPrompt(data);
   const seed = nameToSeed(name || "adventurer");
-  const url = new URL(
-    `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`
-  );
-  url.searchParams.set("width", String(size));
-  url.searchParams.set("height", String(size));
-  url.searchParams.set("seed", String(seed));
-  url.searchParams.set("nologo", "true");
-  url.searchParams.set("enhance", "true");
-  return url.toString();
+  return buildPollinationsUrl(prompt, {
+    width: String(size),
+    height: String(size),
+    seed: String(seed),
+    nologo: "true",
+    enhance: "true",
+  });
 }
 
 // ── Server-side generation (called from character wizard) ──
