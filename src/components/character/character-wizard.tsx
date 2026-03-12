@@ -129,7 +129,7 @@ export function CharacterWizard() {
     resetGame();
     resetWorld();
     resetKarma();
-    if (customPrompt) setPortraitPrompt(customPrompt);
+    setPortraitPrompt(customPrompt ?? null);
     setTimeout(() => {
       finalizeCharacter();
       setShowPortrait(true);
@@ -193,7 +193,9 @@ export function CharacterWizard() {
     };
     setAvatar(avatarData);
 
-    finalizeAndShowPortrait();
+    // Build prompt from local profile values (store hasn't flushed yet)
+    const surveyPrompt = `fantasy portrait, ${profile.gender.toLowerCase()} ${profile.race.toLowerCase()} ${profile.class.toLowerCase()}, D&D character art, detailed painting, dark fantasy style, face visible, upper body, dramatic lighting`;
+    finalizeAndShowPortrait(surveyPrompt);
   }
 
   const handleClassChange = useCallback(
@@ -374,7 +376,9 @@ export function CharacterWizard() {
     };
     setAvatar(avatarData);
 
-    finalizeAndShowPortrait();
+    // Build prompt from local variables (store hasn't flushed yet)
+    const quickPrompt = `fantasy portrait, ${gender.toLowerCase()} ${race.toLowerCase()} ${cls.toLowerCase()}, D&D character art, detailed painting, dark fantasy style, face visible, upper body, dramatic lighting`;
+    finalizeAndShowPortrait(quickPrompt);
   }
 
   const progress = Math.round((step / (STEP_LABELS.length - 1)) * 100);
