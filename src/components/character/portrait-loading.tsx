@@ -65,18 +65,25 @@ export function PortraitLoading({ character, customPrompt, onComplete }: Portrai
     return () => clearTimeout(timeout);
   }, [loaded, onComplete]);
 
-  /** Convert the current proxy URL image to a data URL for persistence */
-  async function convertToDataUrl(url: string): Promise<string | null> {
+  /**
+   * Convert the currently displayed image to a data URL for persistence.
+   * Uses a canvas to capture exactly what the user sees, avoiding a re-fetch
+   * that could return a different image from the generation service.
+   */
+  function captureDisplayedImage(): string | null {
     try {
-      const res = await fetch(url);
-      if (!res.ok) return null;
-      const blob = await res.blob();
-      return await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = () => resolve("");
-        reader.readAsDataURL(blob);
-      }) || null;
+      // Find the currently rendered <img> by its src
+      const img = document.querySelector(`img[src="${CSS.escape(imageUrl ?? "")}"]`) as HTMLImageElement | null;
+      if (!img || !img.naturalWidth) return null;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+
+      ctx.drawImage(img, 0, 0);
+      return canvas.toDataURL("image/jpeg", 0.9);
     } catch {
       return null;
     }
@@ -156,8 +163,8 @@ export function PortraitLoading({ character, customPrompt, onComplete }: Portrai
               {t("portrait.reroll")}
             </button>
             <button
-              onClick={async () => {
-                const dataUrl = await convertToDataUrl(imageUrl);
+              onClick={() => {
+                const dataUrl = captureDisplayedImage();
                 onComplete(dataUrl || imageUrl);
               }}
               className="relative group px-10 py-3 font-cinzel text-base tracking-widest uppercase text-amber-100 bg-gradient-to-b from-amber-900/80 to-red-950/80 border border-amber-500/40 rounded-sm cursor-pointer transition-all duration-300 hover:border-amber-400/70 hover:from-amber-800/90 hover:to-red-900/90 animate-glow-pulse"
