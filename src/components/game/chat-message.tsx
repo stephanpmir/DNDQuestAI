@@ -126,8 +126,7 @@ function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
   const [retried, setRetried] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
-  const fullPrompt = `environment landscape ${prompt} no people wide shot dark fantasy`;
-  const src = `/.netlify/functions/proxy-portrait?prompt=${encodeURIComponent(fullPrompt)}&width=800&height=450&seed=${seed}`;
+  const src = `/.netlify/functions/proxy-scene?prompt=${encodeURIComponent(prompt)}&seed=${seed}`;
 
   const handleError = () => {
     console.warn("[SceneImage] image load failed, retried:", retried);
