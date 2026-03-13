@@ -119,16 +119,33 @@ export function ChatMessage({ message, avatarUrl, abilityScores, onSendMessage, 
   );
 }
 
-/** Scene image rendered above DM narrative text. */
+/** Scene image rendered above DM narrative text. Retries once on failure. */
 function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
+  const [retried, setRetried] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   const src = `/.netlify/functions/proxy-portrait?prompt=${encodeURIComponent(prompt)}&seed=${seed}&width=800&height=450`;
 
   useEffect(() => {
     console.log("[SceneImage] MOUNTED — prompt:", prompt, "src:", src);
   }, [prompt, src]);
+
+  const handleError = () => {
+    console.warn("[SceneImage] image load failed:", src, "retried:", retried);
+    if (!retried) {
+      setRetried(true);
+      // Retry after 2 seconds
+      setTimeout(() => {
+        if (imgRef.current) {
+          imgRef.current.src = src + "&retry=1";
+        }
+      }, 2000);
+    } else {
+      setError(true);
+    }
+  };
 
   return (
     <div
@@ -137,8 +154,13 @@ function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
         aspectRatio: "16/9",
         borderRadius: 8, overflow: "hidden", marginBottom: 12,
         backgroundColor: "#1a1a1a",
+        animation: !loaded && !error ? "scenePulse 2s ease-in-out infinite" : undefined,
       }}
     >
+      {/* Inline keyframes for pulse animation */}
+      {!loaded && !error && (
+        <style>{`@keyframes scenePulse { 0%, 100% { background-color: #1a1a1a; } 50% { background-color: #222222; } }`}</style>
+      )}
       {/* Always-visible placeholder until image loads or errors */}
       {!loaded && (
         <div style={{
@@ -158,10 +180,11 @@ function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
       )}
       {!error && (
         <img
+          ref={imgRef}
           src={src}
           alt=""
           onLoad={() => setLoaded(true)}
-          onError={() => { console.warn("[SceneImage] image load failed:", src); setError(true); }}
+          onError={handleError}
           style={{
             width: "100%", height: "100%", objectFit: "cover",
             borderRadius: 8,

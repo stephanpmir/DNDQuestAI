@@ -41,6 +41,7 @@ Do not auto-resolve uncertain player actions — require a skill check
 Do not let sceneImagePrompt or checkRequired appear in the narrative text shown to the player
 SceneImage component must be wrapped in an error boundary so it cannot crash the app
 Z.ai GLM reasoning models return empty content — always use glm-4.5-air with thinking disabled
+proxy-portrait.js must read width/height from query params — never hardcode portrait dimensions (512x768)
 NARRATIVE RULES
 Maximum 150 words per DM response, 3 paragraphs max, 2-4 sentences each.
 Never auto-resolve uncertain actions — use checkRequired.

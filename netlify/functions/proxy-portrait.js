@@ -30,7 +30,7 @@ exports.handler = async (event) => {
   console.log("[proxy-portrait] Upstream URL:", upstreamUrl.substring(0, 250));
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  const timeoutId = setTimeout(() => controller.abort(), 45000);
 
   try {
     const res = await fetch(upstreamUrl, {
@@ -92,11 +92,11 @@ exports.handler = async (event) => {
     clearTimeout(timeoutId);
     const msg = error instanceof Error ? error.message : "Unknown error";
     const isAbort = error instanceof Error && error.name === "AbortError";
-    console.error("[proxy-portrait] Fetch error:", isAbort ? "Request timed out after 30s" : msg);
+    console.error("[proxy-portrait] Fetch error:", isAbort ? "Request timed out after 45s" : msg);
     return {
       statusCode: 502,
       headers: { "Access-Control-Allow-Origin": "*" },
-      body: isAbort ? "Proxy fetch timed out after 30s" : `Proxy fetch failed: ${msg}`,
+      body: isAbort ? "Proxy fetch timed out after 45s" : `Proxy fetch failed: ${msg}`,
     };
   }
 };
