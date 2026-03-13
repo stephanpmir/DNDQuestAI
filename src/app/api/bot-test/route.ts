@@ -422,7 +422,7 @@ async function runDMTurn(
 
 // ── Main handler ─────────────────────────────────────────────────
 
-export async function POST(): Promise<NextResponse> {
+async function runPlaytest(): Promise<NextResponse> {
   const startTime = Date.now();
   const turns: TurnResult[] = [];
   const errors: string[] = [];
@@ -592,4 +592,12 @@ export async function POST(): Promise<NextResponse> {
       equipped: gs.character.equipped,
     },
   });
+}
+
+export async function POST(): Promise<NextResponse> {
+  return runPlaytest();
+}
+
+export async function GET(): Promise<NextResponse> {
+  return runPlaytest();
 }
