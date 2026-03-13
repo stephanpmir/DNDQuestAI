@@ -32,7 +32,8 @@ function getGrokClient(): OpenAI {
   return new OpenAI({ baseURL: "https://api.x.ai/v1", apiKey: key, timeout: 60_000, fetch: proxyFetch });
 }
 
-const GROK_MODEL = "grok-code-fast-1";
+const GROK_MODEL_PRIMARY = "grok-code-fast-1";
+const GROK_MODEL_FALLBACK = "grok-4-fast-reasoning";
 
 const GROK_SYSTEM_PROMPT = `You are playing a solo D&D 5e text adventure as Zephmir, a Female Tiefling Rogue with high Charisma.
 You are a real player — read the DM's narrative carefully and decide your next action.
@@ -266,6 +267,29 @@ interface GrokResponse {
   rawResponse: string;
 }
 
+function isGrokFallbackError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const msg = error.message;
+    return msg.includes("502") || msg.includes("400");
+  }
+  return false;
+}
+
+async function callGrokWithModel(
+  grokClient: OpenAI,
+  model: string,
+  messages: OpenAI.ChatCompletionMessageParam[],
+): Promise<string> {
+  const response = await grokClient.chat.completions.create({
+    model,
+    messages,
+    max_tokens: 512,
+  });
+  const content = response.choices[0]?.message?.content;
+  if (!content || content.trim().length === 0) throw new Error("Grok returned empty content");
+  return content;
+}
+
 async function callGrok(
   grokClient: OpenAI,
   grokHistory: OpenAI.ChatCompletionMessageParam[],
@@ -276,36 +300,48 @@ async function callGrok(
 
   grokHistory.push({ role: "user", content: userMessage });
 
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+  const fullMessages: OpenAI.ChatCompletionMessageParam[] = [
+    { role: "system", content: GROK_SYSTEM_PROMPT },
+    ...grokHistory,
+  ];
+
+  let content: string | undefined;
+
+  // Try primary model (grok-code-fast-1) with 3 attempts, 1s delay between
+  let lastPrimaryError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const response = await grokClient.chat.completions.create({
-        model: GROK_MODEL,
-        messages: [{ role: "system", content: GROK_SYSTEM_PROMPT }, ...grokHistory],
-        max_tokens: 512,
-      });
-      const content = response.choices[0]?.message?.content;
-      if (!content || content.trim().length === 0) throw new Error("Grok returned empty content");
-
-      grokHistory.push({ role: "assistant", content });
-
-      const actionMatch = content.match(/ACTION:\s*(.+?)(?:\n|$)/i);
-      const reasoningMatch = content.match(/REASONING:\s*(.+?)(?:\n|$)/i);
-      const bugMatch = content.match(/\[OOC_BUG_REPORT\]\s*([\s\S]+?)$/im);
-
-      return {
-        action: actionMatch?.[1]?.trim() ?? content.split("\n")[0].trim(),
-        reasoning: reasoningMatch?.[1]?.trim() ?? "",
-        bugReport: bugMatch?.[1]?.trim() ?? null,
-        rawResponse: content,
-      };
+      content = await callGrokWithModel(grokClient, GROK_MODEL_PRIMARY, fullMessages);
+      break;
     } catch (error) {
-      lastError = error;
-      if (!isRetryableError(error) || attempt >= MAX_RETRY_ATTEMPTS) break;
-      await sleep(RETRY_DELAY_MS);
+      lastPrimaryError = error;
+      if (!isGrokFallbackError(error)) throw error; // non-502/400 → don't retry
+      if (attempt < 2) await sleep(1000);
     }
   }
-  throw lastError;
+
+  // Fallback to grok-4-fast-reasoning if primary failed with 502/400
+  if (!content) {
+    try {
+      content = await callGrokWithModel(grokClient, GROK_MODEL_FALLBACK, fullMessages);
+    } catch (fallbackError) {
+      // If fallback also fails, throw the original primary error
+      throw lastPrimaryError;
+    }
+  }
+
+  grokHistory.push({ role: "assistant", content });
+
+  const actionMatch = content.match(/ACTION:\s*(.+?)(?:\n|$)/i);
+  const reasoningMatch = content.match(/REASONING:\s*(.+?)(?:\n|$)/i);
+  const bugMatch = content.match(/\[OOC_BUG_REPORT\]\s*([\s\S]+?)$/im);
+
+  return {
+    action: actionMatch?.[1]?.trim() ?? content.split("\n")[0].trim(),
+    reasoning: reasoningMatch?.[1]?.trim() ?? "",
+    bugReport: bugMatch?.[1]?.trim() ?? null,
+    rawResponse: content,
+  };
 }
 
 // ── Turn log types ───────────────────────────────────────────────
