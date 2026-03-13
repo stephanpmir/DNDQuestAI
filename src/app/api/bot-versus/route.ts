@@ -26,8 +26,8 @@ import {
 // ── Grok (xAI) client ───────────────────────────────────────────
 
 function getGrokClient(): OpenAI {
-  const key = process.env.XAI_API_KEY;
-  if (!key) throw new Error("XAI_API_KEY not set — cannot use Grok as player.");
+  const key = process.env.XAI_KEY;
+  if (!key) throw new Error("XAI_KEY not set — cannot use Grok as player.");
   const proxyFetch = getProxyFetch();
   return new OpenAI({ baseURL: "https://api.x.ai/v1", apiKey: key, timeout: 60_000, fetch: proxyFetch });
 }
