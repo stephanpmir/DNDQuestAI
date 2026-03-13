@@ -1,86 +1,48 @@
-# DNDQuestAI
-
-Solo AI-powered D&D 5e game where Claude acts as Dungeon Master.
-
-## Tech Stack
-
-- **Framework**: Next.js 15 (App Router)
-- **Language**: TypeScript (strict mode)
-- **Styling**: Tailwind CSS + shadcn/ui
-- **AI**: Z.ai (GLM-4) primary, Cerebras (Llama 3.1 8B) fallback — via OpenAI SDK, all calls server-side only
-- **Database**: Supabase (Postgres + Auth)
-- **State Management**: Zustand
-- **Deploy**: Vercel
-
-## Folder Structure
-
-```
-src/
-├── app/                    # Next.js App Router pages
-│   ├── layout.tsx          # Root layout
-│   ├── page.tsx            # Landing / home page
-│   ├── character/
-│   │   └── page.tsx        # Character creation
-│   ├── game/
-│   │   └── page.tsx        # Main game / conversation UI
-│   └── api/
-│       └── dm/
-│           └── route.ts    # AI Dungeon Master proxy (POST)
-├── components/
-│   ├── ui/                 # shadcn/ui primitives
-│   ├── character/          # Character creation components
-│   └── game/               # Game/conversation components
-├── lib/
-│   ├── ai/
-│   │   ├── dm-prompt.ts    # System prompt for the DM
-│   │   └── parse-response.ts # Parse structured JSON from AI
-│   ├── supabase/
-│   │   ├── client.ts       # Browser Supabase client
-│   │   └── server.ts       # Server Supabase client
-│   ├── utils.ts            # Shared utilities (cn helper, etc.)
-│   └── constants.ts        # Game constants (races, classes, etc.)
-├── stores/
-│   ├── character-store.ts  # Zustand store for character state
-│   └── game-store.ts       # Zustand store for game/session state
-└── types/
-    ├── character.ts        # Character types
-    └── game.ts             # Game state, message, campaign types
-```
-
-## Rules
-
-1. **Never expose API keys client-side.** All Anthropic SDK calls go through `/api/dm` route.
-2. **TypeScript strict mode.** No `any` types unless absolutely necessary and documented.
-3. **Server Components by default.** Only add `"use client"` when the component needs interactivity.
-4. **AI responses are dual-format.** The DM returns narrative text AND structured JSON game state in every response.
-5. **Keep components small.** Max ~150 lines per component file.
-6. **Use shadcn/ui primitives.** Don't reinvent buttons, inputs, cards, etc.
-7. **Zustand for client state.** No prop drilling beyond 2 levels.
-8. **Tailwind only.** No CSS modules or styled-components.
-9. **Commit after each major step.** Keep commits atomic and descriptive.
-
-## Commands
-
-```bash
-npm run dev          # Start dev server
-npm run build        # Production build
-npm run lint         # ESLint
-npm run type-check   # TypeScript check (tsc --noEmit)
-```
-
-## Environment Variables
-
-```
-ZAI_API_KEY=                    # Primary LLM (Z.ai GLM-4) — server-side only
-CEREBRAS_API_KEY=               # Fallback LLM (Cerebras Llama 3.1 8B) — server-side only
-NEXT_PUBLIC_SUPABASE_URL=       # Supabase project URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY=  # Supabase anon key
-```
-
-## Phase 1 MVP Scope
-
-- Character creation (name, race, class, basic stats)
-- Start a campaign with a DM-generated intro
-- Conversation UI: player sends actions, AI DM responds with narrative + game state
-- Game state tracks HP, inventory, location, quest progress
-- All AI calls proxied server-side
+DNDQUESTAI — SESSION CONTEXT
+STACK
+Next.js 15 App Router, TypeScript, Tailwind CSS, shadcn/ui, Zustand, Netlify
+DEPLOY WORKFLOW
+Push to claude/* branch only. GitHub Action auto-merges to main. Netlify auto-deploys from main. Never manually merge, never create PRs, never push directly to main.
+AI PROVIDER CASCADE
+Order: Cerebras → Groq → Moonshot → Z.ai
+Env vars: CEREBRAS_API_KEY, GROQ_API_KEY, MOONSHOT_API_KEY, ZAI_API_KEY, NEXT_PUBLIC_POLLINATIONS_TOKEN
+Z.ai requires "thinking":{"type":"disabled"} in request body. Use glm-4.5-air model only.
+On 429/503/502 or empty content, fall through to next provider.
+IMAGE GENERATION
+Proxy function: /.netlify/functions/proxy-portrait
+Endpoint: gen.pollinations.ai (NOT image.pollinations.ai — that is deprecated and blocked in China)
+DM avatar: fixed URL with seed 666, prompt is dragon eye
+Portrait: generated from character appearance fields via /api/portrait-prompt
+DM RESPONSE FORMAT
+All DM responses must use bracketed delimiters. Narrative prose first, then structured fields:
+[SCENE_IMAGE_PROMPT] prompt text here
+[CHECK_REQUIRED] {"stat":"…","skill":"…","dc":0,"description":"…"}
+[HP] current/max
+[XP] value
+[GOLD] value
+[LOCATION] location name
+[KARMA] value
+[FAME] value
+[AC] value
+[WORN] item1|item2
+[BACKPACK] item1|item2
+[RESOURCES] key:value|key:value
+Parse in parse-response.ts by splitting on [ delimiters. Everything before the first [ is the clean narrative.
+STYLING RULES — DO NOT REVERT
+DM avatar: plain img tag with inline styles only, no Tailwind, no shadcn. Fixed URL constant DM_AVATAR_URL at module level.
+DM message bubble: plain div with inline styles only — background:none, backgroundColor:transparent, borderLeft 3px solid rgba(201,162,39,0.25). NO shadcn Card or CardContent wrappers anywhere in chat-message.tsx.
+All dark fantasy colors: background #080808, gold #c9a227, crimson #6b0000, parchment text #e8d5b0.
+Do not use Tailwind bg-* classes on the DM bubble or avatar — they get overridden by shadcn global styles.
+KNOWN PAST MISTAKES — DO NOT REPEAT
+Do not use image.pollinations.ai — use gen.pollinations.ai
+Do not wrap DM messages in shadcn Card/CardContent — inline styles only
+Do not push to main directly
+Do not auto-resolve uncertain player actions — require a skill check
+Do not let sceneImagePrompt or checkRequired appear in the narrative text shown to the player
+SceneImage component must be wrapped in an error boundary so it cannot crash the app
+Z.ai GLM reasoning models return empty content — always use glm-4.5-air with thinking disabled
+NARRATIVE RULES
+Maximum 150 words per DM response, 3 paragraphs max, 2-4 sentences each.
+Never auto-resolve uncertain actions — use checkRequired.
+UPDATING THIS FILE
+After every session that fixes a bug or establishes a new pattern, append a one-line entry to KNOWN PAST MISTAKES or update the relevant section. Keep it concise — this file must stay under 100 lines.
