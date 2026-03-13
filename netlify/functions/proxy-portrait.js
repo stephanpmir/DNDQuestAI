@@ -20,8 +20,14 @@ exports.handler = async (event) => {
   const height = parseInt(params.height, 10) || 768;
   const key = process.env.NEXT_PUBLIC_POLLINATIONS_TOKEN || "";
 
+  // For landscape/scene requests (width > height), force environment-only prompt
+  const isLandscape = width > height;
+  const finalPrompt = isLandscape
+    ? `environment scene landscape architecture no people no characters no faces no portraits ${prompt} wide establishing shot dark fantasy digital art dramatic lighting`
+    : prompt;
+
   const upstreamUrl =
-    `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}` +
+    `https://gen.pollinations.ai/image/${encodeURIComponent(finalPrompt)}` +
     `?model=flux&width=${width}&height=${height}&seed=${seed}&enhance=true&nologo=true` +
     (key ? `&key=${key}` : "");
 

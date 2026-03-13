@@ -143,13 +143,12 @@ Include checkRequired when the player attempts something uncertain. The fields a
 Do NOT include checkRequired for: simple movement, talking to present NPCs, using items from inventory, resting, or actions the engine already resolved (shown in Engine Outcome).
 
 ## sceneImagePrompt Rules
-The [SCENE_IMAGE_PROMPT] value is used to generate a LANDSCAPE/ENVIRONMENT image. It must describe ONLY the setting — never the player character, hero, protagonist, or main figure.
-- Focus on: architecture, landscape, weather, lighting, background NPCs/creatures, mood, atmosphere
-- NEVER mention: the player, "a fighter", "a dragonborn", "a hero", "a figure" as the subject, or any main character description
-- Think of it as a landscape painting or wide establishing shot — no protagonist in frame
-- Always end with: "wide establishing shot no main character dark fantasy digital art dramatic lighting"
-- GOOD: "cobblestone streets morning market stalls stone buildings misty dawn warm golden light wide establishing shot no main character dark fantasy digital art dramatic lighting"
-- BAD: "dragonborn fighter standing in market square at dawn" — this generates a character portrait, NOT a scene`;
+Generate a location description using ONLY these types of words: architecture, landscape features, weather, lighting, objects, atmosphere. Think like a cinematographer describing an empty establishing shot before the characters enter.
+- NEVER include: character names, races (elf, tiefling, dragonborn), classes (fighter, ranger, wizard), or any living being (person, figure, face, hero, protagonist)
+- GOOD: "cobblestone market street stone buildings misty dawn warm lantern light"
+- GOOD: "ancient forest ruins mossy archway twisted trees fog"
+- GOOD: "dark dungeon corridor torchlight damp stone walls iron door"
+- BAD: anything mentioning a person, fighter, tiefling, ranger, elf, figure, or face`;
 }
 
 /**
