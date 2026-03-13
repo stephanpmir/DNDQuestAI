@@ -15,6 +15,30 @@ interface Props {
   onClose: () => void;
 }
 
+// ── Color palette ─────────────────────────────────────────────
+
+const C = {
+  bg: "#0a0a0a",
+  sectionBg: "#110800",
+  statBg: "#1a0a00",
+  rowOdd: "#0d0d0d",
+  rowEven: "#130800",
+  gold: "#c9a227",
+  goldMuted: "#a07830",
+  goldBorder: "rgba(201,162,39,0.3)",
+  goldBorderStrong: "rgba(201,162,39,0.5)",
+  crimson: "#8b0000",
+  crimsonBorder: "rgba(139,0,0,0.4)",
+  parchment: "#e8d5b0",
+  parchmentMuted: "rgba(232,213,176,0.6)",
+  purple: "#a855f7",
+  purpleMuted: "rgba(168,85,247,0.25)",
+};
+
+/** Cinzel-like font stack (Cinzel loaded via Google Fonts or fallback to serif) */
+const headerFont = "'Cinzel', 'Palatino Linotype', 'Book Antiqua', serif";
+const bodyFont = "'Georgia', 'Palatino Linotype', serif";
+
 // ── D&D 5e saving throw proficiencies by class ──────────────────
 
 const SAVE_PROFICIENCIES: Record<CharacterClass, string[]> = {
@@ -142,6 +166,44 @@ function useDexForAttack(itemName: string): boolean {
   return FINESSE_WEAPONS.some((w) => lower.includes(w)) || RANGED_WEAPONS.some((w) => lower.includes(w));
 }
 
+// ── Shared style helpers ────────────────────────────────────────
+
+const sectionStyle: React.CSSProperties = {
+  background: C.sectionBg,
+  border: `1px solid ${C.goldBorder}`,
+  borderRadius: 8,
+  padding: 12,
+};
+
+const sectionHeaderStyle: React.CSSProperties = {
+  fontSize: 10,
+  fontFamily: headerFont,
+  fontVariant: "small-caps",
+  letterSpacing: "0.12em",
+  color: C.gold,
+  textTransform: "uppercase",
+  marginBottom: 6,
+  textAlign: "center",
+};
+
+function ProfDot({ filled }: { filled: boolean }) {
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        width: 8,
+        height: 8,
+        borderRadius: "50%",
+        border: `1.5px solid ${filled ? C.gold : C.goldMuted}`,
+        backgroundColor: filled ? C.gold : "transparent",
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
+// ── Main component ──────────────────────────────────────────────
+
 export function CharacterSheet({ onClose }: Props) {
   const { character } = useCharacterStore();
   const { location, questLog } = useGameStore();
@@ -177,7 +239,6 @@ export function CharacterSheet({ onClose }: Props) {
 
   const classSaves = SAVE_PROFICIENCIES[character.class] ?? [];
 
-  // Find weapons in inventory for attacks table
   const weapons = character.inventory
     .map((item) => {
       const info = getWeaponInfo(item);
@@ -190,94 +251,121 @@ export function CharacterSheet({ onClose }: Props) {
     })
     .filter(Boolean) as { name: string; atkBonus: string; damage: string; type: string }[];
 
+  const hpPercent = Math.round((character.hp / character.maxHp) * 100);
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.80)", backdropFilter: "blur(4px)" }}
       onClick={onClose}
     >
       <div
-        className="relative w-[92vw] max-w-3xl h-[88vh] bg-card border border-border rounded-xl shadow-2xl overflow-y-auto"
+        style={{
+          position: "relative",
+          width: "92vw",
+          maxWidth: 768,
+          height: "88vh",
+          background: C.bg,
+          border: `1px solid ${C.goldBorder}`,
+          borderRadius: 12,
+          boxShadow: `0 0 60px rgba(201,162,39,0.08), inset 0 1px 0 rgba(201,162,39,0.1)`,
+          overflowY: "auto",
+          color: C.parchment,
+          fontFamily: bodyFont,
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close button */}
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-3 right-4 text-muted-foreground hover:text-foreground text-2xl leading-none z-10"
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 16,
+            fontSize: 24,
+            lineHeight: 1,
+            color: C.crimson,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            zIndex: 10,
+            transition: "color 0.2s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = C.gold)}
+          onMouseLeave={(e) => (e.currentTarget.style.color = C.crimson)}
         >
           &times;
         </button>
 
-        {/* ═══ HEADER BAR (mirrors top of official sheet) ═══ */}
-        <div className="px-6 pt-5 pb-3 border-b border-border/50 bg-gradient-to-b from-muted/60 to-transparent">
-          <div className="grid grid-cols-[1fr_auto] gap-4">
+        {/* ═══ HEADER BAR ═══ */}
+        <div style={{ padding: "20px 24px 12px", borderBottom: `1px solid ${C.crimsonBorder}`, background: "linear-gradient(180deg, rgba(26,10,0,0.8) 0%, transparent 100%)" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 16 }}>
             <div>
-              <h2 className="text-2xl font-black tracking-tight">{character.name}</h2>
+              <h2 style={{ fontSize: 22, fontWeight: 900, fontFamily: headerFont, color: C.gold, letterSpacing: "0.04em", margin: 0 }}>
+                {character.name}
+              </h2>
             </div>
-            <div className="text-right text-xs text-muted-foreground space-y-0.5">
-              <div><span className="font-semibold text-foreground">{character.class} {character.level}</span></div>
+            <div style={{ textAlign: "right", fontSize: 11, color: C.goldMuted, lineHeight: 1.6 }}>
+              <div><span style={{ fontWeight: 700, color: C.parchment, fontFamily: headerFont }}>{character.class} {character.level}</span></div>
               <div>{character.race} ({character.gender})</div>
               <div>{alignmentLabel}</div>
-              <div>XP: {character.xp}{character.xpToNextLevel !== Infinity ? ` / ${character.xpToNextLevel}` : " (MAX)"}</div>
+              <div style={{ color: C.gold }}>XP: {character.xp}{character.xpToNextLevel !== Infinity ? ` / ${character.xpToNextLevel}` : " (MAX)"}</div>
             </div>
           </div>
         </div>
 
-        {/* ═══ THREE-COLUMN LAYOUT (mirrors official sheet) ═══ */}
+        {/* ═══ THREE-COLUMN LAYOUT ═══ */}
         <div className="grid grid-cols-[140px_1fr_180px] gap-4 p-4">
 
           {/* ── LEFT COLUMN ── */}
           <div className="space-y-2">
 
-            {/* Ability Scores — compact vertical stack */}
+            {/* Ability Scores */}
             {(["STR", "DEX", "CON", "INT", "WIS", "CHA"] as const).map((ab) => {
               const val = abilityMap[ab];
               const m = abilityMod(val);
               return (
-                <div key={ab} className="flex items-center justify-between bg-muted/40 rounded px-2.5 py-1.5 border border-border/40">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider w-8">{ab}</span>
-                  <span className="text-lg font-black leading-none">{fmtMod(m)}</span>
-                  <span className="text-[10px] text-muted-foreground bg-muted/60 rounded-full px-1.5">{val}</span>
+                <div key={ab} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: C.statBg, borderRadius: 4, padding: "6px 10px", border: `1px solid ${C.goldBorder}` }}>
+                  <span style={{ fontSize: 10, color: C.goldMuted, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.1em", width: 32 }}>{ab}</span>
+                  <span style={{ fontSize: 18, fontWeight: 900, color: C.gold, fontFamily: headerFont, lineHeight: 1 }}>{fmtMod(m)}</span>
+                  <span style={{ fontSize: 10, color: C.parchmentMuted, background: "rgba(201,162,39,0.08)", borderRadius: 10, padding: "1px 6px" }}>{val}</span>
                 </div>
               );
             })}
 
-            {/* Proficiency Bonus & Inspiration row */}
+            {/* Proficiency Bonus & Inspiration */}
             <div className="grid grid-cols-2 gap-1.5">
-              <div className="text-center bg-muted/40 rounded py-1.5 border border-border/40">
-                <div className="text-[9px] text-muted-foreground uppercase">Prof</div>
-                <div className="text-sm font-black">+{profBonus}</div>
+              <div style={{ textAlign: "center", background: C.statBg, borderRadius: 4, padding: "6px 0", border: `1px solid ${C.goldBorder}` }}>
+                <div style={{ fontSize: 9, color: C.goldMuted, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.1em" }}>Prof</div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: C.gold, fontFamily: headerFont }}>+{profBonus}</div>
               </div>
-              <div className="text-center bg-muted/30 rounded py-1.5 border border-border/20">
-                <div className="text-[9px] text-muted-foreground uppercase">Insp</div>
-                <div className="text-sm">&#x25CB;</div>
+              <div style={{ textAlign: "center", background: C.statBg, borderRadius: 4, padding: "6px 0", border: `1px solid ${C.goldBorder}` }}>
+                <div style={{ fontSize: 9, color: C.goldMuted, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.1em" }}>Insp</div>
+                <div style={{ fontSize: 14, color: C.parchmentMuted }}>&#x25CB;</div>
               </div>
             </div>
 
             {/* Saving Throws */}
-            <div className="bg-muted/30 rounded-lg p-2 border border-border/30">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 text-center">Saving Throws</div>
+            <div style={sectionStyle}>
+              <div style={sectionHeaderStyle}>Saving Throws</div>
               {(["STR", "DEX", "CON", "INT", "WIS", "CHA"] as const).map((ab) => {
                 const val = abilityMap[ab];
                 const isProficient = classSaves.includes(ab);
                 const saveMod = abilityMod(val) + (isProficient ? profBonus : 0);
                 return (
-                  <div key={ab} className="flex items-center gap-1.5 text-xs py-0.5">
-                    <span className={cn(
-                      "w-2 h-2 rounded-full border flex-shrink-0",
-                      isProficient ? "bg-primary border-primary" : "border-muted-foreground/40"
-                    )} />
-                    <span className="font-mono w-7 text-right font-semibold">{fmtMod(saveMod)}</span>
-                    <span className="text-muted-foreground">{ab}</span>
+                  <div key={ab} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, padding: "2px 0" }}>
+                    <ProfDot filled={isProficient} />
+                    <span style={{ fontFamily: "monospace", width: 28, textAlign: "right", fontWeight: 600, color: C.parchment }}>{fmtMod(saveMod)}</span>
+                    <span style={{ color: C.goldMuted }}>{ab}</span>
                   </div>
                 );
               })}
             </div>
 
             {/* Passive Perception */}
-            <div className="text-center bg-muted/40 rounded py-1.5 border border-border/40">
-              <div className="text-[9px] text-muted-foreground uppercase tracking-wider">Passive Perception</div>
-              <div className="text-sm font-black">{passivePerception}</div>
+            <div style={{ textAlign: "center", background: C.statBg, borderRadius: 4, padding: "6px 0", border: `1px solid ${C.goldBorder}` }}>
+              <div style={{ fontSize: 9, color: C.goldMuted, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.1em" }}>Passive Perception</div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: C.parchment, fontFamily: headerFont }}>{passivePerception}</div>
             </div>
           </div>
 
@@ -286,80 +374,81 @@ export function CharacterSheet({ onClose }: Props) {
 
             {/* AC / Initiative / Speed row */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="text-center bg-muted/40 rounded-lg py-3 border-2 border-border/50">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Armor Class</div>
-                <div className="text-3xl font-black">{character.ac}</div>
+              <div style={{ textAlign: "center", background: C.sectionBg, borderRadius: 8, padding: "12px 0", border: `2px solid ${C.goldBorderStrong}` }}>
+                <div style={{ fontSize: 10, color: C.goldMuted, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.1em" }}>Armor Class</div>
+                <div style={{ fontSize: 30, fontWeight: 900, color: C.gold, fontFamily: headerFont }}>{character.ac}</div>
               </div>
-              <div className="text-center bg-muted/40 rounded-lg py-3 border border-border/30">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Initiative</div>
-                <div className="text-3xl font-black">{fmtMod(initiative)}</div>
+              <div style={{ textAlign: "center", background: C.sectionBg, borderRadius: 8, padding: "12px 0", border: `1px solid ${C.goldBorder}` }}>
+                <div style={{ fontSize: 10, color: C.goldMuted, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.1em" }}>Initiative</div>
+                <div style={{ fontSize: 30, fontWeight: 900, color: C.parchment, fontFamily: headerFont }}>{fmtMod(initiative)}</div>
               </div>
-              <div className="text-center bg-muted/40 rounded-lg py-3 border border-border/30">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Speed</div>
-                <div className="text-3xl font-black">{speed}</div>
-                <div className="text-[10px] text-muted-foreground">ft</div>
+              <div style={{ textAlign: "center", background: C.sectionBg, borderRadius: 8, padding: "12px 0", border: `1px solid ${C.goldBorder}` }}>
+                <div style={{ fontSize: 10, color: C.goldMuted, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.1em" }}>Speed</div>
+                <div style={{ fontSize: 30, fontWeight: 900, color: C.parchment, fontFamily: headerFont }}>{speed}</div>
+                <div style={{ fontSize: 10, color: C.goldMuted }}>ft</div>
               </div>
             </div>
 
             {/* Hit Points */}
-            <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Hit Points</div>
+            <div style={sectionStyle}>
+              <div style={sectionHeaderStyle}>Hit Points</div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <div className="text-[10px] text-muted-foreground">Maximum</div>
-                  <div className="text-2xl font-black text-red-400">{character.maxHp}</div>
+                  <div style={{ fontSize: 10, color: C.goldMuted }}>Maximum</div>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: "#dc2626", fontFamily: headerFont }}>{character.maxHp}</div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-muted-foreground">Current</div>
-                  <div className={cn(
-                    "text-2xl font-black",
-                    character.hp > character.maxHp * 0.5 ? "text-emerald-400" :
-                    character.hp > character.maxHp * 0.25 ? "text-orange-400" :
-                    "text-red-400"
-                  )}>
+                  <div style={{ fontSize: 10, color: C.goldMuted }}>Current</div>
+                  <div style={{
+                    fontSize: 22, fontWeight: 900, fontFamily: headerFont,
+                    color: character.hp > character.maxHp * 0.5 ? "#22c55e" : character.hp > character.maxHp * 0.25 ? "#f97316" : "#dc2626",
+                  }}>
                     {character.hp}
                   </div>
                 </div>
               </div>
               {/* HP Bar */}
-              <div className="w-full bg-red-950/80 rounded-full h-2.5 overflow-hidden border border-red-900/50 mt-2">
+              <div style={{ width: "100%", background: "rgba(139,0,0,0.3)", borderRadius: 6, height: 10, overflow: "hidden", border: `1px solid ${C.crimsonBorder}`, marginTop: 8 }}>
                 <div
-                  className={cn(
-                    "h-full rounded-full transition-all duration-500",
-                    character.hp > character.maxHp * 0.6 ? "bg-red-500" :
-                    character.hp > character.maxHp * 0.25 ? "bg-orange-500" : "bg-red-700"
-                  )}
-                  style={{ width: `${Math.round((character.hp / character.maxHp) * 100)}%` }}
+                  style={{
+                    height: "100%",
+                    borderRadius: 6,
+                    transition: "width 0.5s",
+                    width: `${hpPercent}%`,
+                    background: hpPercent > 60 ? "linear-gradient(90deg, #8b0000, #dc2626)" : hpPercent > 25 ? "linear-gradient(90deg, #8b0000, #f97316)" : "#8b0000",
+                  }}
                 />
               </div>
             </div>
 
-            {/* Hit Dice & Death Saves row */}
+            {/* Hit Dice & Death Saves */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Hit Dice</div>
-                <div className="text-lg font-black">{character.level}{hitDie}</div>
-                <div className="text-[10px] text-muted-foreground">Total: {character.level}</div>
+              <div style={sectionStyle}>
+                <div style={sectionHeaderStyle}>Hit Dice</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: C.parchment, fontFamily: headerFont }}>{character.level}{hitDie}</div>
+                <div style={{ fontSize: 10, color: C.goldMuted }}>Total: {character.level}</div>
               </div>
-              <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Death Saves</div>
-                <div className="flex gap-3">
+              <div style={sectionStyle}>
+                <div style={sectionHeaderStyle}>Death Saves</div>
+                <div style={{ display: "flex", gap: 12 }}>
                   <div>
-                    <span className="text-[10px] text-emerald-400">S </span>
+                    <span style={{ fontSize: 10, color: "#22c55e" }}>S </span>
                     {[0, 1, 2].map((i) => (
-                      <span key={i} className={cn(
-                        "inline-block w-3 h-3 rounded-full border mr-0.5",
-                        i < character.deathSaves.successes ? "bg-emerald-500 border-emerald-400" : "border-muted-foreground/40"
-                      )} />
+                      <span key={i} style={{
+                        display: "inline-block", width: 12, height: 12, borderRadius: "50%", marginRight: 2,
+                        border: `1.5px solid ${i < character.deathSaves.successes ? "#22c55e" : C.goldMuted}`,
+                        backgroundColor: i < character.deathSaves.successes ? "#22c55e" : "transparent",
+                      }} />
                     ))}
                   </div>
                   <div>
-                    <span className="text-[10px] text-red-400">F </span>
+                    <span style={{ fontSize: 10, color: "#dc2626" }}>F </span>
                     {[0, 1, 2].map((i) => (
-                      <span key={i} className={cn(
-                        "inline-block w-3 h-3 rounded-full border mr-0.5",
-                        i < character.deathSaves.failures ? "bg-red-500 border-red-400" : "border-muted-foreground/40"
-                      )} />
+                      <span key={i} style={{
+                        display: "inline-block", width: 12, height: 12, borderRadius: "50%", marginRight: 2,
+                        border: `1.5px solid ${i < character.deathSaves.failures ? "#dc2626" : C.goldMuted}`,
+                        backgroundColor: i < character.deathSaves.failures ? "#dc2626" : "transparent",
+                      }} />
                     ))}
                   </div>
                 </div>
@@ -367,68 +456,68 @@ export function CharacterSheet({ onClose }: Props) {
             </div>
 
             {/* Attacks & Spellcasting */}
-            <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Attacks & Spellcasting</div>
+            <div style={sectionStyle}>
+              <div style={sectionHeaderStyle}>Attacks &amp; Spellcasting</div>
               {weapons.length > 0 ? (
-                <table className="w-full text-xs">
+                <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
                   <thead>
-                    <tr className="text-[10px] text-muted-foreground uppercase">
-                      <th className="text-left font-medium pb-1">Name</th>
-                      <th className="text-center font-medium pb-1">Atk Bonus</th>
-                      <th className="text-right font-medium pb-1">Damage/Type</th>
+                    <tr>
+                      <th style={{ textAlign: "left", fontWeight: 500, paddingBottom: 4, fontSize: 10, color: C.gold, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.08em" }}>Name</th>
+                      <th style={{ textAlign: "center", fontWeight: 500, paddingBottom: 4, fontSize: 10, color: C.gold, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.08em" }}>Atk Bonus</th>
+                      <th style={{ textAlign: "right", fontWeight: 500, paddingBottom: 4, fontSize: 10, color: C.gold, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.08em" }}>Damage/Type</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {weapons.slice(0, 5).map((w) => (
-                      <tr key={w.name} className="border-t border-border/20">
-                        <td className="py-1 truncate max-w-[120px]">{w.name}</td>
-                        <td className="py-1 text-center font-mono font-semibold">{w.atkBonus}</td>
-                        <td className="py-1 text-right font-mono">{w.damage} {w.type}</td>
+                    {weapons.slice(0, 5).map((w, idx) => (
+                      <tr key={w.name} style={{ background: idx % 2 === 0 ? C.rowOdd : C.rowEven }}>
+                        <td style={{ padding: "4px 4px", color: C.parchment, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.name}</td>
+                        <td style={{ padding: "4px 4px", textAlign: "center", fontFamily: "monospace", fontWeight: 600, color: C.gold }}>{w.atkBonus}</td>
+                        <td style={{ padding: "4px 4px", textAlign: "right", fontFamily: "monospace", color: C.parchment }}>{w.damage} {w.type}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               ) : (
-                <div className="text-xs text-muted-foreground italic">No weapons equipped</div>
+                <div style={{ fontSize: 11, color: C.goldMuted, fontStyle: "italic" }}>No weapons equipped</div>
               )}
             </div>
 
             {/* Equipment — Worn */}
-            <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Worn Equipment</div>
+            <div style={sectionStyle}>
+              <div style={sectionHeaderStyle}>Worn Equipment</div>
               {equippedItems.length > 0 ? (
-                <ul className="space-y-1">
+                <ul style={{ listStyle: "none", margin: 0, padding: 0 }} className="space-y-1">
                   {equippedItems.map((item) => {
                     const info = getItemInfo(item);
                     const icon = getItemIcon(item);
                     const isIdentified = !info?.isMagical || character.identifiedItems.includes(item);
+                    const isMagic = info?.isMagical;
                     return (
                       <li key={item}>
                         <button
                           type="button"
                           onClick={() => setSelectedItem(selectedItem === item ? null : item)}
-                          className={cn(
-                            "w-full text-left flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border transition-colors",
-                            info?.isMagical
-                              ? "bg-purple-950/30 border-purple-700/30 hover:bg-purple-950/50"
-                              : "bg-muted/20 border-border/10 hover:bg-muted/40",
-                            selectedItem === item && "ring-1 ring-primary"
-                          )}
+                          style={{
+                            width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 6,
+                            fontSize: 11, padding: "4px 8px", borderRadius: 4, cursor: "pointer",
+                            background: isMagic ? C.purpleMuted : "rgba(201,162,39,0.05)",
+                            border: `1px solid ${isMagic ? "rgba(168,85,247,0.3)" : C.goldBorder}`,
+                            color: C.parchment, fontFamily: bodyFont,
+                            outline: selectedItem === item ? `1px solid ${C.gold}` : "none",
+                          }}
                         >
-                          <span className="text-sm shrink-0">{icon}</span>
-                          <span className="truncate">{item}</span>
-                          {info?.isMagical && !isIdentified && (
-                            <span className="text-[9px] text-purple-400 shrink-0">???</span>
-                          )}
+                          <span style={{ fontSize: 14, flexShrink: 0 }}>{icon}</span>
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item}</span>
+                          {isMagic && !isIdentified && <span style={{ fontSize: 9, color: C.purple, flexShrink: 0 }}>???</span>}
                         </button>
                         {selectedItem === item && (
-                          <div className="mt-1 mx-1 p-2 bg-muted/40 rounded text-[10px] text-muted-foreground border border-border/20">
+                          <div style={{ margin: "4px 4px 0", padding: 8, background: "rgba(201,162,39,0.05)", borderRadius: 4, fontSize: 10, color: C.parchmentMuted, border: `1px solid ${C.goldBorder}` }}>
                             <div>{info?.description ?? "A mysterious item."}</div>
-                            {info?.isMagical && isIdentified && info.magicalProperties && (
-                              <div className="mt-1 text-purple-300 font-semibold">{info.magicalProperties}</div>
+                            {isMagic && isIdentified && info?.magicalProperties && (
+                              <div style={{ marginTop: 4, color: C.purple, fontWeight: 600 }}>{info.magicalProperties}</div>
                             )}
-                            {info?.isMagical && !isIdentified && (
-                              <div className="mt-1 text-purple-400 italic">Magical properties unknown. Requires identification.</div>
+                            {isMagic && !isIdentified && (
+                              <div style={{ marginTop: 4, color: C.purple, fontStyle: "italic" }}>Magical properties unknown. Requires identification.</div>
                             )}
                           </div>
                         )}
@@ -437,49 +526,49 @@ export function CharacterSheet({ onClose }: Props) {
                   })}
                 </ul>
               ) : (
-                <div className="text-xs text-muted-foreground italic">Nothing equipped</div>
+                <div style={{ fontSize: 11, color: C.goldMuted, fontStyle: "italic" }}>Nothing equipped</div>
               )}
             </div>
 
             {/* Backpack / Inventory */}
-            <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Backpack</div>
-                <div className="text-[10px] text-amber-400 font-bold">{character.gold} GP</div>
+            <div style={sectionStyle}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <div style={sectionHeaderStyle}>Backpack</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, fontFamily: headerFont }}>{character.gold} GP</div>
               </div>
               {backpackItems.length > 0 ? (
-                <ul className="space-y-1">
+                <ul style={{ listStyle: "none", margin: 0, padding: 0 }} className="space-y-1">
                   {backpackItems.map((item) => {
                     const info = getItemInfo(item);
                     const icon = getItemIcon(item);
                     const isIdentified = !info?.isMagical || character.identifiedItems.includes(item);
+                    const isMagic = info?.isMagical;
                     return (
                       <li key={item}>
                         <button
                           type="button"
                           onClick={() => setSelectedItem(selectedItem === item ? null : item)}
-                          className={cn(
-                            "w-full text-left flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border transition-colors",
-                            info?.isMagical
-                              ? "bg-purple-950/30 border-purple-700/30 hover:bg-purple-950/50"
-                              : "bg-muted/20 border-border/10 hover:bg-muted/40",
-                            selectedItem === item && "ring-1 ring-primary"
-                          )}
+                          style={{
+                            width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 6,
+                            fontSize: 11, padding: "4px 8px", borderRadius: 4, cursor: "pointer",
+                            background: isMagic ? C.purpleMuted : "rgba(201,162,39,0.05)",
+                            border: `1px solid ${isMagic ? "rgba(168,85,247,0.3)" : C.goldBorder}`,
+                            color: C.parchment, fontFamily: bodyFont,
+                            outline: selectedItem === item ? `1px solid ${C.gold}` : "none",
+                          }}
                         >
-                          <span className="text-sm shrink-0">{icon}</span>
-                          <span className="truncate">{item}</span>
-                          {info?.isMagical && !isIdentified && (
-                            <span className="text-[9px] text-purple-400 shrink-0">???</span>
-                          )}
+                          <span style={{ fontSize: 14, flexShrink: 0 }}>{icon}</span>
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item}</span>
+                          {isMagic && !isIdentified && <span style={{ fontSize: 9, color: C.purple, flexShrink: 0 }}>???</span>}
                         </button>
                         {selectedItem === item && (
-                          <div className="mt-1 mx-1 p-2 bg-muted/40 rounded text-[10px] text-muted-foreground border border-border/20">
+                          <div style={{ margin: "4px 4px 0", padding: 8, background: "rgba(201,162,39,0.05)", borderRadius: 4, fontSize: 10, color: C.parchmentMuted, border: `1px solid ${C.goldBorder}` }}>
                             <div>{info?.description ?? "A mysterious item."}</div>
-                            {info?.isMagical && isIdentified && info.magicalProperties && (
-                              <div className="mt-1 text-purple-300 font-semibold">{info.magicalProperties}</div>
+                            {isMagic && isIdentified && info?.magicalProperties && (
+                              <div style={{ marginTop: 4, color: C.purple, fontWeight: 600 }}>{info.magicalProperties}</div>
                             )}
-                            {info?.isMagical && !isIdentified && (
-                              <div className="mt-1 text-purple-400 italic">Magical properties unknown. Requires identification.</div>
+                            {isMagic && !isIdentified && (
+                              <div style={{ marginTop: 4, color: C.purple, fontStyle: "italic" }}>Magical properties unknown. Requires identification.</div>
                             )}
                           </div>
                         )}
@@ -488,7 +577,7 @@ export function CharacterSheet({ onClose }: Props) {
                   })}
                 </ul>
               ) : (
-                <div className="text-xs text-muted-foreground italic">Empty</div>
+                <div style={{ fontSize: 11, color: C.goldMuted, fontStyle: "italic" }}>Empty</div>
               )}
             </div>
           </div>
@@ -496,100 +585,107 @@ export function CharacterSheet({ onClose }: Props) {
           {/* ── RIGHT COLUMN ── */}
           <div className="space-y-4">
 
-            {/* Alignment / Karma — clickable to show history */}
+            {/* Alignment / Karma */}
             <button
               type="button"
               onClick={() => setShowKarmaHistory(true)}
-              className="w-full text-left bg-muted/30 rounded-lg p-3 border border-border/30 hover:bg-muted/50 transition-colors cursor-pointer"
+              style={{
+                width: "100%", textAlign: "left", cursor: "pointer",
+                ...sectionStyle,
+                transition: "border-color 0.2s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.borderColor = C.gold)}
+              onMouseLeave={(e) => (e.currentTarget.style.borderColor = C.goldBorder)}
             >
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Alignment</div>
-              <div className={cn(
-                "text-sm font-bold",
-                character.karma > 25 ? "text-emerald-400" :
-                character.karma < -25 ? "text-red-400" :
-                "text-gray-400"
-              )}>
+              <div style={sectionHeaderStyle}>Alignment</div>
+              <div style={{
+                fontSize: 13, fontWeight: 700, fontFamily: headerFont,
+                color: character.karma > 25 ? "#22c55e" : character.karma < -25 ? "#dc2626" : C.parchmentMuted,
+              }}>
                 {alignmentLabel}
               </div>
-              <div className="text-[10px] text-muted-foreground mt-1">
+              <div style={{ fontSize: 10, color: C.goldMuted, marginTop: 4 }}>
                 Karma: {character.karma > 0 ? "+" : ""}{character.karma}
               </div>
               {karmaHistory.length > 0 && (
-                <div className="text-[10px] text-muted-foreground underline">
+                <div style={{ fontSize: 10, color: C.goldMuted, textDecoration: "underline" }}>
                   {karmaHistory.length} moral action{karmaHistory.length > 1 ? "s" : ""} — view history
                 </div>
               )}
             </button>
 
-            {/* Fame — clickable to show history */}
+            {/* Fame */}
             <button
               type="button"
               onClick={() => setShowFameHistory(true)}
-              className="w-full text-left bg-muted/30 rounded-lg p-3 border border-border/30 hover:bg-muted/50 transition-colors cursor-pointer"
+              style={{
+                width: "100%", textAlign: "left", cursor: "pointer",
+                ...sectionStyle,
+                transition: "border-color 0.2s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.borderColor = C.gold)}
+              onMouseLeave={(e) => (e.currentTarget.style.borderColor = C.goldBorder)}
             >
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Fame</div>
-              <div className={cn(
-                "text-sm font-bold",
-                character.fame >= 75 ? "text-amber-400" :
-                character.fame >= 40 ? "text-sky-400" :
-                character.fame >= 15 ? "text-slate-300" :
-                "text-gray-500"
-              )}>
+              <div style={sectionHeaderStyle}>Fame</div>
+              <div style={{
+                fontSize: 13, fontWeight: 700, fontFamily: headerFont,
+                color: character.fame >= 75 ? "#fbbf24" : character.fame >= 40 ? "#38bdf8" : character.fame >= 15 ? C.parchment : C.goldMuted,
+              }}>
                 {character.fame >= 75 ? "Legendary" :
                  character.fame >= 50 ? "Renowned" :
                  character.fame >= 30 ? "Well-Known" :
                  character.fame >= 15 ? "Recognized" :
                  "Unknown"}
               </div>
-              <div className="text-[10px] text-muted-foreground mt-1">
+              <div style={{ fontSize: 10, color: C.goldMuted, marginTop: 4 }}>
                 Score: {character.fame}
               </div>
               {fameHistory.length > 0 && (
-                <div className="text-[10px] text-muted-foreground underline">
+                <div style={{ fontSize: 10, color: C.goldMuted, textDecoration: "underline" }}>
                   {fameHistory.length} event{fameHistory.length > 1 ? "s" : ""} — view history
                 </div>
               )}
             </button>
 
             {/* Racial Traits & Features */}
-            <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Features & Traits</div>
-              <div className="text-[10px] text-muted-foreground uppercase mb-1">{character.race} Traits</div>
-              <ul className="space-y-0.5 mb-3">
+            <div style={sectionStyle}>
+              <div style={sectionHeaderStyle}>Features &amp; Traits</div>
+              <div style={{ fontSize: 10, color: C.gold, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.1em", marginBottom: 4 }}>{character.race} Traits</div>
+              <ul style={{ listStyle: "none", margin: "0 0 12px 0", padding: 0 }} className="space-y-0.5">
                 {(character.racialTraits?.length > 0 ? character.racialTraits : racialTraits).map((trait) => (
-                  <li key={trait} className="text-[11px]">{trait}</li>
+                  <li key={trait} style={{ fontSize: 11, color: C.parchment }}>{trait}</li>
                 ))}
               </ul>
-              <div className="text-[10px] text-muted-foreground uppercase mb-1">{character.class} Features</div>
-              <ul className="space-y-0.5">
-                <li className="text-[11px]">Hit Die: {hitDie}</li>
-                <li className="text-[11px]">Save Prof: {classSaves.join(", ")}</li>
+              <div style={{ fontSize: 10, color: C.gold, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.1em", marginBottom: 4 }}>{character.class} Features</div>
+              <ul style={{ listStyle: "none", margin: 0, padding: 0 }} className="space-y-0.5">
+                <li style={{ fontSize: 11, color: C.parchment }}>Hit Die: {hitDie}</li>
+                <li style={{ fontSize: 11, color: C.parchment }}>Save Prof: {classSaves.join(", ")}</li>
                 {character.fightingStyle && (
-                  <li className="text-[11px]">Fighting Style: {character.fightingStyle}</li>
+                  <li style={{ fontSize: 11, color: C.parchment }}>Fighting Style: {character.fightingStyle}</li>
                 )}
               </ul>
             </div>
 
             {/* Cantrips & Spells */}
             {(character.cantrips?.length > 0 || character.spells?.length > 0) && (
-              <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Spellcasting</div>
+              <div style={sectionStyle}>
+                <div style={sectionHeaderStyle}>Spellcasting</div>
                 {character.cantrips?.length > 0 && (
                   <>
-                    <div className="text-[10px] text-purple-400 uppercase mb-1">Cantrips</div>
-                    <ul className="space-y-0.5 mb-2">
+                    <div style={{ fontSize: 10, color: C.purple, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.08em", marginBottom: 4 }}>Cantrips</div>
+                    <ul style={{ listStyle: "none", margin: "0 0 8px 0", padding: 0 }} className="space-y-0.5">
                       {character.cantrips.map((c) => (
-                        <li key={c} className="text-[11px]">{c}</li>
+                        <li key={c} style={{ fontSize: 11, color: C.parchment }}>{c}</li>
                       ))}
                     </ul>
                   </>
                 )}
                 {character.spells?.length > 0 && (
                   <>
-                    <div className="text-[10px] text-blue-400 uppercase mb-1">1st Level</div>
-                    <ul className="space-y-0.5">
+                    <div style={{ fontSize: 10, color: "#60a5fa", fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.08em", marginBottom: 4 }}>1st Level</div>
+                    <ul style={{ listStyle: "none", margin: 0, padding: 0 }} className="space-y-0.5">
                       {character.spells.map((s) => (
-                        <li key={s} className="text-[11px]">{s}</li>
+                        <li key={s} style={{ fontSize: 11, color: C.parchment }}>{s}</li>
                       ))}
                     </ul>
                   </>
@@ -598,30 +694,27 @@ export function CharacterSheet({ onClose }: Props) {
             )}
 
             {/* Location */}
-            <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Current Location</div>
-              <div className="text-xs font-medium flex items-center gap-1.5">
-                <span className="text-green-400">&#x25CF;</span>
-                {location}
+            <div style={sectionStyle}>
+              <div style={sectionHeaderStyle}>Current Location</div>
+              <div style={{ fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ color: "#22c55e" }}>&#x25CF;</span>
+                <span style={{ color: C.gold }}>{location}</span>
               </div>
             </div>
 
             {/* Skills */}
-            <div className="bg-muted/30 rounded-lg p-2 border border-border/30">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 text-center">Skills</div>
+            <div style={{ ...sectionStyle, padding: 8 }}>
+              <div style={sectionHeaderStyle}>Skills</div>
               {SKILLS.map(([skill, ability]) => {
                 const val = abilityMap[ability];
                 const isProficient = (character.skillProficiencies ?? []).includes(skill);
                 const skillMod = abilityMod(val) + (isProficient ? profBonus : 0);
                 return (
-                  <div key={skill} className="flex items-center gap-1.5 text-[11px] py-0.5">
-                    <span className={cn(
-                      "w-2 h-2 rounded-full border flex-shrink-0",
-                      isProficient ? "bg-primary border-primary" : "border-muted-foreground/40"
-                    )} />
-                    <span className="font-mono w-6 text-right font-semibold">{fmtMod(skillMod)}</span>
-                    <span className="text-muted-foreground truncate">
-                      {skill} <span className="text-[9px]">({ability})</span>
+                  <div key={skill} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, padding: "2px 0" }}>
+                    <ProfDot filled={isProficient} />
+                    <span style={{ fontFamily: "monospace", width: 24, textAlign: "right", fontWeight: 600, color: C.parchment }}>{fmtMod(skillMod)}</span>
+                    <span style={{ color: isProficient ? C.parchment : C.goldMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {skill} <span style={{ fontSize: 9, color: C.goldMuted }}>({ability})</span>
                     </span>
                   </div>
                 );
@@ -630,11 +723,11 @@ export function CharacterSheet({ onClose }: Props) {
 
             {/* Quest Log */}
             {questLog.length > 0 && (
-              <div className="bg-muted/30 rounded-lg p-3 border border-border/30">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Quest Log</div>
-                <ul className="space-y-1">
+              <div style={sectionStyle}>
+                <div style={sectionHeaderStyle}>Quest Log</div>
+                <ul style={{ listStyle: "none", margin: 0, padding: 0 }} className="space-y-1">
                   {questLog.map((q) => (
-                    <li key={q} className="text-[11px] text-amber-300/80">
+                    <li key={q} style={{ fontSize: 11, color: C.gold }}>
                       &#x2694; {q}
                     </li>
                   ))}
@@ -644,8 +737,8 @@ export function CharacterSheet({ onClose }: Props) {
 
             {/* Unconscious warning */}
             {character.isUnconscious && (
-              <div className="bg-red-950/60 rounded-lg p-3 border border-red-700/50 animate-pulse">
-                <div className="text-[10px] text-red-400 uppercase tracking-wider font-bold text-center">
+              <div style={{ background: "rgba(139,0,0,0.3)", borderRadius: 8, padding: 12, border: `1px solid ${C.crimsonBorder}` }} className="animate-pulse">
+                <div style={{ fontSize: 10, color: "#dc2626", fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.1em", fontWeight: 700, textAlign: "center" }}>
                   Unconscious
                 </div>
               </div>
