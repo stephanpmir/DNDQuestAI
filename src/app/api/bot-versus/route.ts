@@ -32,8 +32,8 @@ function getGrokClient(): OpenAI {
   return new OpenAI({ baseURL: "https://api.x.ai/v1", apiKey: key, timeout: 60_000, fetch: proxyFetch });
 }
 
-const GROK_MODEL_PRIMARY = "grok-code-fast-1";
-const GROK_MODEL_FALLBACK = "grok-4-fast-reasoning";
+const GROK_MODEL_PRIMARY = "grok-4-fast-reasoning";
+const GROK_MODEL_FALLBACK = "grok-code-fast-1";
 
 const GROK_SYSTEM_PROMPT = `You are playing a solo D&D 5e text adventure as Zephmir, a Female Tiefling Rogue with high Charisma.
 You are a real player — read the DM's narrative carefully and decide your next action.
@@ -267,13 +267,15 @@ interface GrokResponse {
   rawResponse: string;
 }
 
-function isGrokFallbackError(error: unknown): boolean {
+function isGrokRetryableError(error: unknown): boolean {
   if (error instanceof Error) {
     const msg = error.message;
-    return msg.includes("502") || msg.includes("400");
+    return msg.includes("502") || msg.includes("429");
   }
   return false;
 }
+
+const GROK_BACKOFF_MS = [800, 1600, 3200];
 
 async function callGrokWithModel(
   grokClient: OpenAI,
@@ -288,6 +290,24 @@ async function callGrokWithModel(
   const content = response.choices[0]?.message?.content;
   if (!content || content.trim().length === 0) throw new Error("Grok returned empty content");
   return content;
+}
+
+async function callGrokWithRetries(
+  grokClient: OpenAI,
+  model: string,
+  messages: OpenAI.ChatCompletionMessageParam[],
+): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= GROK_BACKOFF_MS.length; attempt++) {
+    try {
+      return await callGrokWithModel(grokClient, model, messages);
+    } catch (error) {
+      lastError = error;
+      if (!isGrokRetryableError(error)) throw error;
+      if (attempt < GROK_BACKOFF_MS.length) await sleep(GROK_BACKOFF_MS[attempt]);
+    }
+  }
+  throw lastError;
 }
 
 async function callGrok(
@@ -305,29 +325,13 @@ async function callGrok(
     ...grokHistory,
   ];
 
-  let content: string | undefined;
-
-  // Try primary model (grok-code-fast-1) with 3 attempts, 1s delay between
-  let lastPrimaryError: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      content = await callGrokWithModel(grokClient, GROK_MODEL_PRIMARY, fullMessages);
-      break;
-    } catch (error) {
-      lastPrimaryError = error;
-      if (!isGrokFallbackError(error)) throw error; // non-502/400 → don't retry
-      if (attempt < 2) await sleep(1000);
-    }
-  }
-
-  // Fallback to grok-4-fast-reasoning if primary failed with 502/400
-  if (!content) {
-    try {
-      content = await callGrokWithModel(grokClient, GROK_MODEL_FALLBACK, fullMessages);
-    } catch (fallbackError) {
-      // If fallback also fails, throw the original primary error
-      throw lastPrimaryError;
-    }
+  let content: string;
+  try {
+    content = await callGrokWithRetries(grokClient, GROK_MODEL_PRIMARY, fullMessages);
+  } catch (primaryError) {
+    // Only fall back if primary exhausted retries on 502/429
+    if (!isGrokRetryableError(primaryError)) throw primaryError;
+    content = await callGrokWithRetries(grokClient, GROK_MODEL_FALLBACK, fullMessages);
   }
 
   grokHistory.push({ role: "assistant", content });
