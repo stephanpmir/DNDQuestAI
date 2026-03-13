@@ -28,18 +28,44 @@ function tryParseJSON(text: string): unknown | null {
   }
 }
 
+interface CheckRequired {
+  stat: string;
+  skill: string;
+  dc: number;
+  description: string;
+}
+
+interface ParsedDMResponse {
+  narrative: string;
+  sceneImagePrompt?: string;
+  checkRequired?: CheckRequired;
+  gameStateUpdate: Record<string, never>;
+}
+
 /**
- * Extract narrative text and sceneImagePrompt from the LLM response.
+ * Extract narrative text, sceneImagePrompt, and checkRequired from the LLM response.
  * gameStateUpdate is always empty — the engine decides state, not the LLM.
  */
-export function parseDMResponse(raw: string): { narrative: string; sceneImagePrompt?: string; gameStateUpdate: Record<string, never> } {
+export function parseDMResponse(raw: string): ParsedDMResponse {
   let narrative = "";
   let sceneImagePrompt: string | undefined;
+  let checkRequired: CheckRequired | undefined;
 
-  /** Helper: extract both fields from a parsed JSON object */
+  /** Helper: extract fields from a parsed JSON object */
   function extractFields(obj: Record<string, unknown>) {
     if (typeof obj.narrative === "string") narrative = obj.narrative;
     if (typeof obj.sceneImagePrompt === "string") sceneImagePrompt = obj.sceneImagePrompt;
+    if (obj.checkRequired && typeof obj.checkRequired === "object") {
+      const cr = obj.checkRequired as Record<string, unknown>;
+      if (typeof cr.stat === "string" && typeof cr.skill === "string" && typeof cr.dc === "number") {
+        checkRequired = {
+          stat: cr.stat,
+          skill: cr.skill,
+          dc: cr.dc,
+          description: typeof cr.description === "string" ? cr.description : "",
+        };
+      }
+    }
   }
 
   // Try direct JSON parse
@@ -100,7 +126,7 @@ export function parseDMResponse(raw: string): { narrative: string; sceneImagePro
   // Clean the narrative of any syntax artifacts
   narrative = cleanNarrative(narrative);
 
-  return { narrative, sceneImagePrompt, gameStateUpdate: {} };
+  return { narrative, sceneImagePrompt, checkRequired, gameStateUpdate: {} };
 }
 
 /**
@@ -158,7 +184,7 @@ function cleanNarrative(text: string): string {
   );
 
   // Remove stray JSON keys that leaked into prose
-  cleaned = cleaned.replace(/"(?:narrative|sceneImagePrompt|gameStateUpdate|suggestedActions|mentionedNpcs|locationDescription)"\s*:/gi, "");
+  cleaned = cleaned.replace(/"(?:narrative|sceneImagePrompt|checkRequired|gameStateUpdate|suggestedActions|mentionedNpcs|locationDescription)"\s*:/gi, "");
 
   // Remove markdown headers like #narrative, ## narrative, ### DM, etc.
   cleaned = cleaned.replace(/^#{1,6}\s*(?:narrative|dm)\b[^\n]*/gim, "");

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage as ChatMessageType } from "@/types/game";
+import type { AbilityScores } from "@/types/character";
 import { DiceRollDisplay } from "./dice-roll-display";
 import { useLanguageStore } from "@/stores/language-store";
 
@@ -10,9 +11,12 @@ const DM_AVATAR_URL = "/.netlify/functions/proxy-portrait?prompt=dragon%20eye%20
 interface Props {
   message: ChatMessageType;
   avatarUrl?: string;
+  abilityScores?: AbilityScores;
+  onSendMessage?: (message: string) => void;
+  disabled?: boolean;
 }
 
-export function ChatMessage({ message, avatarUrl }: Props) {
+export function ChatMessage({ message, avatarUrl, abilityScores, onSendMessage, disabled }: Props) {
   const t = useLanguageStore((s) => s.t);
   const isUser = message.role === "user";
   const [dmAvatarError, setDmAvatarError] = useState(false);
@@ -79,6 +83,14 @@ export function ChatMessage({ message, avatarUrl }: Props) {
             <SceneImage prompt={message.sceneImagePrompt} seed={message.timestamp} />
           )}
           <TypewriterText text={message.narrative} />
+          {message.checkRequired && abilityScores && onSendMessage && (
+            <SkillCheckRoll
+              check={message.checkRequired}
+              abilityScores={abilityScores}
+              onRoll={onSendMessage}
+              disabled={disabled}
+            />
+          )}
         </div>
       </div>
       {(hasKarmaChange || hasFameChange) && (
@@ -141,6 +153,84 @@ function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
           display: loaded ? "block" : "none",
         }}
       />
+    </div>
+  );
+}
+
+/** Map stat name to the matching abilityScores key */
+const STAT_KEY_MAP: Record<string, keyof AbilityScores> = {
+  strength: "strength", dexterity: "dexterity", constitution: "constitution",
+  wisdom: "wisdom", intelligence: "intelligence", charisma: "charisma",
+};
+
+function getAbilityModifier(score: number): number {
+  return Math.floor((score - 10) / 2);
+}
+
+function getDifficultyLabel(dc: number): string {
+  if (dc <= 9) return "Easy";
+  if (dc <= 14) return "Medium";
+  if (dc <= 19) return "Hard";
+  return "Very Hard";
+}
+
+/** Dice roll UI for DM-requested skill checks. */
+function SkillCheckRoll({
+  check,
+  abilityScores,
+  onRoll,
+  disabled,
+}: {
+  check: { stat: string; skill: string; dc: number; description: string };
+  abilityScores: AbilityScores;
+  onRoll: (message: string) => void;
+  disabled?: boolean;
+}) {
+  const [rolled, setRolled] = useState(false);
+
+  const statKey = STAT_KEY_MAP[check.stat.toLowerCase()];
+  const score = statKey ? abilityScores[statKey] : 10;
+  const modifier = getAbilityModifier(score);
+  const diffLabel = getDifficultyLabel(check.dc);
+
+  const handleRoll = () => {
+    if (rolled || disabled) return;
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const total = d20 + modifier;
+    setRolled(true);
+    onRoll(`${check.skill} check result: ${total} (rolled ${d20} + ${modifier >= 0 ? "+" : ""}${modifier})`);
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: 12, padding: "12px 16px", borderRadius: 8,
+        backgroundColor: "rgba(201,162,39,0.08)",
+        border: "1px solid rgba(201,162,39,0.2)",
+      }}
+    >
+      <div style={{ fontSize: 13, color: "#c9a227", fontWeight: 600, marginBottom: 4 }}>
+        {check.stat} ({check.skill}) — {diffLabel}
+      </div>
+      <div style={{ fontSize: 12, color: "#8a8a8a", marginBottom: 8 }}>
+        {check.description}
+      </div>
+      <button
+        type="button"
+        onClick={handleRoll}
+        disabled={rolled || disabled}
+        style={{
+          padding: "6px 20px", borderRadius: 6, fontSize: 13, fontWeight: 700,
+          fontFamily: "'Cinzel', serif", letterSpacing: "0.05em",
+          backgroundColor: rolled ? "#333" : "#6b0000",
+          color: rolled ? "#888" : "#fff",
+          border: rolled ? "1px solid #444" : "1px solid #c9a227",
+          cursor: rolled || disabled ? "default" : "pointer",
+          transition: "all 0.2s",
+        }}
+      >
+        {rolled ? "Rolled" : "Roll d20"}
+      </button>
     </div>
   );
 }

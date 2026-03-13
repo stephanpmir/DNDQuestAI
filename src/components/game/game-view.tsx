@@ -309,6 +309,7 @@ export function GameView() {
           karmaChange: data.karmaChange?.amount,
           fameChange: data.fameChange,
           sceneImagePrompt: data.sceneImagePrompt,
+          checkRequired: data.checkRequired,
         };
         addMessage(dmMsg);
       } catch (err) {
@@ -438,7 +439,14 @@ export function GameView() {
         <div className="flex-1 min-h-0 overflow-y-auto pr-4">
           <div className="space-y-4 py-4">
             {messages.map((msg) => (
-              <ChatMessage key={msg.id} message={msg} avatarUrl={character.avatarUrl} />
+              <ChatMessage
+                key={msg.id}
+                message={msg}
+                avatarUrl={character.avatarUrl}
+                abilityScores={character.abilityScores}
+                onSendMessage={sendToDM}
+                disabled={isLoading}
+              />
             ))}
             {isLoading && (
               <div className="flex gap-3">

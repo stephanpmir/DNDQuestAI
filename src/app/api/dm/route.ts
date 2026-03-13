@@ -278,6 +278,7 @@ export async function POST(request: Request) {
 
     let narrative = "";
     let sceneImagePrompt: string | undefined;
+    let checkRequired: { stat: string; skill: string; dc: number; description: string } | undefined;
     let postResult = null;
     let contradictionHint: string | undefined;
 
@@ -304,6 +305,7 @@ export async function POST(request: Request) {
       const parsed = parseDMResponse(rawText);
       narrative = parsed.narrative;
       sceneImagePrompt = parsed.sceneImagePrompt;
+      checkRequired = parsed.checkRequired;
 
       // ── PIPELINE STEPS 6-7: Validate + Update ───────────────────
       postResult = postGenerate(narrative, pipelineInput, preResult);
@@ -351,6 +353,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       narrative: postResult.narrative,
       sceneImagePrompt,
+      checkRequired,
       gameStateUpdate: {
         hpChange: eo.hpChange || undefined,
         newItems: eo.itemsGained.length > 0 ? eo.itemsGained : undefined,

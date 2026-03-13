@@ -23,12 +23,26 @@ export interface ChatMessage {
   fameChange?: number;
   /** Scene image prompt for AI-generated scene illustration */
   sceneImagePrompt?: string;
+  /** Skill check requested by DM — player must roll before action resolves */
+  checkRequired?: {
+    stat: string;
+    skill: string;
+    dc: number;
+    description: string;
+  };
 }
 
 /** The structured JSON the API returns. */
 export interface DMResponsePayload {
   narrative: string;
   sceneImagePrompt?: string;
+  /** Skill check the DM wants the player to perform */
+  checkRequired?: {
+    stat: string;
+    skill: string;
+    dc: number;
+    description: string;
+  };
   gameStateUpdate: {
     hpChange?: number;
     newItems?: string[];
