@@ -127,38 +127,48 @@ function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
   const src = `/.netlify/functions/proxy-portrait?prompt=${encodeURIComponent(prompt)}&seed=${seed}&width=800&height=450`;
 
   useEffect(() => {
-    console.log("[SceneImage] prompt:", prompt, "src:", src);
+    console.log("[SceneImage] MOUNTED — prompt:", prompt, "src:", src);
   }, [prompt, src]);
-
-  if (error) return null;
 
   return (
     <div
       style={{
-        position: "relative", width: "100%", maxHeight: 250,
+        position: "relative", width: "100%",
         aspectRatio: "16/9",
         borderRadius: 8, overflow: "hidden", marginBottom: 12,
         backgroundColor: "#1a1a1a",
       }}
     >
+      {/* Always-visible placeholder until image loads or errors */}
       {!loaded && (
+        <div style={{
+          position: "absolute", inset: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          color: "#555", fontSize: 13, fontStyle: "italic",
+        }}>
+          {error ? "Scene unavailable" : "Loading scene\u2026"}
+        </div>
+      )}
+      {!loaded && !error && (
         <div className="animate-shimmer" style={{
           position: "absolute", inset: 0,
           background: "linear-gradient(90deg, transparent 25%, rgba(212,175,55,0.08) 50%, transparent 75%)",
           backgroundSize: "200% 100%",
         }} />
       )}
-      <img
-        src={src}
-        alt=""
-        onLoad={() => setLoaded(true)}
-        onError={() => setError(true)}
-        style={{
-          width: "100%", height: "100%", objectFit: "cover",
-          borderRadius: 8,
-          display: loaded ? "block" : "none",
-        }}
-      />
+      {!error && (
+        <img
+          src={src}
+          alt=""
+          onLoad={() => setLoaded(true)}
+          onError={() => { console.warn("[SceneImage] image load failed:", src); setError(true); }}
+          style={{
+            width: "100%", height: "100%", objectFit: "cover",
+            borderRadius: 8,
+            display: loaded ? "block" : "none",
+          }}
+        />
+      )}
     </div>
   );
 }

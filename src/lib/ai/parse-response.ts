@@ -250,6 +250,10 @@ function cleanNarrative(text: string): string {
   );
   cleaned = cleaned.replace(tagPattern, "");
 
+  // Remove bracketed stage directions the LLM may embed in the narrative
+  // e.g. "[The market square bustles with merchants]" or "[A dark cave looms ahead]"
+  cleaned = cleaned.replace(/\[(?![A-Z_]{3,}\])[^\]]{5,200}\]/g, "");
+
   // Remove non-narrative label lines the LLM echoes
   const labelPatterns = [
     "engine\\s*outcome", "response\\s*(?:json|format|language)", "critical\\s*rules",
