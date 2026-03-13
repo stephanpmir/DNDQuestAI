@@ -12,7 +12,7 @@ IMAGE GENERATION
 Endpoint: gen.pollinations.ai (NOT image.pollinations.ai — that is deprecated and blocked in China)
 Proxy function: /.netlify/functions/proxy-portrait (handles both portraits and scenes)
   Portraits: default 512x768, prompt passed as-is
-  Scenes: pass width=800&height=450, client prepends "environment landscape" and appends "no people wide shot" to prompt
+  Scenes: pass width=800&height=450 with raw prompt. Proxy detects landscape (width>height) and wraps with "environment landscape ... no people wide shot dark fantasy"
 DM avatar: fixed URL with seed 666, prompt is dragon eye
 Portrait: generated from character appearance fields via /api/portrait-prompt
 DM RESPONSE FORMAT
@@ -44,7 +44,8 @@ Do not let sceneImagePrompt or checkRequired appear in the narrative text shown 
 SceneImage component must be wrapped in an error boundary so it cannot crash the app
 Z.ai GLM reasoning models return empty content — always use glm-4.5-air with thinking disabled
 proxy-portrait.js must read width/height from query params — never hardcode portrait dimensions (512x768)
-Scene image prompts must be environment-only — no characters, races, classes, or living beings. Client prepends/appends environment keywords before calling proxy-portrait
+Scene image prompts must be environment-only — no characters, races, classes, or living beings. Proxy-portrait handles environment keyword wrapping for landscape requests — do not wrap client-side
+Scene image seed must be capped (timestamp % 1000000) — Pollinations rejects very large seed values
 Never call Pollinations directly from the browser — always use proxy-portrait
 [SCENE_IMAGE_PROMPT] values: architecture, weather, lighting, objects only. Never mention people/figures/heroes
 NARRATIVE RULES

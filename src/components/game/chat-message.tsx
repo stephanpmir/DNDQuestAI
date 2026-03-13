@@ -80,7 +80,7 @@ export function ChatMessage({ message, avatarUrl, abilityScores, onSendMessage, 
           }}
         >
           {message.sceneImagePrompt && (
-            <SceneImage prompt={message.sceneImagePrompt} seed={message.timestamp} />
+            <SceneImage prompt={message.sceneImagePrompt} seed={message.timestamp % 1000000} />
           )}
           <TypewriterText text={message.narrative} />
           {message.checkRequired && abilityScores && onSendMessage && (
