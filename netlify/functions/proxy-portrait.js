@@ -20,12 +20,19 @@ exports.handler = async (event) => {
   const height = parseInt(params.height, 10) || 768;
   const key = process.env.NEXT_PUBLIC_POLLINATIONS_TOKEN || "";
 
+  // For landscape/scene requests (width > height), wrap with environment keywords
+  const isLandscape = width > height;
+  const finalPrompt = isLandscape
+    ? `environment landscape ${prompt} no people wide shot dark fantasy`
+    : prompt;
+
   const upstreamUrl =
-    `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}` +
+    `https://gen.pollinations.ai/image/${encodeURIComponent(finalPrompt)}` +
     `?model=flux&width=${width}&height=${height}&seed=${seed}&enhance=true&nologo=true` +
     (key ? `&key=${key}` : "");
 
-  console.log("[proxy-portrait] Prompt received:", prompt.substring(0, 200), `(${prompt.length} chars)`);
+  console.log("[proxy-portrait] Prompt received:", prompt.substring(0, 120));
+  console.log("[proxy-portrait] Final prompt:", finalPrompt.substring(0, 200), `(${finalPrompt.length} chars)`);
   console.log("[proxy-portrait] Seed:", seed, "Dimensions:", width, "x", height);
   console.log("[proxy-portrait] Full upstream URL:", upstreamUrl);
 
