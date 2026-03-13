@@ -109,10 +109,10 @@ export function PortraitLoading({ character, customPrompt, onComplete }: Portrai
   // Phase 2: "Your Hero" reveal screen
   if (phase === "reveal" && imageUrl) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black" style={{ height: "100dvh", overflow: "hidden" }}>
         <div className="absolute inset-0 bg-gradient-to-b from-amber-950/30 via-black to-red-950/30" />
 
-        <div className="relative z-10 flex flex-col items-center gap-6 px-6 text-center animate-fade-in">
+        <div className="relative z-10 flex flex-col items-center gap-6 px-6 text-center animate-fade-in" style={{ maxHeight: "100dvh", overflow: "hidden" }}>
           {/* Decorative top rule */}
           <div className="flex items-center justify-center gap-4">
             <div className="h-px w-16 bg-gradient-to-r from-transparent to-amber-600/60" />
@@ -125,15 +125,15 @@ export function PortraitLoading({ character, customPrompt, onComplete }: Portrai
           </h2>
 
           {/* Large portrait with ornate frame */}
-          <div className="relative w-72 h-96 sm:w-80 sm:h-[28rem] rounded-lg overflow-hidden">
+          <div className="relative rounded-lg overflow-hidden" style={{ maxHeight: "calc(100dvh - 240px)", width: "fit-content" }}>
             {/* Gold border glow */}
             <div className="absolute -inset-1 rounded-lg bg-gradient-to-b from-amber-400/30 via-amber-600/20 to-amber-400/30 blur-sm" />
-            <div className="relative w-full h-full rounded-lg border-2 border-amber-500/50 overflow-hidden">
+            <div className="relative rounded-lg border-2 border-amber-500/50 overflow-hidden" style={{ maxHeight: "calc(100dvh - 240px)" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={imageUrl}
                 alt={`${character.name} portrait`}
-                className="w-full h-full object-cover"
+                style={{ maxHeight: "calc(100dvh - 248px)", objectFit: "contain" }}
                 onError={(e) => { (e.target as HTMLImageElement).src = "/images/default-avatar.svg"; }}
               />
               {/* Gold corner accents */}

@@ -128,10 +128,16 @@ function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
 
   const src = `/.netlify/functions/proxy-portrait?prompt=${encodeURIComponent(prompt)}&seed=${seed}&width=800&height=450`;
 
+  // Debug: confirm sceneImagePrompt is reaching the component
+  useEffect(() => {
+    console.log("[SceneImage] prompt:", prompt, "src:", src);
+  }, [prompt, src]);
+
   return (
     <div
       style={{
-        position: "relative", width: "100%", aspectRatio: "16/9",
+        position: "relative", width: "100%", maxHeight: 250,
+        aspectRatio: "16/9",
         borderRadius: 8, overflow: "hidden", marginBottom: 12,
         backgroundColor: "#1a1a1a",
       }}
@@ -150,6 +156,7 @@ function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
         onError={() => setError(true)}
         style={{
           width: "100%", height: "100%", objectFit: "cover",
+          borderRadius: 8,
           display: loaded ? "block" : "none",
         }}
       />

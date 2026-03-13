@@ -183,6 +183,11 @@ function cleanNarrative(text: string): string {
     ""
   );
 
+  // Remove sceneImagePrompt values leaked into prose (key + quoted value)
+  cleaned = cleaned.replace(/\*{0,2}sceneImagePrompt\*{0,2}\s*[:=]\s*"[^"]*"/gi, "");
+  // Remove checkRequired objects leaked into prose
+  cleaned = cleaned.replace(/\*{0,2}checkRequired\*{0,2}\s*[:=]\s*\{[^}]*\}/gi, "");
+
   // Remove stray JSON keys that leaked into prose
   cleaned = cleaned.replace(/"(?:narrative|sceneImagePrompt|checkRequired|gameStateUpdate|suggestedActions|mentionedNpcs|locationDescription)"\s*:/gi, "");
 
