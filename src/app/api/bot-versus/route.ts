@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { HttpsProxyAgent } from "https-proxy-agent";
-import nodeFetch from "node-fetch";
 import { buildSystemPrompt, buildEngineContextMessage } from "@/lib/ai/dm-prompt";
 import { parseDMResponse } from "@/lib/ai/parse-response";
 import { preGenerate, postGenerate } from "@/lib/engine/pipeline";
@@ -13,6 +11,9 @@ import type { GameState } from "@/types/game";
 import { getDefaultEquipped, getItemInfo } from "@/lib/items";
 import { RACIAL_DATA, applyRacialBonuses } from "@/lib/races";
 import { buildResourcePool } from "@/lib/resources";
+import {
+  getProxyFetch, callWithCascade, isRetryableError, sleep,
+} from "@/lib/ai/providers";
 
 /**
  * GET/POST /api/bot-versus — Dynamic AI vs AI playtest.
@@ -21,76 +22,6 @@ import { buildResourcePool } from "@/lib/resources";
  * Grok reads each DM response and decides its next action dynamically.
  * 10 turns, full structured report at the end.
  */
-
-// ── Proxy helper ─────────────────────────────────────────────────
-
-function getProxyFetch(): typeof fetch | undefined {
-  const proxy = process.env.https_proxy || process.env.HTTPS_PROXY;
-  if (!proxy) return undefined;
-  const agent = new HttpsProxyAgent(proxy);
-  return ((url: string, init?: RequestInit) =>
-    nodeFetch(url, { ...init, agent } as Parameters<typeof nodeFetch>[1])
-  ) as unknown as typeof fetch;
-}
-
-// ── DM LLM providers (same cascade as bot-test) ─────────────────
-
-interface LLMProvider {
-  client: OpenAI;
-  model: string;
-  name: string;
-  extraBody?: Record<string, unknown>;
-}
-
-function getDMProviders(): LLMProvider[] {
-  const proxyFetch = getProxyFetch();
-  const providers: LLMProvider[] = [];
-
-  const cerebrasKey = process.env.CEREBRAS_API_KEY;
-  if (cerebrasKey) {
-    providers.push({
-      client: new OpenAI({ baseURL: "https://api.cerebras.ai/v1", apiKey: cerebrasKey, timeout: 30_000, fetch: proxyFetch }),
-      model: "llama3.1-8b", name: "Cerebras",
-    });
-  }
-
-  const groqKey = process.env.GROQ_API_KEY;
-  if (groqKey) {
-    providers.push({
-      client: new OpenAI({ baseURL: "https://api.groq.com/openai/v1", apiKey: groqKey, timeout: 30_000, fetch: proxyFetch }),
-      model: "llama-3.1-8b-instant", name: "Groq",
-    });
-  }
-
-  const zaiKey = process.env.ZAI_API_KEY;
-  if (zaiKey) {
-    providers.push({
-      client: new OpenAI({ baseURL: "https://open.bigmodel.cn/api/paas/v4", apiKey: zaiKey, timeout: 30_000, fetch: proxyFetch }),
-      model: "glm-4.5-air", name: "Z.ai", extraBody: { thinking: { type: "disabled" } },
-    });
-  }
-
-  const moonshotKey = process.env.MOONSHOT_API_KEY;
-  if (moonshotKey) {
-    providers.push({
-      client: new OpenAI({ baseURL: "https://api.moonshot.ai/v1", apiKey: moonshotKey, timeout: 30_000, fetch: proxyFetch }),
-      model: "moonshot-v1-8k", name: "Moonshot",
-    });
-  }
-
-  if (providers.length === 0) throw new Error("No DM LLM API key set.");
-  return providers;
-}
-
-function getZhipuFallback(): LLMProvider | null {
-  const proxyFetch = getProxyFetch();
-  const key = process.env.ZHIPU_API_KEY || process.env.ZAI_API_KEY;
-  if (!key) return null;
-  return {
-    client: new OpenAI({ baseURL: "https://open.bigmodel.cn/api/paas/v4", apiKey: key, timeout: 30_000, fetch: proxyFetch }),
-    model: "glm-4.5-air", name: "ZhipuAI-Fallback", extraBody: { thinking: { type: "disabled" } },
-  };
-}
 
 // ── Grok (xAI) client ───────────────────────────────────────────
 
@@ -121,67 +52,8 @@ ACTION: <your in-character action>
 REASONING: <brief explanation of why you chose this>
 [OOC_BUG_REPORT] <only on turns 3, 6, 9>`;
 
-// ── Shared helpers ───────────────────────────────────────────────
-
 const MAX_RETRY_ATTEMPTS = 2;
 const RETRY_DELAY_MS = 1500;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function isRetryableError(error: unknown): boolean {
-  const status = (error as { status?: number }).status;
-  if (status === 429 || status === 502 || status === 503) return true;
-  if (error instanceof Error) {
-    const msg = error.message.toLowerCase();
-    return msg.includes("timeout") || msg.includes("econnreset") || msg.includes("econnrefused") ||
-      msg.includes("socket hang up") || msg.includes("network") || msg.includes("fetch failed") || msg.includes("aborted");
-  }
-  return false;
-}
-
-async function tryProvider(
-  provider: LLMProvider,
-  messages: OpenAI.ChatCompletionMessageParam[],
-): Promise<{ content: string | null; lastError: unknown; providerName: string }> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
-    try {
-      const response = await provider.client.chat.completions.create({
-        model: provider.model, messages, max_tokens: 1024, ...provider.extraBody,
-      } as OpenAI.ChatCompletionCreateParamsNonStreaming);
-      const content = response.choices[0]?.message?.content;
-      if (!content || content.trim().length === 0) {
-        lastError = new Error(`${provider.name} returned empty content`);
-        break;
-      }
-      return { content, lastError: null, providerName: provider.name };
-    } catch (error) {
-      lastError = error;
-      if (!isRetryableError(error) || attempt >= MAX_RETRY_ATTEMPTS) break;
-      await sleep(RETRY_DELAY_MS);
-    }
-  }
-  return { content: null, lastError, providerName: provider.name };
-}
-
-async function callDMWithRetry(messages: OpenAI.ChatCompletionMessageParam[]): Promise<{ text: string; provider: string }> {
-  const providers = getDMProviders();
-  let lastError: unknown;
-  for (const provider of providers) {
-    const result = await tryProvider(provider, messages);
-    if (result.content) return { text: result.content, provider: result.providerName };
-    lastError = result.lastError;
-  }
-  const zhipu = getZhipuFallback();
-  if (zhipu) {
-    const result = await tryProvider(zhipu, messages);
-    if (result.content) return { text: result.content, provider: result.providerName };
-    lastError = result.lastError;
-  }
-  throw lastError;
-}
 
 // ── Character creation ───────────────────────────────────────────
 
@@ -353,7 +225,7 @@ async function runDMTurn(
     { role: "user", content: message },
   ];
 
-  const { text: rawText, provider } = await callDMWithRetry(messages);
+  const { text: rawText, provider } = await callWithCascade(messages);
   const parsed = parseDMResponse(rawText);
   const postResult = postGenerate(parsed.narrative, pipelineInput, preResult);
   const narrative = postResult.narrative;

@@ -132,10 +132,7 @@ function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
 
   const src = `/.netlify/functions/proxy-portrait?prompt=${encodeURIComponent(prompt)}&width=800&height=450&seed=${seed}`;
 
-  console.log("[SceneImage] src:", src);
-
   const handleError = () => {
-    console.warn("[SceneImage] image load failed, retried:", retried);
     if (!retried) {
       setRetried(true);
       setTimeout(() => {

@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { HttpsProxyAgent } from "https-proxy-agent";
-import nodeFetch from "node-fetch";
 import { buildSystemPrompt, buildEngineContextMessage } from "@/lib/ai/dm-prompt";
 import { parseDMResponse } from "@/lib/ai/parse-response";
 import { preGenerate, postGenerate } from "@/lib/engine/pipeline";
@@ -13,111 +11,9 @@ import type { GameState } from "@/types/game";
 import type { WorldEvent, NPC, LocationRecord } from "@/types/world";
 import type { Fact } from "@/lib/engine/fact-ledger";
 import { computeNpcDisposition } from "@/lib/karma";
-import { runGuardInvestigations, shouldGuardsConfront, buildCrimeContext } from "@/lib/crimes";
+import { runGuardInvestigations, shouldGuardsConfront } from "@/lib/crimes";
 import type { Crime } from "@/lib/crimes";
-
-/**
- * Create a proxy-aware fetch function.
- * The OpenAI SDK v6 uses native fetch which ignores https_proxy.
- * We use node-fetch + HttpsProxyAgent as a workaround.
- */
-function getProxyFetch(): typeof fetch | undefined {
-  const proxy = process.env.https_proxy || process.env.HTTPS_PROXY;
-  if (!proxy) return undefined;
-  const agent = new HttpsProxyAgent(proxy);
-  return ((url: string, init?: RequestInit) =>
-    nodeFetch(url, { ...init, agent } as Parameters<typeof nodeFetch>[1])
-  ) as unknown as typeof fetch;
-}
-
-interface LLMProvider {
-  client: OpenAI;
-  model: string;
-  name: string;
-  /** Extra body params merged into every chat completion request (e.g. Z.ai thinking config) */
-  extraBody?: Record<string, unknown>;
-}
-
-/**
- * Build a prioritized list of available LLM providers.
- * Order: Cerebras → Groq → Z.ai → Moonshot
- *   1. Cerebras  — FREE (1M tokens/day), llama3.1-8b
- *   2. Groq      — FREE tier (fast but TPM-limited), llama-3.1-8b-instant
- *   3. Z.ai      — glm-4.5-air (cheap but ~7s latency, thinking disabled)
- *   4. Moonshot   — PAID last resort, moonshot-v1-8k
- * All use the OpenAI SDK interface.
- */
-function getProviders(): LLMProvider[] {
-  const proxyFetch = getProxyFetch();
-  const providers: LLMProvider[] = [];
-
-  // 1. Cerebras — FREE (1M tokens/day), llama3.1-8b
-  const cerebrasKey = process.env.CEREBRAS_API_KEY;
-  if (cerebrasKey) {
-    providers.push({
-      client: new OpenAI({
-        baseURL: "https://api.cerebras.ai/v1",
-        apiKey: cerebrasKey,
-        timeout: 30_000,
-        fetch: proxyFetch,
-      }),
-      model: "llama3.1-8b",
-      name: "Cerebras",
-    });
-  }
-
-  // 2. Groq — FREE tier (fast but TPM-limited ~30k TPM for 8B model)
-  const groqKey = process.env.GROQ_API_KEY;
-  if (groqKey) {
-    providers.push({
-      client: new OpenAI({
-        baseURL: "https://api.groq.com/openai/v1",
-        apiKey: groqKey,
-        timeout: 30_000,
-        fetch: proxyFetch,
-      }),
-      model: "llama-3.1-8b-instant",
-      name: "Groq",
-    });
-  }
-
-  // 3. Z.ai — glm-4.5-air (cheap but ~7s latency, thinking disabled)
-  const zaiKey = process.env.ZAI_API_KEY;
-  if (zaiKey) {
-    providers.push({
-      client: new OpenAI({
-        baseURL: "https://open.bigmodel.cn/api/paas/v4",
-        apiKey: zaiKey,
-        timeout: 30_000,
-        fetch: proxyFetch,
-      }),
-      model: "glm-4.5-air",
-      name: "Z.ai",
-      extraBody: { thinking: { type: "disabled" } },
-    });
-  }
-
-  // 4. Moonshot — PAID last resort (moonshot-v1-8k: $0.20/M in, $2.00/M out)
-  const moonshotKey = process.env.MOONSHOT_API_KEY;
-  if (moonshotKey) {
-    providers.push({
-      client: new OpenAI({
-        baseURL: "https://api.moonshot.ai/v1",
-        apiKey: moonshotKey,
-        timeout: 30_000,
-        fetch: proxyFetch,
-      }),
-      model: "moonshot-v1-8k",
-      name: "Moonshot",
-    });
-  }
-
-  if (providers.length === 0) {
-    throw new Error("No LLM API key set. Set CEREBRAS_API_KEY, ZAI_API_KEY, GROQ_API_KEY, or MOONSHOT_API_KEY.");
-  }
-
-  return providers;
-}
+import { callWithCascade } from "@/lib/ai/providers";
 
 interface RequestBody {
   message: string;
@@ -145,137 +41,6 @@ interface RequestBody {
 }
 
 const MAX_REGENERATION_ATTEMPTS = 1;
-const MAX_RETRY_ATTEMPTS = 2;
-const RETRY_DELAY_MS = 1500;
-
-/** Sleep for the given number of milliseconds */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** Check if an error is a timeout/network error worth retrying */
-function isRetryableError(error: unknown): boolean {
-  // OpenAI SDK errors have a numeric `status` property
-  const status = (error as { status?: number }).status;
-  if (status === 429 || status === 502 || status === 503) {
-    return true;
-  }
-  if (error instanceof Error) {
-    const msg = error.message.toLowerCase();
-    return (
-      msg.includes("timeout") ||
-      msg.includes("econnreset") ||
-      msg.includes("econnrefused") ||
-      msg.includes("socket hang up") ||
-      msg.includes("network") ||
-      msg.includes("fetch failed") ||
-      msg.includes("aborted")
-    );
-  }
-  return false;
-}
-
-/**
- * Build a dedicated ZhipuAI fallback provider using ZHIPU_API_KEY.
- * This is separate from the Z.ai entry in the main cascade (which uses ZAI_API_KEY)
- * and serves as a last-resort fallback when all primary providers fail.
- */
-function getZhipuFallback(): LLMProvider | null {
-  const proxyFetch = getProxyFetch();
-  const key = process.env.ZHIPU_API_KEY || process.env.ZAI_API_KEY;
-  if (!key) return null;
-  return {
-    client: new OpenAI({
-      baseURL: "https://open.bigmodel.cn/api/paas/v4",
-      apiKey: key,
-      timeout: 30_000,
-      fetch: proxyFetch,
-    }),
-    model: "glm-4.5-air",
-    name: "ZhipuAI-Fallback",
-    extraBody: { thinking: { type: "disabled" } },
-  };
-}
-
-/** Try a single provider with retries. Returns content string or null on failure. */
-async function tryProvider(
-  provider: LLMProvider,
-  messages: OpenAI.ChatCompletionMessageParam[],
-): Promise<{ content: string | null; lastError: unknown }> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
-    try {
-      console.error(`[DM API] ${provider.name} attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS + 1}...`);
-      const response = await provider.client.chat.completions.create({
-        model: provider.model,
-        messages,
-        max_tokens: 1024,
-        ...provider.extraBody,
-      } as OpenAI.ChatCompletionCreateParamsNonStreaming);
-      const content = response.choices[0]?.message?.content;
-      console.error(`[DM API] ${provider.name} responded, content length: ${content?.length ?? 0}`);
-      // Treat empty/null content as failure (e.g. reasoning-token overflow)
-      if (!content || content.trim().length === 0) {
-        console.error(
-          `[DM API] ${provider.name} returned empty content, falling through`
-        );
-        lastError = new Error(`${provider.name} returned empty content`);
-        break; // No point retrying empty responses
-      }
-      console.error(`[DM API] ${provider.name} succeeded (${content.length} chars)`);
-      return { content, lastError: null };
-    } catch (error) {
-      lastError = error;
-      const status = (error as { status?: number }).status;
-      const errMsg = error instanceof Error ? error.message : String(error);
-      console.error(
-        `[DM API] ${provider.name} attempt ${attempt + 1} FAILED: status=${status ?? "N/A"} msg=${errMsg}`
-      );
-      if (!isRetryableError(error) || attempt >= MAX_RETRY_ATTEMPTS) {
-        console.error(`[DM API] ${provider.name} error not retryable or retries exhausted`);
-        break;
-      }
-      console.error(`[DM API] ${provider.name} retrying in ${RETRY_DELAY_MS}ms...`);
-      await sleep(RETRY_DELAY_MS);
-    }
-  }
-  return { content: null, lastError };
-}
-
-/** Make an LLM call, trying each provider in order with retry on retryable errors.
- *  Empty content (200 but no text) is treated as a failure and falls through.
- *  If all primary providers fail, falls back to ZhipuAI as last resort. */
-async function callWithRetry(
-  messages: OpenAI.ChatCompletionMessageParam[]
-): Promise<string> {
-  const providers = getProviders();
-  console.error(`[DM API] Starting LLM call with ${providers.length} provider(s): ${providers.map(p => p.name).join(", ")}`);
-  let lastError: unknown;
-
-  // Try each primary provider in order
-  for (const provider of providers) {
-    console.error(`[DM API] Trying ${provider.name} (model: ${provider.model})`);
-    const result = await tryProvider(provider, messages);
-    if (result.content) return result.content;
-    lastError = result.lastError;
-    console.error(`[DM API] ${provider.name} exhausted, trying next provider...`);
-  }
-
-  // All primary providers failed — try ZhipuAI dedicated fallback
-  const zhipuFallback = getZhipuFallback();
-  if (zhipuFallback) {
-    console.error(`[DM API] All primary providers failed. Attempting ZhipuAI fallback...`);
-    const result = await tryProvider(zhipuFallback, messages);
-    if (result.content) {
-      console.error(`[DM API] ZhipuAI fallback succeeded — story continues seamlessly`);
-      return result.content;
-    }
-    lastError = result.lastError;
-  }
-
-  console.error(`[DM API] All providers (including fallback) exhausted. Last error:`, lastError);
-  throw lastError;
-}
 
 export async function POST(request: Request) {
   try {
@@ -348,7 +113,7 @@ export async function POST(request: Request) {
         { role: "user", content: message },
       ];
 
-      const rawText = await callWithRetry(messages);
+      const { text: rawText } = await callWithCascade(messages);
       const parsed = parseDMResponse(rawText);
       narrative = parsed.narrative;
       sceneImagePrompt = parsed.sceneImagePrompt;
@@ -363,10 +128,6 @@ export async function POST(request: Request) {
 
       // Contradiction found — regenerate with correction hint
       contradictionHint = postResult.regenerationHint;
-      console.warn(
-        `[Pipeline] Regenerating due to ${postResult.contradictions.length} contradiction(s)`,
-        postResult.contradictions.map((c) => c.factContent)
-      );
     }
 
     if (!postResult) {
@@ -463,8 +224,6 @@ export async function POST(request: Request) {
   } catch (error: unknown) {
     const errMsg =
       error instanceof Error ? error.message : "Unknown error occurred";
-    console.error("DM API error:", errMsg, error);
-
     return NextResponse.json(
       { error: "The winds of fate pause for a moment\u2026 please try again." },
       { status: 500 }

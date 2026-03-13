@@ -1,22 +1,11 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { HttpsProxyAgent } from "https-proxy-agent";
-import nodeFetch from "node-fetch";
 import type { BeginnerSurvey } from "@/types/character";
 import { RACES, CLASSES } from "@/types/character";
-
-function getProxyFetch(): typeof fetch | undefined {
-  const proxy = process.env.https_proxy || process.env.HTTPS_PROXY;
-  if (!proxy) return undefined;
-  const agent = new HttpsProxyAgent(proxy);
-  return ((url: string, init?: RequestInit) =>
-    nodeFetch(url, { ...init, agent } as Parameters<typeof nodeFetch>[1])
-  ) as unknown as typeof fetch;
-}
+import { getProxyFetch, isRetryableError } from "@/lib/ai/providers";
 
 function getClient(): { client: OpenAI; model: string; extraBody?: Record<string, unknown> } {
   const proxyFetch = getProxyFetch();
-  // Primary: Z.ai (glm-4.5-air with thinking disabled)
   const zaiKey = process.env.ZAI_API_KEY;
   if (zaiKey) {
     return {
@@ -25,7 +14,6 @@ function getClient(): { client: OpenAI; model: string; extraBody?: Record<string
       extraBody: { thinking: { type: "disabled" } },
     };
   }
-  // Fallback: Cerebras
   const cerebrasKey = process.env.CEREBRAS_API_KEY;
   if (cerebrasKey) {
     return {
@@ -38,16 +26,6 @@ function getClient(): { client: OpenAI; model: string; extraBody?: Record<string
 
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 2000;
-
-function isRetryable(error: unknown): boolean {
-  if (error instanceof Error) {
-    const msg = error.message.toLowerCase();
-    return msg.includes("timeout") || msg.includes("econnreset") ||
-      msg.includes("503") || msg.includes("502") || msg.includes("429") ||
-      msg.includes("fetch failed");
-  }
-  return false;
-}
 
 interface ProfileRequest {
   survey: BeginnerSurvey;
@@ -180,7 +158,7 @@ export async function POST(request: Request) {
         );
       } catch (error) {
         lastError = error;
-        if (!isRetryable(error) || attempt >= MAX_RETRIES) break;
+        if (!isRetryableError(error) || attempt >= MAX_RETRIES) break;
         await new Promise((r) => setTimeout(r, RETRY_BASE_MS * Math.pow(2, attempt)));
       }
     }

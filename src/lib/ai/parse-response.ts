@@ -70,14 +70,9 @@ const TAG_LINE_REGEX = new RegExp(
  * narrative. Each [TAG] value runs until the next [TAG] or end of string.
  */
 export function parseDMResponse(raw: string): ParsedDMResponse {
-  console.log("[parseDMResponse] RAW LLM output:", raw);
-
   // First, try to handle the case where the LLM still outputs JSON despite instructions
   const jsonFallback = tryExtractFromJSON(raw);
-  if (jsonFallback) {
-    console.log("[parseDMResponse] JSON fallback used — sceneImagePrompt:", jsonFallback.sceneImagePrompt ?? "NONE");
-    return jsonFallback;
-  }
+  if (jsonFallback) return jsonFallback;
 
   const fields = new Map<string, string>();
 
@@ -132,10 +127,6 @@ export function parseDMResponse(raw: string): ParsedDMResponse {
   if (crRaw) {
     checkRequired = parseCheckRequired(crRaw);
   }
-
-  console.log("[parseDMResponse] Parsed fields:", [...fields.keys()].join(", ") || "NONE");
-  console.log("[parseDMResponse] sceneImagePrompt:", sceneImagePrompt ?? "NONE");
-  console.log("[parseDMResponse] firstTagMatch found:", !!raw.match(TAG_LINE_REGEX));
 
   // Clean narrative
   narrative = cleanNarrative(narrative);

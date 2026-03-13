@@ -335,7 +335,6 @@ export function GameView() {
       } catch (err) {
         const errorMessage =
           err instanceof Error ? err.message : "Unknown error";
-        console.error("Error calling DM:", errorMessage, err);
         addMessage({
           id: generateId(),
           role: "assistant",

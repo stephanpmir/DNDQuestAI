@@ -46,7 +46,6 @@ export async function POST(request: Request) {
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.error("[Avatar API] Pollinations error:", response.status, response.statusText);
       return NextResponse.json(
         { error: `Image generation failed: ${response.statusText}` },
         { status: 502 }
@@ -61,7 +60,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ avatarUrl: dataUrl });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
-    console.error("[Avatar API] Error:", msg);
     return NextResponse.json(
       { error: `Avatar generation failed: ${msg}` },
       { status: 500 }

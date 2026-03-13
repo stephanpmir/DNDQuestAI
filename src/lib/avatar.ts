@@ -159,14 +159,12 @@ export async function generateAvatar(character: Character): Promise<string | nul
     });
 
     if (!response.ok) {
-      console.warn("[Avatar] Generation failed:", response.status);
       return null;
     }
 
     const data = await response.json();
     return data.avatarUrl ?? null;
   } catch (error) {
-    console.warn("[Avatar] Generation error:", error instanceof Error ? error.message : error);
     return null;
   }
 }
