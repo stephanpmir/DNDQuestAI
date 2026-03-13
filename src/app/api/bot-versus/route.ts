@@ -277,15 +277,20 @@ function isGrokRetryableError(error: unknown): boolean {
 
 const GROK_BACKOFF_MS = [800, 1600, 3200];
 
+const REASONING_MODELS = ["grok-4-fast-reasoning", "grok-4-1-fast-reasoning"];
+
 async function callGrokWithModel(
   grokClient: OpenAI,
   model: string,
   messages: OpenAI.ChatCompletionMessageParam[],
 ): Promise<string> {
+  const isReasoning = REASONING_MODELS.some(m => model.includes(m));
   const response = await grokClient.chat.completions.create({
     model,
     messages,
-    max_tokens: 512,
+    // Reasoning models require max_completion_tokens (covers thinking + output).
+    // Non-reasoning models use max_tokens.
+    ...(isReasoning ? { max_completion_tokens: 2048 } : { max_tokens: 512 }),
   });
   const content = response.choices[0]?.message?.content;
   if (!content || content.trim().length === 0) throw new Error("Grok returned empty content");
