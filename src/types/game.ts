@@ -21,11 +21,14 @@ export interface ChatMessage {
   karmaChange?: number;
   /** Fame change to display as floating indicator */
   fameChange?: number;
+  /** Scene image prompt for AI-generated scene illustration */
+  sceneImagePrompt?: string;
 }
 
 /** The structured JSON the API returns. */
 export interface DMResponsePayload {
   narrative: string;
+  sceneImagePrompt?: string;
   gameStateUpdate: {
     hpChange?: number;
     newItems?: string[];

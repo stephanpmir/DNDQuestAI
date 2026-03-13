@@ -308,6 +308,7 @@ export function GameView() {
           rollResult: data.engineOutcome?.roll,
           karmaChange: data.karmaChange?.amount,
           fameChange: data.fameChange,
+          sceneImagePrompt: data.sceneImagePrompt,
         };
         addMessage(dmMsg);
       } catch (err) {

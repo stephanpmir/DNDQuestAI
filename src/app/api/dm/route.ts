@@ -277,6 +277,7 @@ export async function POST(request: Request) {
     );
 
     let narrative = "";
+    let sceneImagePrompt: string | undefined;
     let postResult = null;
     let contradictionHint: string | undefined;
 
@@ -302,6 +303,7 @@ export async function POST(request: Request) {
       const rawText = await callWithRetry(messages);
       const parsed = parseDMResponse(rawText);
       narrative = parsed.narrative;
+      sceneImagePrompt = parsed.sceneImagePrompt;
 
       // ── PIPELINE STEPS 6-7: Validate + Update ───────────────────
       postResult = postGenerate(narrative, pipelineInput, preResult);
@@ -348,6 +350,7 @@ export async function POST(request: Request) {
     // ── PIPELINE STEP 8: Deliver ──────────────────────────────────
     return NextResponse.json({
       narrative: postResult.narrative,
+      sceneImagePrompt,
       gameStateUpdate: {
         hpChange: eo.hpChange || undefined,
         newItems: eo.itemsGained.length > 0 ? eo.itemsGained : undefined,

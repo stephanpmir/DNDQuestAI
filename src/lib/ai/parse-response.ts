@@ -29,20 +29,23 @@ function tryParseJSON(text: string): unknown | null {
 }
 
 /**
- * Extract narrative text from the LLM response.
- * Returns ONLY { narrative, gameStateUpdate: {} }.
+ * Extract narrative text and sceneImagePrompt from the LLM response.
  * gameStateUpdate is always empty — the engine decides state, not the LLM.
  */
-export function parseDMResponse(raw: string): { narrative: string; gameStateUpdate: Record<string, never> } {
+export function parseDMResponse(raw: string): { narrative: string; sceneImagePrompt?: string; gameStateUpdate: Record<string, never> } {
   let narrative = "";
+  let sceneImagePrompt: string | undefined;
 
-  // Try direct JSON parse — extract "narrative" field only
+  /** Helper: extract both fields from a parsed JSON object */
+  function extractFields(obj: Record<string, unknown>) {
+    if (typeof obj.narrative === "string") narrative = obj.narrative;
+    if (typeof obj.sceneImagePrompt === "string") sceneImagePrompt = obj.sceneImagePrompt;
+  }
+
+  // Try direct JSON parse
   const direct = tryParseJSON(raw);
   if (direct && typeof direct === "object") {
-    const obj = direct as Record<string, unknown>;
-    if (typeof obj.narrative === "string") {
-      narrative = obj.narrative;
-    }
+    extractFields(direct as Record<string, unknown>);
   }
 
   // Try extracting from markdown code fences
@@ -51,10 +54,7 @@ export function parseDMResponse(raw: string): { narrative: string; gameStateUpda
     if (fenceMatch) {
       const parsed = tryParseJSON(fenceMatch[1].trim());
       if (parsed && typeof parsed === "object") {
-        const obj = parsed as Record<string, unknown>;
-        if (typeof obj.narrative === "string") {
-          narrative = obj.narrative;
-        }
+        extractFields(parsed as Record<string, unknown>);
       }
       // If JSON parse failed but the fence contains a "narrative" key,
       // try to extract the value with a regex
@@ -74,10 +74,7 @@ export function parseDMResponse(raw: string): { narrative: string; gameStateUpda
     if (braceStart !== -1 && braceEnd > braceStart) {
       const parsed = tryParseJSON(raw.slice(braceStart, braceEnd + 1));
       if (parsed && typeof parsed === "object") {
-        const obj = parsed as Record<string, unknown>;
-        if (typeof obj.narrative === "string") {
-          narrative = obj.narrative;
-        }
+        extractFields(parsed as Record<string, unknown>);
       }
     }
   }
@@ -94,10 +91,16 @@ export function parseDMResponse(raw: string): { narrative: string; gameStateUpda
     }
   }
 
+  // Try extracting sceneImagePrompt via regex if not found yet
+  if (!sceneImagePrompt) {
+    const sipMatch = raw.match(/"sceneImagePrompt"\s*:\s*"([^"]{10,200})"/);
+    if (sipMatch) sceneImagePrompt = sipMatch[1];
+  }
+
   // Clean the narrative of any syntax artifacts
   narrative = cleanNarrative(narrative);
 
-  return { narrative, gameStateUpdate: {} };
+  return { narrative, sceneImagePrompt, gameStateUpdate: {} };
 }
 
 /**
@@ -155,7 +158,7 @@ function cleanNarrative(text: string): string {
   );
 
   // Remove stray JSON keys that leaked into prose
-  cleaned = cleaned.replace(/"(?:narrative|gameStateUpdate|suggestedActions|mentionedNpcs|locationDescription)"\s*:/gi, "");
+  cleaned = cleaned.replace(/"(?:narrative|sceneImagePrompt|gameStateUpdate|suggestedActions|mentionedNpcs|locationDescription)"\s*:/gi, "");
 
   // Remove markdown headers like #narrative, ## narrative, ### DM, etc.
   cleaned = cleaned.replace(/^#{1,6}\s*(?:narrative|dm)\b[^\n]*/gim, "");

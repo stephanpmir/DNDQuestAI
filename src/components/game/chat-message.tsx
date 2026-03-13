@@ -75,6 +75,9 @@ export function ChatMessage({ message, avatarUrl }: Props) {
             borderLeft: "3px solid rgba(201,162,39,0.25)", paddingLeft: 16,
           }}
         >
+          {message.sceneImagePrompt && (
+            <SceneImage prompt={message.sceneImagePrompt} seed={message.timestamp} />
+          )}
           <TypewriterText text={message.narrative} />
         </div>
       </div>
@@ -100,6 +103,44 @@ export function ChatMessage({ message, avatarUrl }: Props) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Scene image rendered above DM narrative text. */
+function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
+
+  if (error) return null;
+
+  const src = `/.netlify/functions/proxy-portrait?prompt=${encodeURIComponent(prompt)}&seed=${seed}&width=800&height=450`;
+
+  return (
+    <div
+      style={{
+        position: "relative", width: "100%", aspectRatio: "16/9",
+        borderRadius: 8, overflow: "hidden", marginBottom: 12,
+        backgroundColor: "#1a1a1a",
+      }}
+    >
+      {!loaded && (
+        <div className="animate-shimmer" style={{
+          position: "absolute", inset: 0,
+          background: "linear-gradient(90deg, transparent 25%, rgba(212,175,55,0.08) 50%, transparent 75%)",
+          backgroundSize: "200% 100%",
+        }} />
+      )}
+      <img
+        src={src}
+        alt=""
+        onLoad={() => setLoaded(true)}
+        onError={() => setError(true)}
+        style={{
+          width: "100%", height: "100%", objectFit: "cover",
+          display: loaded ? "block" : "none",
+        }}
+      />
     </div>
   );
 }

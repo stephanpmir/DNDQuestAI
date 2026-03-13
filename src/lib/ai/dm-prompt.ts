@@ -117,13 +117,17 @@ ${karmaSection}${companionSection}${campaignSection}
 19. When the player claims to do something their class/level cannot do, describe the attempt failing naturally: they jump but gravity wins, they wave their hands but no magic answers, they shout commands but nothing obeys.
 
 ## Response Format
-Respond with valid JSON containing ONLY this field:
+Respond with valid JSON containing ONLY these fields:
 \`\`\`json
 {
-  "narrative": "Your story text here — pure prose, no markdown, no code, no mechanical statements, no action lists..."
+  "narrative": "Your story text here — pure prose, no markdown, no code, no mechanical statements, no action lists...",
+  "sceneImagePrompt": "15-25 word description of the scene for image generation"
 }
 \`\`\`
-Always include "narrative". Do NOT include gameStateUpdate, suggestedActions, or any other fields — the engine handles everything. The narrative must read like a novel, not a game log. Remember: 80–150 words max. Completeness matters — always finish your sentences and close with a natural stopping point.`;
+Always include both "narrative" and "sceneImagePrompt". Do NOT include gameStateUpdate, suggestedActions, or any other fields — the engine handles everything. The narrative must read like a novel, not a game log. Remember: 80–150 words max. Completeness matters — always finish your sentences and close with a natural stopping point.
+
+## sceneImagePrompt Rules
+The sceneImagePrompt describes ONLY the location, atmosphere, and any NPCs or enemies visible in the scene. NEVER include the player character. Focus on environment, lighting, mood, and any creatures or figures present. Always end with "dark fantasy digital art dramatic lighting". Example: "dimly lit tavern interior wooden beams flickering firelight hooded figure at corner table dark fantasy digital art dramatic lighting"`;
 }
 
 /**
