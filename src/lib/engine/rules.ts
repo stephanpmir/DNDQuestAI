@@ -1,5 +1,5 @@
 import type { Character } from "@/types/character";
-import type { EngineOutcome, RollResult, WorldEvent } from "@/types/world";
+import type { EngineOutcome, WorldEvent } from "@/types/world";
 import { abilityCheck, attackRoll, damageRoll, modifier, d20, d20Lucky, d } from "./dice";
 import {
   detectKarmaAction,
@@ -1060,38 +1060,32 @@ export function resolveAction(
     }
 
     case "skill_check": {
-      const ability = getSkillAbility(playerInput);
-      const skillName = ability.charAt(0).toUpperCase() + ability.slice(1);
-
-      // When the player has already rolled via the CHECK_REQUIRED UI, parse their result
-      // instead of rolling independently. Format: "X check result: T (rolled D + M) [DC:N]"
-      const checkResultMatch = playerInput.match(
-        /check result:\s*(\d+)\s*\(rolled\s+(\d+)\s*\+\s*[+-]?\d+\)\s*\[DC:(\d+)\]/i
+      // CHECK_ROLL messages come from the CHECK_REQUIRED UI button.
+      // Format: [CHECK_ROLL:skill|stat|dc] — all rolling happens server-side.
+      const checkRollMatch = playerInput.match(
+        /\[CHECK_ROLL:([^|]+)\|([^|]+)\|(\d+)\]/i
       );
 
-      let result: RollResult;
-      if (checkResultMatch) {
-        const total = parseInt(checkResultMatch[1], 10);
-        const rolled = parseInt(checkResultMatch[2], 10);
-        const dc = parseInt(checkResultMatch[3], 10);
-        const mod = total - rolled;
-        result = {
-          type: "check",
-          ability,
-          dc,
-          rolled,
-          modifier: mod,
-          total,
-          success: total >= dc,
-        };
+      let ability: keyof Character["abilityScores"];
+      let dc: number;
+      let skillLabel: string;
+
+      if (checkRollMatch) {
+        skillLabel = checkRollMatch[1];
+        const statName = checkRollMatch[2].toLowerCase() as keyof Character["abilityScores"];
+        ability = statName in character.abilityScores ? statName : getSkillAbility(playerInput);
+        dc = parseInt(checkRollMatch[3], 10);
       } else {
-        const dc = levelScaledDC(12, character.level);
-        const prof = proficiencyBonus(character.level);
-        // Gnome Cunning only applies to saving throws vs magic, not skill checks
-        result = abilityCheck(character.abilityScores[ability], dc, ability, prof, lucky);
+        ability = getSkillAbility(playerInput);
+        dc = levelScaledDC(12, character.level);
+        skillLabel = ability.charAt(0).toUpperCase() + ability.slice(1);
       }
 
-      outcome.roll = { ...result, reason: `${skillName} check — testing your skill` };
+      const prof = proficiencyBonus(character.level);
+      // Gnome Cunning only applies to saving throws vs magic, not skill checks
+      const result = abilityCheck(character.abilityScores[ability], dc, ability, prof, lucky);
+
+      outcome.roll = { ...result, reason: `${skillLabel} check — testing your skill` };
       if (result.success) {
         outcome.xpGained = skillCheckXpReward(character.level);
       } else if (result.rolled <= 3) {
@@ -1099,7 +1093,7 @@ export function resolveAction(
         const mishapDmg = Math.max(1, d(4));
         outcome.hpChange = -mishapDmg;
         outcome.damageTaken = mishapDmg;
-        outcome.roll = { ...result, reason: `${skillName} check — critical failure! A mishap occurs` };
+        outcome.roll = { ...result, reason: `${skillLabel} check — critical failure! A mishap occurs` };
       }
       break;
     }

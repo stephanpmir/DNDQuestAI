@@ -443,8 +443,6 @@ export function GameView() {
                 key={msg.id}
                 message={msg}
                 avatarUrl={character.avatarUrl}
-                abilityScores={character.abilityScores}
-                characterLevel={character.level}
                 onSendMessage={sendToDM}
                 disabled={isLoading}
               />

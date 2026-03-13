@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage as ChatMessageType } from "@/types/game";
-import type { AbilityScores } from "@/types/character";
 import { DiceRollDisplay } from "./dice-roll-display";
 import { useLanguageStore } from "@/stores/language-store";
 
@@ -11,13 +10,11 @@ const DM_AVATAR_URL = "/.netlify/functions/proxy-portrait?prompt=dragon%20eye%20
 interface Props {
   message: ChatMessageType;
   avatarUrl?: string;
-  abilityScores?: AbilityScores;
-  characterLevel?: number;
   onSendMessage?: (message: string) => void;
   disabled?: boolean;
 }
 
-export function ChatMessage({ message, avatarUrl, abilityScores, characterLevel, onSendMessage, disabled }: Props) {
+export function ChatMessage({ message, avatarUrl, onSendMessage, disabled }: Props) {
   const t = useLanguageStore((s) => s.t);
   const isUser = message.role === "user";
   const [dmAvatarError, setDmAvatarError] = useState(false);
@@ -84,11 +81,9 @@ export function ChatMessage({ message, avatarUrl, abilityScores, characterLevel,
             <SceneImage prompt={message.sceneImagePrompt} seed={message.timestamp % 1000000} />
           )}
           <TypewriterText text={message.narrative} />
-          {message.checkRequired && abilityScores && onSendMessage && (
+          {message.checkRequired && onSendMessage && (
             <SkillCheckRoll
               check={message.checkRequired}
-              abilityScores={abilityScores}
-              characterLevel={characterLevel ?? 1}
               onRoll={onSendMessage}
               disabled={disabled}
             />
@@ -195,16 +190,6 @@ function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
   );
 }
 
-/** Map stat name to the matching abilityScores key */
-const STAT_KEY_MAP: Record<string, keyof AbilityScores> = {
-  strength: "strength", dexterity: "dexterity", constitution: "constitution",
-  wisdom: "wisdom", intelligence: "intelligence", charisma: "charisma",
-};
-
-function getAbilityModifier(score: number): number {
-  return Math.floor((score - 10) / 2);
-}
-
 function getDifficultyLabel(dc: number): string {
   if (dc <= 9) return "Easy";
   if (dc <= 14) return "Medium";
@@ -212,35 +197,26 @@ function getDifficultyLabel(dc: number): string {
   return "Very Hard";
 }
 
-/** Dice roll UI for DM-requested skill checks. */
+/** Dice roll UI for DM-requested skill checks.
+ *  No client-side rolling — sends structured params so the server rolls. */
 function SkillCheckRoll({
   check,
-  abilityScores,
-  characterLevel,
   onRoll,
   disabled,
 }: {
   check: { stat: string; skill: string; dc: number; description: string };
-  abilityScores: AbilityScores;
-  characterLevel: number;
   onRoll: (message: string) => void;
   disabled?: boolean;
 }) {
   const [rolled, setRolled] = useState(false);
 
-  const statKey = STAT_KEY_MAP[check.stat.toLowerCase()];
-  const score = statKey ? abilityScores[statKey] : 10;
-  const abilityMod = getAbilityModifier(score);
-  const prof = Math.floor((characterLevel - 1) / 4) + 2;
-  const modifier = abilityMod + prof;
   const diffLabel = getDifficultyLabel(check.dc);
 
   const handleRoll = () => {
     if (rolled || disabled) return;
-    const d20 = Math.floor(Math.random() * 20) + 1;
-    const total = d20 + modifier;
     setRolled(true);
-    onRoll(`${check.skill} check result: ${total} (rolled ${d20} + ${modifier >= 0 ? "+" : ""}${modifier}) [DC:${check.dc}]`);
+    // Send structured message for server-side rolling
+    onRoll(`[CHECK_ROLL:${check.skill}|${check.stat}|${check.dc}]`);
   };
 
   return (
