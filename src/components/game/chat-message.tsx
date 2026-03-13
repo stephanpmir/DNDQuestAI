@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChatMessage as ChatMessageType } from "@/types/game";
 import { DiceRollDisplay } from "./dice-roll-display";
 import { useLanguageStore } from "@/stores/language-store";
+
+const DM_AVATAR_URL = "/.netlify/functions/proxy-portrait?prompt=dungeon%20master%20hooded%20figure%20glowing%20red%20eyes%20dark%20fantasy%20circular%20portrait%20dramatic%20lighting%20arcane%20magical%20aura%20mysterious%20ancient%20sorcerer&seed=666&width=128&height=128";
 
 interface Props {
   message: ChatMessageType;
@@ -13,6 +15,7 @@ interface Props {
 export function ChatMessage({ message, avatarUrl }: Props) {
   const t = useLanguageStore((s) => s.t);
   const isUser = message.role === "user";
+  const [dmAvatarError, setDmAvatarError] = useState(false);
 
   if (isUser) {
     return (
@@ -44,10 +47,35 @@ export function ChatMessage({ message, avatarUrl }: Props) {
     <div className="space-y-0">
       {message.rollResult && <DiceRollDisplay roll={message.rollResult} />}
       <div className="flex gap-3 justify-start">
-        <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold shrink-0">
-          {t("chat.dm")}
-        </div>
-        <div className="max-w-[80%] rounded-lg px-4 py-3 text-sm leading-relaxed bg-muted text-foreground">
+        {dmAvatarError ? (
+          <div
+            style={{
+              width: 48, height: 48, minWidth: 48, borderRadius: "50%",
+              border: "2px solid #c9a227", boxShadow: "0 0 10px rgba(201,162,39,0.4)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              backgroundColor: "#1a1a1a", fontSize: 20,
+            }}
+          >
+            <span style={{ color: "#c9a227" }}>⚔</span>
+          </div>
+        ) : (
+          <img
+            src={DM_AVATAR_URL}
+            alt="DM"
+            onError={() => setDmAvatarError(true)}
+            style={{
+              width: 48, height: 48, minWidth: 48, borderRadius: "50%",
+              border: "2px solid #c9a227", boxShadow: "0 0 10px rgba(201,162,39,0.4)",
+              objectFit: "cover",
+            }}
+          />
+        )}
+        <div
+          style={{
+            backgroundColor: "transparent", background: "none",
+            borderLeft: "3px solid rgba(201,162,39,0.25)", paddingLeft: 16,
+          }}
+        >
           <TypewriterText text={message.narrative} />
         </div>
       </div>
@@ -148,7 +176,13 @@ function TypewriterText({ text }: { text: string }) {
   }, [text]);
 
   return (
-    <div className="whitespace-pre-wrap">
+    <div
+      className="whitespace-pre-wrap"
+      style={{
+        color: "#e8d5b0", fontStyle: "italic",
+        fontFamily: "Georgia, serif", lineHeight: 1.8,
+      }}
+    >
       <span ref={containerRef} />
       <span
         ref={cursorRef}
