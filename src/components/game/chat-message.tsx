@@ -5,7 +5,7 @@ import type { ChatMessage as ChatMessageType } from "@/types/game";
 import { DiceRollDisplay } from "./dice-roll-display";
 import { useLanguageStore } from "@/stores/language-store";
 
-const DM_AVATAR_URL = "/.netlify/functions/proxy-portrait?prompt=dragon%20eye%20close%20up%20slit%20pupil%20gold%20iris%20glowing%20arcane%20magic%20dark%20fantasy%20circular%20portrait%20dramatic%20lighting&seed=666&width=128&height=128";
+const DM_AVATAR_URL = "/.netlify/functions/proxy-portrait?prompt=dragon%20eye%20close%20up%20perfectly%20centered%20slit%20pupil%20gold%20iris%20glowing%20arcane%20dark%20fantasy%20square%20portrait%20symmetrical&seed=666&width=128&height=128";
 
 interface Props {
   message: ChatMessageType;
@@ -65,8 +65,7 @@ export function ChatMessage({ message, avatarUrl }: Props) {
             onError={() => setDmAvatarError(true)}
             style={{
               width: 48, height: 48, minWidth: 48, borderRadius: "50%",
-              boxShadow: "0 0 10px rgba(201,162,39,0.4)",
-              objectFit: "cover",
+              objectFit: "cover", objectPosition: "center",
             }}
           />
         )}
