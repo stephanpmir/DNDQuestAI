@@ -444,6 +444,7 @@ export function GameView() {
                 message={msg}
                 avatarUrl={character.avatarUrl}
                 abilityScores={character.abilityScores}
+                characterLevel={character.level}
                 onSendMessage={sendToDM}
                 disabled={isLoading}
               />

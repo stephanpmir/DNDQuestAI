@@ -12,11 +12,12 @@ interface Props {
   message: ChatMessageType;
   avatarUrl?: string;
   abilityScores?: AbilityScores;
+  characterLevel?: number;
   onSendMessage?: (message: string) => void;
   disabled?: boolean;
 }
 
-export function ChatMessage({ message, avatarUrl, abilityScores, onSendMessage, disabled }: Props) {
+export function ChatMessage({ message, avatarUrl, abilityScores, characterLevel, onSendMessage, disabled }: Props) {
   const t = useLanguageStore((s) => s.t);
   const isUser = message.role === "user";
   const [dmAvatarError, setDmAvatarError] = useState(false);
@@ -87,6 +88,7 @@ export function ChatMessage({ message, avatarUrl, abilityScores, onSendMessage, 
             <SkillCheckRoll
               check={message.checkRequired}
               abilityScores={abilityScores}
+              characterLevel={characterLevel ?? 1}
               onRoll={onSendMessage}
               disabled={disabled}
             />
@@ -214,11 +216,13 @@ function getDifficultyLabel(dc: number): string {
 function SkillCheckRoll({
   check,
   abilityScores,
+  characterLevel,
   onRoll,
   disabled,
 }: {
   check: { stat: string; skill: string; dc: number; description: string };
   abilityScores: AbilityScores;
+  characterLevel: number;
   onRoll: (message: string) => void;
   disabled?: boolean;
 }) {
@@ -226,7 +230,9 @@ function SkillCheckRoll({
 
   const statKey = STAT_KEY_MAP[check.stat.toLowerCase()];
   const score = statKey ? abilityScores[statKey] : 10;
-  const modifier = getAbilityModifier(score);
+  const abilityMod = getAbilityModifier(score);
+  const prof = Math.floor((characterLevel - 1) / 4) + 2;
+  const modifier = abilityMod + prof;
   const diffLabel = getDifficultyLabel(check.dc);
 
   const handleRoll = () => {
@@ -234,7 +240,7 @@ function SkillCheckRoll({
     const d20 = Math.floor(Math.random() * 20) + 1;
     const total = d20 + modifier;
     setRolled(true);
-    onRoll(`${check.skill} check result: ${total} (rolled ${d20} + ${modifier >= 0 ? "+" : ""}${modifier})`);
+    onRoll(`${check.skill} check result: ${total} (rolled ${d20} + ${modifier >= 0 ? "+" : ""}${modifier}) [DC:${check.dc}]`);
   };
 
   return (

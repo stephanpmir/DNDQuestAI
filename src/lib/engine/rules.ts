@@ -1,5 +1,5 @@
 import type { Character } from "@/types/character";
-import type { EngineOutcome, WorldEvent } from "@/types/world";
+import type { EngineOutcome, RollResult, WorldEvent } from "@/types/world";
 import { abilityCheck, attackRoll, damageRoll, modifier, d20, d20Lucky, d } from "./dice";
 import {
   detectKarmaAction,
@@ -1061,11 +1061,36 @@ export function resolveAction(
 
     case "skill_check": {
       const ability = getSkillAbility(playerInput);
-      const dc = levelScaledDC(12, character.level);
-      const prof = proficiencyBonus(character.level);
-      // Gnome Cunning only applies to saving throws vs magic, not skill checks
-      const result = abilityCheck(character.abilityScores[ability], dc, ability, prof, lucky);
       const skillName = ability.charAt(0).toUpperCase() + ability.slice(1);
+
+      // When the player has already rolled via the CHECK_REQUIRED UI, parse their result
+      // instead of rolling independently. Format: "X check result: T (rolled D + M) [DC:N]"
+      const checkResultMatch = playerInput.match(
+        /check result:\s*(\d+)\s*\(rolled\s+(\d+)\s*\+\s*[+-]?\d+\)\s*\[DC:(\d+)\]/i
+      );
+
+      let result: RollResult;
+      if (checkResultMatch) {
+        const total = parseInt(checkResultMatch[1], 10);
+        const rolled = parseInt(checkResultMatch[2], 10);
+        const dc = parseInt(checkResultMatch[3], 10);
+        const mod = total - rolled;
+        result = {
+          type: "check",
+          ability,
+          dc,
+          rolled,
+          modifier: mod,
+          total,
+          success: total >= dc,
+        };
+      } else {
+        const dc = levelScaledDC(12, character.level);
+        const prof = proficiencyBonus(character.level);
+        // Gnome Cunning only applies to saving throws vs magic, not skill checks
+        result = abilityCheck(character.abilityScores[ability], dc, ability, prof, lucky);
+      }
+
       outcome.roll = { ...result, reason: `${skillName} check — testing your skill` };
       if (result.success) {
         outcome.xpGained = skillCheckXpReward(character.level);
