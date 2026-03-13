@@ -108,10 +108,35 @@ function cleanNarrative(text: string): string {
   let cleaned = text;
 
   // Remove preamble text before code fences (e.g. "Response JSON", "Here is the response:")
-  cleaned = cleaned.replace(/^[\s\S]*?(?=```)/m, "");
+  if (cleaned.includes("```")) {
+    cleaned = cleaned.replace(/^[\s\S]*?(?=```)/, "");
+  }
 
   // Remove code fences and their contents if they contain JSON
   cleaned = cleaned.replace(/```(?:json)?[\s\S]*?```/g, "");
+
+  // Remove non-narrative label lines the LLM echoes from system/context messages.
+  // Covers all section headers from the system prompt and engine context messages.
+  const labelPatterns = [
+    "engine\\s*outcome", "response\\s*(?:json|format|language)", "critical\\s*rules",
+    "permanent\\s*facts", "context\\s*window", "current\\s*state", "player\\s*(?:character|action)",
+    "campaign\\s*tone", "mandatory\\s*escalation", "here\\s*is\\s*(?:my|the)\\s*response",
+    "json\\s*response", "narrative\\s*(?:response)?", "dm\\s*response",
+    "dice\\s*roll", "hp\\s*change", "items?\\s*(?:gained|lost)", "gold\\s*change",
+    "xp\\s*gained", "location\\s*change", "new\\s*quest", "quest\\s*completed",
+    "rest\\s*(?:interrupted|event|denied)", "(?:long|short)\\s*rest", "death\\s*save",
+    "damage\\s*(?:dealt|taken)", "item\\s*not\\s*found", "karma\\s*shift",
+    "divine\\s*intervention", "action\\s*denied", "resources?\\s*used",
+    "travel\\s*encounter", "guard\\s*(?:investigation|confrontation)",
+    "trade(?:\\s*failed)?", "pickup(?:\\s*failed)?", "loot\\s*dropped",
+    "drop(?:\\s*failed)?", "equip\\s*:", "identify\\s*:",
+  ].join("|");
+  const labelRegex = new RegExp(`^\\s*(?:#{1,6}\\s*)?(?:${labelPatterns})[^\\n]*$`, "gim");
+  cleaned = cleaned.replace(labelRegex, "");
+
+  // Catch-all: lines that look like engine directives (ALL CAPS label followed by colon)
+  // e.g. "REST DENIED: The character..." or "TRADE FAILED: Player tried..."
+  cleaned = cleaned.replace(/^\s*[A-Z][A-Z _]{3,}:\s.*$/gm, "");
 
   // Remove inline gameStateUpdate blocks (any format)
   cleaned = cleaned.replace(/\*{0,2}gameStateUpdate\*{0,2}\s*[:=]\s*\{[\s\S]*?\}/gi, "");
