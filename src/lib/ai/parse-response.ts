@@ -6,7 +6,8 @@
  * [TAG] is the narrative shown to the player.
  *
  * Supported tags:
- *   [SCENE_IMAGE_PROMPT] — scene description for image generation
+ *   [GENERATE_IMAGE]     — scene description for image generation (only on trigger events)
+ *   [SCENE_IMAGE_PROMPT] — legacy alias for [GENERATE_IMAGE]
  *   [CHECK_REQUIRED]     — JSON object: { stat, skill, dc, description }
  *   [HP]                 — integer HP change (e.g. -5 or +3)
  *   [XP]                 — integer XP gained
@@ -39,6 +40,7 @@ export interface ParsedDMResponse {
  * All recognized bracket tags. Order doesn't matter — we split on any of them.
  */
 const TAGS = [
+  "GENERATE_IMAGE",
   "SCENE_IMAGE_PROMPT",
   "CHECK_REQUIRED",
   "HP",
@@ -121,8 +123,8 @@ export function parseDMResponse(raw: string): ParsedDMResponse {
     }
   }
 
-  // Extract structured fields
-  const rawScenePrompt = fields.get("SCENE_IMAGE_PROMPT") || undefined;
+  // Extract structured fields — prefer GENERATE_IMAGE, fall back to SCENE_IMAGE_PROMPT
+  const rawScenePrompt = fields.get("GENERATE_IMAGE") || fields.get("SCENE_IMAGE_PROMPT") || undefined;
   const sceneImagePrompt = rawScenePrompt ? sanitizeScenePrompt(rawScenePrompt) : undefined;
 
   let checkRequired: CheckRequired | undefined;
