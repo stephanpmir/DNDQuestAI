@@ -146,7 +146,7 @@ interface RequestBody {
 
 const MAX_REGENERATION_ATTEMPTS = 1;
 const MAX_RETRY_ATTEMPTS = 2;
-const RETRY_BASE_DELAY_MS = 1500;
+const RETRY_DELAY_MS = 1500;
 
 /** Sleep for the given number of milliseconds */
 function sleep(ms: number): Promise<void> {
@@ -175,8 +175,76 @@ function isRetryableError(error: unknown): boolean {
   return false;
 }
 
+/**
+ * Build a dedicated ZhipuAI fallback provider using ZHIPU_API_KEY.
+ * This is separate from the Z.ai entry in the main cascade (which uses ZAI_API_KEY)
+ * and serves as a last-resort fallback when all primary providers fail.
+ */
+function getZhipuFallback(): LLMProvider | null {
+  const proxyFetch = getProxyFetch();
+  const key = process.env.ZHIPU_API_KEY || process.env.ZAI_API_KEY;
+  if (!key) return null;
+  return {
+    client: new OpenAI({
+      baseURL: "https://open.bigmodel.cn/api/paas/v4",
+      apiKey: key,
+      timeout: 30_000,
+      fetch: proxyFetch,
+    }),
+    model: "glm-4.5-air",
+    name: "ZhipuAI-Fallback",
+    extraBody: { thinking: { type: "disabled" } },
+  };
+}
+
+/** Try a single provider with retries. Returns content string or null on failure. */
+async function tryProvider(
+  provider: LLMProvider,
+  messages: OpenAI.ChatCompletionMessageParam[],
+): Promise<{ content: string | null; lastError: unknown }> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+    try {
+      console.error(`[DM API] ${provider.name} attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS + 1}...`);
+      const response = await provider.client.chat.completions.create({
+        model: provider.model,
+        messages,
+        max_tokens: 1024,
+        ...provider.extraBody,
+      } as OpenAI.ChatCompletionCreateParamsNonStreaming);
+      const content = response.choices[0]?.message?.content;
+      console.error(`[DM API] ${provider.name} responded, content length: ${content?.length ?? 0}`);
+      // Treat empty/null content as failure (e.g. reasoning-token overflow)
+      if (!content || content.trim().length === 0) {
+        console.error(
+          `[DM API] ${provider.name} returned empty content, falling through`
+        );
+        lastError = new Error(`${provider.name} returned empty content`);
+        break; // No point retrying empty responses
+      }
+      console.error(`[DM API] ${provider.name} succeeded (${content.length} chars)`);
+      return { content, lastError: null };
+    } catch (error) {
+      lastError = error;
+      const status = (error as { status?: number }).status;
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error(
+        `[DM API] ${provider.name} attempt ${attempt + 1} FAILED: status=${status ?? "N/A"} msg=${errMsg}`
+      );
+      if (!isRetryableError(error) || attempt >= MAX_RETRY_ATTEMPTS) {
+        console.error(`[DM API] ${provider.name} error not retryable or retries exhausted`);
+        break;
+      }
+      console.error(`[DM API] ${provider.name} retrying in ${RETRY_DELAY_MS}ms...`);
+      await sleep(RETRY_DELAY_MS);
+    }
+  }
+  return { content: null, lastError };
+}
+
 /** Make an LLM call, trying each provider in order with retry on retryable errors.
- *  Empty content (200 but no text) is treated as a failure and falls through. */
+ *  Empty content (200 but no text) is treated as a failure and falls through.
+ *  If all primary providers fail, falls back to ZhipuAI as last resort. */
 async function callWithRetry(
   messages: OpenAI.ChatCompletionMessageParam[]
 ): Promise<string> {
@@ -184,49 +252,28 @@ async function callWithRetry(
   console.error(`[DM API] Starting LLM call with ${providers.length} provider(s): ${providers.map(p => p.name).join(", ")}`);
   let lastError: unknown;
 
+  // Try each primary provider in order
   for (const provider of providers) {
     console.error(`[DM API] Trying ${provider.name} (model: ${provider.model})`);
-    for (let attempt = 0; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
-      try {
-        console.error(`[DM API] ${provider.name} attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS + 1}...`);
-        const response = await provider.client.chat.completions.create({
-          model: provider.model,
-          messages,
-          max_tokens: 1024,
-          ...provider.extraBody,
-        } as OpenAI.ChatCompletionCreateParamsNonStreaming);
-        const content = response.choices[0]?.message?.content;
-        console.error(`[DM API] ${provider.name} responded, content length: ${content?.length ?? 0}`);
-        // Treat empty/null content as failure (e.g. reasoning-token overflow)
-        if (!content || content.trim().length === 0) {
-          console.error(
-            `[DM API] ${provider.name} returned empty content, falling through to next provider`
-          );
-          lastError = new Error(`${provider.name} returned empty content`);
-          break; // Move to next provider (no point retrying empty responses)
-        }
-        console.error(`[DM API] ${provider.name} succeeded (${content.length} chars)`);
-        return content;
-      } catch (error) {
-        lastError = error;
-        const status = (error as { status?: number }).status;
-        const errMsg = error instanceof Error ? error.message : String(error);
-        console.error(
-          `[DM API] ${provider.name} attempt ${attempt + 1} FAILED: status=${status ?? "N/A"} msg=${errMsg}`
-        );
-        if (!isRetryableError(error) || attempt >= MAX_RETRY_ATTEMPTS) {
-          console.error(`[DM API] ${provider.name} error not retryable or retries exhausted, moving to next provider`);
-          break; // Move to next provider
-        }
-        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
-        console.error(`[DM API] ${provider.name} retrying in ${delay}ms...`);
-        await sleep(delay);
-      }
-    }
+    const result = await tryProvider(provider, messages);
+    if (result.content) return result.content;
+    lastError = result.lastError;
     console.error(`[DM API] ${provider.name} exhausted, trying next provider...`);
   }
 
-  console.error(`[DM API] All providers exhausted. Last error:`, lastError);
+  // All primary providers failed — try ZhipuAI dedicated fallback
+  const zhipuFallback = getZhipuFallback();
+  if (zhipuFallback) {
+    console.error(`[DM API] All primary providers failed. Attempting ZhipuAI fallback...`);
+    const result = await tryProvider(zhipuFallback, messages);
+    if (result.content) {
+      console.error(`[DM API] ZhipuAI fallback succeeded — story continues seamlessly`);
+      return result.content;
+    }
+    lastError = result.lastError;
+  }
+
+  console.error(`[DM API] All providers (including fallback) exhausted. Last error:`, lastError);
   throw lastError;
 }
 
@@ -419,7 +466,7 @@ export async function POST(request: Request) {
     console.error("DM API error:", errMsg, error);
 
     return NextResponse.json(
-      { error: `DM API failed: ${errMsg}` },
+      { error: "The winds of fate pause for a moment\u2026 please try again." },
       { status: 500 }
     );
   }

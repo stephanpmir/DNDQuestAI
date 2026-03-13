@@ -251,7 +251,7 @@ export const EN_STRINGS: UITranslations = {
   "game.sendAction": "Send",
   "game.shortRest": "Short Rest",
   "game.longRest": "Long Rest",
-  "game.errorMessage": "The Dungeon Master pauses briefly... Something went wrong behind the scenes. Please try your action again.",
+  "game.errorMessage": "The winds of fate pause for a moment\u2026 please try again.",
   "game.defaultFameGain": "Your deeds have been noticed",
   "game.defaultFameLoss": "Your reputation has suffered",
 
