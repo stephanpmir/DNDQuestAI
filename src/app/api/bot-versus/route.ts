@@ -32,7 +32,7 @@ function getGrokClient(): OpenAI {
   return new OpenAI({ baseURL: "https://api.x.ai/v1", apiKey: key, timeout: 60_000, fetch: proxyFetch });
 }
 
-const GROK_MODEL = "grok-2";
+const GROK_MODEL = "grok-2-latest";
 
 const GROK_SYSTEM_PROMPT = `You are playing a solo D&D 5e text adventure as Zephmir, a Female Tiefling Rogue with high Charisma.
 You are a real player — read the DM's narrative carefully and decide your next action.
