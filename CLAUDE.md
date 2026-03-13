@@ -10,9 +10,9 @@ Z.ai requires "thinking":{"type":"disabled"} in request body. Use glm-4.5-air mo
 On 429/503/502 or empty content, fall through to next provider.
 IMAGE GENERATION
 Endpoint: gen.pollinations.ai (NOT image.pollinations.ai — that is deprecated and blocked in China)
-Two proxy functions (never call Pollinations directly from browser):
-  proxy-portrait.js — character portraits. Reads width/height from query params (default 512x768). No negative prompt. No prompt wrapping.
-  proxy-scene.js — scene/landscape images. Hardcoded 800x450. Prepends "environment landscape architecture", appends "no people no faces no characters wide establishing shot dark fantasy digital art dramatic lighting". Includes negative param to block people/faces/characters.
+Proxy function: /.netlify/functions/proxy-portrait (handles both portraits and scenes)
+  Portraits: default 512x768, prompt passed as-is
+  Scenes: pass width=800&height=450, client prepends "environment landscape" and appends "no people wide shot" to prompt
 DM avatar: fixed URL with seed 666, prompt is dragon eye
 Portrait: generated from character appearance fields via /api/portrait-prompt
 DM RESPONSE FORMAT
@@ -44,8 +44,8 @@ Do not let sceneImagePrompt or checkRequired appear in the narrative text shown 
 SceneImage component must be wrapped in an error boundary so it cannot crash the app
 Z.ai GLM reasoning models return empty content — always use glm-4.5-air with thinking disabled
 proxy-portrait.js must read width/height from query params — never hardcode portrait dimensions (512x768)
-Scene image prompts must be environment-only — no characters, races, classes, or living beings. proxy-scene.js handles all prompt wrapping and negative prompts
-Never call Pollinations directly from the browser — always use the proxy functions
+Scene image prompts must be environment-only — no characters, races, classes, or living beings. Client prepends/appends environment keywords before calling proxy-portrait
+Never call Pollinations directly from the browser — always use proxy-portrait
 [SCENE_IMAGE_PROMPT] values: architecture, weather, lighting, objects only. Never mention people/figures/heroes
 NARRATIVE RULES
 Maximum 150 words per DM response, 3 paragraphs max, 2-4 sentences each.
