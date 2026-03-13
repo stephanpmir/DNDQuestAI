@@ -192,7 +192,7 @@ async function callWithRetry(
         const response = await provider.client.chat.completions.create({
           model: provider.model,
           messages,
-          max_tokens: 400,
+          max_tokens: 1024,
           ...provider.extraBody,
         } as OpenAI.ChatCompletionCreateParamsNonStreaming);
         const content = response.choices[0]?.message?.content;
