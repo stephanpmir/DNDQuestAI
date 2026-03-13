@@ -350,6 +350,19 @@ async function callGrok(
 
 // ── Turn log types ───────────────────────────────────────────────
 
+interface TurnGameState {
+  hp: number;
+  maxHp: number;
+  xp: number;
+  gold: number;
+  ac: number;
+  location: string;
+  karma: number;
+  fame: number;
+  worn: string[];
+  backpack: string[];
+}
+
 interface VersusTurn {
   turn: number;
   grok: {
@@ -368,12 +381,26 @@ interface VersusTurn {
     tagsFound: string[];
     rawResponse: string;
   };
+  gameState: TurnGameState | null;
   error: string | null;
 }
 
 // ── Main handler ─────────────────────────────────────────────────
 
 const TOTAL_TURNS = 10;
+
+function snapshotGameState(gs: InternalGameState): TurnGameState {
+  const worn = [...gs.character.equipped];
+  const wornLower = new Set(worn.map(i => i.toLowerCase()));
+  const backpack = gs.character.inventory.filter(i => !wornLower.has(i.toLowerCase()));
+  return {
+    hp: gs.character.hp, maxHp: gs.character.maxHp,
+    xp: gs.character.xp, gold: gs.character.gold, ac: gs.character.ac,
+    location: gs.location,
+    karma: gs.character.karma ?? 0, fame: gs.character.fame ?? 0,
+    worn, backpack,
+  };
+}
 
 async function runVersus(): Promise<NextResponse> {
   const startTime = Date.now();
@@ -411,6 +438,7 @@ async function runVersus(): Promise<NextResponse> {
         imagePrompt: dmResult.imagePrompt, tagsFound: dmResult.tagsFound,
         rawResponse: dmResult.rawResponse,
       },
+      gameState: snapshotGameState(gs),
       error: null,
     });
   } catch (err: unknown) {
@@ -433,7 +461,7 @@ async function runVersus(): Promise<NextResponse> {
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       errors.push(`Turn ${i} Grok failed: ${errMsg}`);
-      turns.push({ turn: i, grok: null, dm: { narrative: "", provider: "", responseTimeMs: 0, checkRoll: null, imagePrompt: null, tagsFound: [], rawResponse: "" }, error: `Grok failed: ${errMsg}` });
+      turns.push({ turn: i, grok: null, dm: { narrative: "", provider: "", responseTimeMs: 0, checkRoll: null, imagePrompt: null, tagsFound: [], rawResponse: "" }, gameState: snapshotGameState(gs), error: `Grok failed: ${errMsg}` });
       continue;
     }
     const grokTimeMs = Date.now() - grokStart;
@@ -462,6 +490,7 @@ async function runVersus(): Promise<NextResponse> {
           imagePrompt: dmResult.imagePrompt, tagsFound: dmResult.tagsFound,
           rawResponse: dmResult.rawResponse,
         },
+        gameState: snapshotGameState(gs),
         error: null,
       });
     } catch (err: unknown) {
@@ -475,6 +504,7 @@ async function runVersus(): Promise<NextResponse> {
           rawResponse: grokResult.rawResponse,
         },
         dm: { narrative: "", provider: "", responseTimeMs: Date.now() - dmStart, checkRoll: null, imagePrompt: null, tagsFound: [], rawResponse: "" },
+        gameState: snapshotGameState(gs),
         error: `DM failed: ${errMsg}`,
       });
     }
@@ -482,15 +512,20 @@ async function runVersus(): Promise<NextResponse> {
 
   // Build summary report
   const successfulTurns = turns.filter(t => !t.error);
-  const EXPECTED_TAGS = ["HP", "XP", "GOLD", "LOCATION"];
 
+  // Validate actual state changes — flag if values never change across all turns
   const consistencyIssues: string[] = [];
-  for (const turn of successfulTurns) {
-    if (turn.turn === 0) continue; // opening turn may differ
-    const missing = EXPECTED_TAGS.filter(tag => !turn.dm.tagsFound.includes(tag));
-    if (missing.length > 0) {
-      consistencyIssues.push(`Turn ${turn.turn}: missing tags [${missing.join(", ")}]`);
-    }
+  const statesWithData = turns.map(t => t.gameState).filter(Boolean) as TurnGameState[];
+  if (statesWithData.length >= 2) {
+    const first = statesWithData[0];
+    const hpFrozen = statesWithData.every(s => s.hp === first.hp && s.maxHp === first.maxHp);
+    const xpFrozen = statesWithData.every(s => s.xp === first.xp);
+    const goldFrozen = statesWithData.every(s => s.gold === first.gold);
+    const locationFrozen = statesWithData.every(s => s.location === first.location);
+    if (hpFrozen) consistencyIssues.push("HP never changed across all turns — state may be frozen");
+    if (xpFrozen) consistencyIssues.push("XP never changed across all turns — state may be frozen");
+    if (goldFrozen) consistencyIssues.push("Gold never changed across all turns — state may be frozen");
+    if (locationFrozen) consistencyIssues.push("Location never changed across all turns — state may be frozen");
   }
 
   const grokTimes = turns.filter(t => t.grok).map(t => t.grok!.responseTimeMs);
@@ -501,8 +536,16 @@ async function runVersus(): Promise<NextResponse> {
   const checkRolls = successfulTurns.map(t => t.dm.checkRoll).filter(Boolean);
   const imagePrompts = successfulTurns.map(t => t.dm.imagePrompt).filter(Boolean);
 
-  const narrativeConsistencyScore = successfulTurns.length > 0
-    ? Math.round((successfulTurns.filter(t => t.turn === 0 || EXPECTED_TAGS.every(tag => t.dm.tagsFound.includes(tag))).length / successfulTurns.length) * 100)
+  // Score: percentage of tracked fields (HP, XP, gold, location) that actually changed
+  const trackedFields = 4;
+  const fieldsChanged = [
+    statesWithData.length >= 2 && !statesWithData.every(s => s.hp === statesWithData[0].hp && s.maxHp === statesWithData[0].maxHp),
+    statesWithData.length >= 2 && !statesWithData.every(s => s.xp === statesWithData[0].xp),
+    statesWithData.length >= 2 && !statesWithData.every(s => s.gold === statesWithData[0].gold),
+    statesWithData.length >= 2 && !statesWithData.every(s => s.location === statesWithData[0].location),
+  ].filter(Boolean).length;
+  const narrativeConsistencyScore = statesWithData.length >= 2
+    ? Math.round((fieldsChanged / trackedFields) * 100)
     : 0;
 
   return NextResponse.json({

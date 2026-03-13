@@ -201,6 +201,71 @@
   .bug-summary h3 { color: #cc4444; font-size: 0.95rem; margin-bottom: 8px; }
   .bug-summary li { color: #e06060; font-size: 0.85rem; margin-bottom: 4px; line-height: 1.4; }
 
+  .state-panel {
+    margin: 10px 14px 12px;
+    padding: 12px 14px;
+    background: #0a0a0a;
+    border: 1px solid rgba(201,162,39,0.15);
+    border-radius: 6px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 20px;
+    font-size: 0.82rem;
+  }
+  .state-panel .state-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .state-panel .state-label {
+    color: #c9a227;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.5px;
+  }
+  .state-panel .state-value {
+    color: #e8d5b0;
+    font-weight: 600;
+  }
+  .state-panel .hp-bar-wrap {
+    grid-column: 1 / -1;
+    margin-bottom: 2px;
+  }
+  .state-panel .hp-bar-outer {
+    background: #1a0a0a;
+    border-radius: 3px;
+    height: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(107,0,0,0.4);
+  }
+  .state-panel .hp-bar-inner {
+    height: 100%;
+    background: linear-gradient(90deg, #6b0000, #a02020);
+    border-radius: 2px;
+    transition: width 0.3s;
+  }
+  .state-panel .hp-text {
+    text-align: center;
+    font-size: 0.75rem;
+    color: #e8d5b0;
+    margin-top: 2px;
+  }
+  .state-panel .equip-list {
+    grid-column: 1 / -1;
+    color: #b0a080;
+    font-size: 0.78rem;
+    line-height: 1.4;
+  }
+  .state-panel .equip-list .equip-title {
+    color: #c9a227;
+    font-weight: 700;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
   .loading { animation: pulse 1.5s infinite; }
 </style>
@@ -261,6 +326,27 @@
     // Image prompt
     if (turn.dm.imagePrompt) {
       html += `<div class="image-prompt">&#x1F5BC; Scene: ${escapeHtml(turn.dm.imagePrompt)}</div>`;
+    }
+
+    // Game state panel
+    if (turn.gameState) {
+      const gs = turn.gameState;
+      const hpPct = gs.maxHp > 0 ? Math.round((gs.hp / gs.maxHp) * 100) : 0;
+      html += `<div class="state-panel">`;
+      html += `<div class="hp-bar-wrap"><div class="state-row"><span class="state-label">HP</span><span class="state-value">${gs.hp} / ${gs.maxHp}</span></div><div class="hp-bar-outer"><div class="hp-bar-inner" style="width:${hpPct}%"></div></div></div>`;
+      html += `<div class="state-row"><span class="state-label">XP</span><span class="state-value">${gs.xp}</span></div>`;
+      html += `<div class="state-row"><span class="state-label">Gold</span><span class="state-value">${gs.gold}</span></div>`;
+      html += `<div class="state-row"><span class="state-label">AC</span><span class="state-value">${gs.ac}</span></div>`;
+      html += `<div class="state-row"><span class="state-label">Location</span><span class="state-value">${escapeHtml(gs.location)}</span></div>`;
+      html += `<div class="state-row"><span class="state-label">Karma</span><span class="state-value">${gs.karma}</span></div>`;
+      html += `<div class="state-row"><span class="state-label">Fame</span><span class="state-value">${gs.fame}</span></div>`;
+      if (gs.worn && gs.worn.length > 0) {
+        html += `<div class="equip-list"><div class="equip-title">Worn</div>${escapeHtml(gs.worn.join(', '))}</div>`;
+      }
+      if (gs.backpack && gs.backpack.length > 0) {
+        html += `<div class="equip-list"><div class="equip-title">Backpack</div>${escapeHtml(gs.backpack.join(', '))}</div>`;
+      }
+      html += `</div>`;
     }
 
     // Grok's response
