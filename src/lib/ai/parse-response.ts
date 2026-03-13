@@ -56,6 +56,14 @@ export function parseDMResponse(raw: string): { narrative: string; gameStateUpda
           narrative = obj.narrative;
         }
       }
+      // If JSON parse failed but the fence contains a "narrative" key,
+      // try to extract the value with a regex
+      if (!narrative) {
+        const narMatch = fenceMatch[1].match(/"narrative"\s*:\s*"([\s\S]*?)"\s*[,}]/);
+        if (narMatch) {
+          narrative = narMatch[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
+        }
+      }
     }
   }
 
@@ -76,7 +84,14 @@ export function parseDMResponse(raw: string): { narrative: string; gameStateUpda
 
   // Last resort: use raw text but strip any JSON/syntax artifacts
   if (!narrative) {
-    narrative = raw;
+    // Try extracting narrative value even from malformed JSON
+    const narRegex = /"narrative"\s*:\s*"([\s\S]*?)"\s*[,}]/;
+    const narFallback = raw.match(narRegex);
+    if (narFallback) {
+      narrative = narFallback[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
+    } else {
+      narrative = raw;
+    }
   }
 
   // Clean the narrative of any syntax artifacts
@@ -91,6 +106,9 @@ export function parseDMResponse(raw: string): { narrative: string; gameStateUpda
  */
 function cleanNarrative(text: string): string {
   let cleaned = text;
+
+  // Remove preamble text before code fences (e.g. "Response JSON", "Here is the response:")
+  cleaned = cleaned.replace(/^[\s\S]*?(?=```)/m, "");
 
   // Remove code fences and their contents if they contain JSON
   cleaned = cleaned.replace(/```(?:json)?[\s\S]*?```/g, "");
