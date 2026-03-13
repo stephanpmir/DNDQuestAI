@@ -23,7 +23,7 @@ exports.handler = async (event) => {
   // For landscape/scene requests (width > height), force environment-only prompt
   const isLandscape = width > height;
   const finalPrompt = isLandscape
-    ? `environment scene landscape architecture no people no characters no faces no portraits ${prompt} wide establishing shot dark fantasy digital art dramatic lighting`
+    ? `environment landscape ${prompt} no people wide shot dark fantasy`
     : prompt;
 
   const upstreamUrl =
@@ -32,8 +32,9 @@ exports.handler = async (event) => {
     (key ? `&key=${key}` : "");
 
   console.log("[proxy-portrait] Prompt received:", prompt.substring(0, 120));
-  console.log("[proxy-portrait] Seed:", seed);
-  console.log("[proxy-portrait] Upstream URL:", upstreamUrl.substring(0, 250));
+  console.log("[proxy-portrait] Final prompt:", finalPrompt.substring(0, 200), `(${finalPrompt.length} chars)`);
+  console.log("[proxy-portrait] Seed:", seed, "Dimensions:", width, "x", height);
+  console.log("[proxy-portrait] Full upstream URL:", upstreamUrl);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 45000);

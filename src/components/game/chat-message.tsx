@@ -192,14 +192,6 @@ function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
           }}
         />
       )}
-      {/* DEBUG: show prompt text — remove after debugging */}
-      <div style={{
-        position: "absolute", bottom: 4, left: 4, right: 4,
-        fontSize: 9, color: "#444", fontFamily: "monospace",
-        overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
-      }}>
-        {prompt}
-      </div>
     </div>
   );
 }
