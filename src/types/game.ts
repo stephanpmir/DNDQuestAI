@@ -11,7 +11,7 @@ export interface GameState {
 
 export interface ChatMessage {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "roll_result";
   narrative: string;
   gameState?: Partial<GameState>;
   timestamp: number;

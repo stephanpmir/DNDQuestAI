@@ -299,13 +299,33 @@ export function GameView() {
         };
         addEvent(worldEvent);
 
+        // If this was a check roll, insert a centered roll card before the DM narrative
+        const isCheckRoll = /\[CHECK_ROLL:/.test(message);
+        if (isCheckRoll && data.engineOutcome?.roll) {
+          const roll = data.engineOutcome.roll;
+          // Extract check info from the message pattern [CHECK_ROLL:skill|stat|dc]
+          const checkMatch = message.match(/\[CHECK_ROLL:([^|]+)\|([^|]+)\|(\d+)\]/);
+          const rollCardMsg: ChatMessageType = {
+            id: generateId(),
+            role: "roll_result",
+            narrative: "",
+            timestamp: Date.now(),
+            rollResult: roll,
+            checkRequired: checkMatch
+              ? { skill: checkMatch[1], stat: checkMatch[2], dc: parseInt(checkMatch[3], 10), description: "" }
+              : undefined,
+          };
+          addMessage(rollCardMsg);
+        }
+
         // Add DM message with roll result and karma/fame indicators
         const dmMsg: ChatMessageType = {
           id: generateId(),
           role: "assistant",
           narrative: data.narrative,
           timestamp: Date.now(),
-          rollResult: data.engineOutcome?.roll,
+          // Don't duplicate roll display when a roll card was already inserted
+          rollResult: isCheckRoll ? undefined : data.engineOutcome?.roll,
           karmaChange: data.karmaChange?.amount,
           fameChange: data.fameChange,
           sceneImagePrompt: data.sceneImagePrompt,
@@ -368,6 +388,12 @@ export function GameView() {
 
   const sendToDM = useCallback(
     (message: string) => callDMApi(message, true),
+    [callDMApi]
+  );
+
+  /** Send a check roll to the DM without showing a player bubble */
+  const sendCheckRoll = useCallback(
+    (message: string) => callDMApi(message, false),
     [callDMApi]
   );
 
@@ -444,6 +470,7 @@ export function GameView() {
                 message={msg}
                 avatarUrl={character.avatarUrl}
                 onSendMessage={sendToDM}
+                onCheckRoll={sendCheckRoll}
                 disabled={isLoading}
               />
             ))}

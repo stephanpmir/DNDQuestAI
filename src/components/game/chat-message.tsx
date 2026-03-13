@@ -11,13 +11,20 @@ interface Props {
   message: ChatMessageType;
   avatarUrl?: string;
   onSendMessage?: (message: string) => void;
+  onCheckRoll?: (message: string) => void;
   disabled?: boolean;
 }
 
-export function ChatMessage({ message, avatarUrl, onSendMessage, disabled }: Props) {
+export function ChatMessage({ message, avatarUrl, onSendMessage, onCheckRoll, disabled }: Props) {
   const t = useLanguageStore((s) => s.t);
   const isUser = message.role === "user";
+  const isRollResult = message.role === "roll_result";
   const [dmAvatarError, setDmAvatarError] = useState(false);
+
+  // Centered roll result card — not a player or DM message
+  if (isRollResult && message.rollResult) {
+    return <RollResultCard roll={message.rollResult} check={message.checkRequired} />;
+  }
 
   if (isUser) {
     return (
@@ -81,10 +88,10 @@ export function ChatMessage({ message, avatarUrl, onSendMessage, disabled }: Pro
             <SceneImage prompt={message.sceneImagePrompt} seed={message.timestamp % 1000000} />
           )}
           <TypewriterText text={message.narrative} />
-          {message.checkRequired && onSendMessage && (
+          {message.checkRequired && onCheckRoll && (
             <SkillCheckRoll
               check={message.checkRequired}
-              onRoll={onSendMessage}
+              onRoll={onCheckRoll}
               disabled={disabled}
             />
           )}
@@ -195,6 +202,128 @@ function getDifficultyLabel(dc: number): string {
   if (dc <= 14) return "Medium";
   if (dc <= 19) return "Hard";
   return "Very Hard";
+}
+
+/** Centered roll result card — distinct from DM/player bubbles. */
+function RollResultCard({
+  roll,
+  check,
+}: {
+  roll: import("@/types/world").RollResult;
+  check?: { stat: string; skill: string; dc: number; description: string };
+}) {
+  const [animDone, setAnimDone] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setAnimDone(true), 600);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const passed = roll.success;
+  const isCrit = roll.rolled === 20;
+  const isFumble = roll.rolled === 1;
+
+  const checkLabel = check
+    ? `${check.stat.charAt(0).toUpperCase() + check.stat.slice(1)} (${check.skill})`
+    : roll.reason ?? "Ability Check";
+
+  return (
+    <div style={{ display: "flex", justifyContent: "center", margin: "8px 0" }}>
+      <style>{`
+        @keyframes diceReveal {
+          0% { opacity: 0; transform: scale(0.6) rotate(-15deg); }
+          50% { opacity: 1; transform: scale(1.15) rotate(5deg); }
+          100% { opacity: 1; transform: scale(1) rotate(0deg); }
+        }
+        @keyframes resultSlam {
+          0% { opacity: 0; transform: scale(2); }
+          60% { opacity: 1; transform: scale(0.9); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 360,
+          padding: "16px 24px",
+          borderRadius: 12,
+          border: `2px solid ${passed ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)"}`,
+          backgroundColor: passed ? "rgba(34,197,94,0.06)" : "rgba(239,68,68,0.06)",
+          textAlign: "center",
+        }}
+      >
+        {/* Check label */}
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: "#c9a227",
+            fontFamily: "'Cinzel', serif",
+            letterSpacing: "0.05em",
+            marginBottom: 8,
+          }}
+        >
+          {checkLabel}
+        </div>
+
+        {/* Dice result row */}
+        <div
+          style={{
+            fontSize: 22,
+            fontWeight: 700,
+            fontFamily: "monospace",
+            color: "#e8d5b0",
+            marginBottom: 4,
+            animation: "diceReveal 0.6s ease-out both",
+          }}
+        >
+          <span role="img" aria-label="dice">🎲</span>{" "}
+          <span style={{ color: isCrit ? "#fbbf24" : isFumble ? "#ef4444" : "#e8d5b0" }}>
+            {animDone ? roll.rolled : "?"}
+          </span>{" "}
+          <span style={{ color: "#8a8a8a" }}>
+            {roll.modifier >= 0 ? "+" : ""}{roll.modifier}
+          </span>{" "}
+          <span style={{ color: "#8a8a8a" }}>=</span>{" "}
+          <span style={{ fontWeight: 900, color: "#fff" }}>{animDone ? roll.total : "?"}</span>
+        </div>
+
+        {/* DC line */}
+        {roll.dc != null && (
+          <div style={{ fontSize: 12, color: "#8a8a8a", marginBottom: 10 }}>
+            vs DC {roll.dc}
+          </div>
+        )}
+
+        {/* PASS / FAIL */}
+        <div
+          style={{
+            fontSize: 28,
+            fontWeight: 900,
+            fontFamily: "'Cinzel', serif",
+            letterSpacing: "0.1em",
+            color: passed ? "#22c55e" : "#ef4444",
+            animation: animDone ? "resultSlam 0.3s ease-out both" : undefined,
+            opacity: animDone ? 1 : 0,
+          }}
+        >
+          {passed ? "PASS" : "FAIL"}
+        </div>
+
+        {/* Crit/fumble callout */}
+        {isCrit && (
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#fbbf24", marginTop: 2 }}>
+            NATURAL 20!
+          </div>
+        )}
+        {isFumble && (
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#ef4444", marginTop: 2 }}>
+            NATURAL 1!
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /** Dice roll UI for DM-requested skill checks.
