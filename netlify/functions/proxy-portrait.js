@@ -16,11 +16,13 @@ exports.handler = async (event) => {
   }
 
   const seed = params.seed || String(Math.floor(Math.random() * 999999999));
+  const width = parseInt(params.width, 10) || 512;
+  const height = parseInt(params.height, 10) || 768;
   const key = process.env.NEXT_PUBLIC_POLLINATIONS_TOKEN || "";
 
   const upstreamUrl =
     `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}` +
-    `?model=flux&width=512&height=768&seed=${seed}&enhance=true&nologo=true` +
+    `?model=flux&width=${width}&height=${height}&seed=${seed}&enhance=true&nologo=true` +
     (key ? `&key=${key}` : "");
 
   console.log("[proxy-portrait] Prompt received:", prompt.substring(0, 120));
