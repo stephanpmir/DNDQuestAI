@@ -131,6 +131,9 @@ ${karmaSection}${companionSection}${campaignSection}
 ## IMAGES
 Generate a SCENE_IMAGE_PROMPT at least once every 4 turns. Do not wait for location changes — generate one on any visually interesting moment.
 
+## COMBAT RULES — CRITICAL
+Every 4 to 6 turns, or whenever the player is in a dangerous area such as a forest, dungeon, or alley AND fails a Stealth or Perception check, IMMEDIATELY start a combat encounter. Output the tag [COMBAT_START] followed by the enemy name and CR rating, for example: [COMBAT_START] Goblin Scout CR1/4. In combat turns describe the enemy action, roll their attack against the player AC, apply damage if they hit by updating the HP tag, then wait for the player response. Combat ends when the enemy is defeated or the player flees. Never skip or avoid fights — D&D requires combat risk.
+
 ## Response Format
 Write ONLY clean narrative prose first (no JSON, no field names, no keys). Then on separate lines below the narrative, include structured data using bracketed delimiters. Each delimiter goes on its own line followed by its value.
 

@@ -54,6 +54,7 @@ const TAGS = [
   "BACKPACK",
   "RESOURCES",
   "CRIMES",
+  "COMBAT_START",
 ] as const;
 
 /**
@@ -140,6 +141,42 @@ export function parseDMResponse(raw: string): ParsedDMResponse {
  */
 let _lastLocation: string | null = null;
 let _sameLocationCount = 0;
+
+/**
+ * Detect item acquisition language in narrative and warn if backpack
+ * did not change — indicates items mentioned in prose were not added
+ * to inventory by the engine.
+ */
+const ITEM_ACQUISITION_PATTERNS = [
+  /you\s+(?:find|found)\b/i,
+  /you\s+(?:pocket|pocketed)\b/i,
+  /you\s+(?:pick\s+up|picked\s+up)\b/i,
+  /you\s+(?:receive|received)\b/i,
+  /you\s+(?:grab|grabbed)\b/i,
+  /you\s+(?:collect|collected)\b/i,
+  /you\s+(?:take|took|taken)\b/i,
+  /you\s+(?:loot|looted)\b/i,
+  /among\s+the\s+items\b/i,
+  /hands?\s+you\b/i,
+  /gives?\s+you\b/i,
+];
+
+export function checkItemAcquisition(
+  narrative: string,
+  backpackBefore: string[],
+  backpackAfter: string[],
+): void {
+  const mentionsAcquisition = ITEM_ACQUISITION_PATTERNS.some(p => p.test(narrative));
+  if (mentionsAcquisition && backpackBefore.length === backpackAfter.length) {
+    const same = backpackBefore.length === backpackAfter.length &&
+      backpackBefore.every((item, i) => item === backpackAfter[i]);
+    if (same) {
+      console.warn(
+        `[parse-response] ITEM ACQUISITION WARNING: Narrative mentions finding/receiving an item but backpack did not change`
+      );
+    }
+  }
+}
 
 export function checkLocationStagnation(currentLocation: string): void {
   if (_lastLocation && currentLocation.toLowerCase() === _lastLocation.toLowerCase()) {

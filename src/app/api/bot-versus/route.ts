@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { buildSystemPrompt, buildEngineContextMessage } from "@/lib/ai/dm-prompt";
-import { parseDMResponse, checkLocationStagnation } from "@/lib/ai/parse-response";
+import { parseDMResponse, checkLocationStagnation, checkItemAcquisition } from "@/lib/ai/parse-response";
 import { preGenerate, postGenerate } from "@/lib/engine/pipeline";
 import type { PipelineInput } from "@/lib/engine/pipeline";
 import { getRandomThemeForLevel, getRandomCampaign } from "@/lib/campaigns";
@@ -239,6 +239,7 @@ async function runDMTurn(
   }
 
   const eo = preResult.engineOutcome;
+  const backpackBefore = [...gs.character.inventory];
   if (eo.hpChange) gs.character.hp = Math.max(0, Math.min(gs.character.maxHp, gs.character.hp + eo.hpChange));
   if (eo.itemsGained.length > 0) gs.character.inventory.push(...eo.itemsGained);
   if (eo.itemsLost.length > 0) {
@@ -257,6 +258,9 @@ async function runDMTurn(
 
   // Track location stagnation
   checkLocationStagnation(gs.location);
+
+  // Warn if narrative mentions item acquisition but inventory didn't change
+  checkItemAcquisition(narrative, backpackBefore, gs.character.inventory);
 
   return { narrative, checkRoll: parsed.checkRequired ? { stat: parsed.checkRequired.stat, skill: parsed.checkRequired.skill, dc: parsed.checkRequired.dc, description: parsed.checkRequired.description } : null, imagePrompt: parsed.sceneImagePrompt ?? null, provider, tagsFound, rawResponse: rawText };
 }
