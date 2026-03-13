@@ -32,7 +32,7 @@ function getGrokClient(): OpenAI {
   return new OpenAI({ baseURL: "https://api.x.ai/v1", apiKey: key, timeout: 60_000, fetch: proxyFetch });
 }
 
-const GROK_MODEL_PRIMARY = "grok-4-fast-reasoning";
+const GROK_MODEL_PRIMARY = "grok-4-1-fast-non-reasoning";
 const GROK_MODEL_FALLBACK = "grok-code-fast-1";
 
 const GROK_SYSTEM_PROMPT = `You are playing a solo D&D 5e text adventure as Zephmir, a Female Tiefling Rogue with high Charisma.
@@ -290,7 +290,7 @@ async function callGrokWithModel(
     messages,
     // Reasoning models require max_completion_tokens (covers thinking + output).
     // Non-reasoning models use max_tokens.
-    ...(isReasoning ? { max_completion_tokens: 2048 } : { max_tokens: 512 }),
+    ...(isReasoning ? { max_completion_tokens: 512 } : { max_tokens: 512 }),
   });
   const content = response.choices[0]?.message?.content;
   if (!content || content.trim().length === 0) throw new Error("Grok returned empty content");
