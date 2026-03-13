@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
@@ -121,6 +121,7 @@ export function CharacterWizard() {
   const [halfElfBonus1, setHalfElfBonus1] = useState("");
   const [halfElfBonus2, setHalfElfBonus2] = useState("");
   const [appearanceFields, setAppearanceFields] = useState<AppearanceFields>(createDefaultAppearanceFields());
+  const [appearanceLoading, setAppearanceLoading] = useState(false);
 
   const classData = CLASS_DATA[character.class as CharacterClass];
 
@@ -253,6 +254,80 @@ export function CharacterWizard() {
     },
     [classData.spellsKnown]
   );
+
+  /** Auto-generate appearance fields when entering step 7 */
+  useEffect(() => {
+    if (step !== 7) return;
+    let cancelled = false;
+    async function fetchAppearance() {
+      setAppearanceLoading(true);
+      try {
+        const res = await fetch("/api/generate-appearance", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            gender: character.gender,
+            race: character.race,
+            characterClass: character.class,
+          }),
+        });
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          setAppearanceFields({
+            heightSize: data.heightSize ?? "",
+            weight: data.weight ?? "",
+            hairColor: data.hairColor ?? "",
+            facialHair: data.facialHair ?? "",
+            scars: data.scars ?? "",
+            eyeColor: data.eyeColor ?? "",
+            lipColor: data.lipColor ?? "",
+            clothing: data.clothing ?? "",
+            accessories: data.accessories ?? "",
+          });
+        }
+      } catch {
+        // Silently fail — user can fill in manually
+      } finally {
+        if (!cancelled) setAppearanceLoading(false);
+      }
+    }
+    fetchAppearance();
+    return () => { cancelled = true; };
+  }, [step, character.gender, character.race, character.class]);
+
+  /** Re-generate appearance fields on demand */
+  const handleRegenerateAppearance = useCallback(async () => {
+    setAppearanceLoading(true);
+    try {
+      const res = await fetch("/api/generate-appearance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          gender: character.gender,
+          race: character.race,
+          characterClass: character.class,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAppearanceFields({
+          heightSize: data.heightSize ?? "",
+          weight: data.weight ?? "",
+          hairColor: data.hairColor ?? "",
+          facialHair: data.facialHair ?? "",
+          scars: data.scars ?? "",
+          eyeColor: data.eyeColor ?? "",
+          lipColor: data.lipColor ?? "",
+          clothing: data.clothing ?? "",
+          accessories: data.accessories ?? "",
+        });
+      }
+    } catch {
+      // Silently fail
+    } finally {
+      setAppearanceLoading(false);
+    }
+  }, [character.gender, character.race, character.class]);
 
   /** Save skill selections and advance to appearance step */
   function handleReviewSubmit() {
@@ -541,8 +616,10 @@ export function CharacterWizard() {
             setAppearanceFields((prev) => ({ ...prev, [key]: value }))
           }
           onGenerate={handleGeneratePortrait}
+          onRegenerate={handleRegenerateAppearance}
           onSkip={handleSkipAppearance}
           onBack={() => setStep(6)}
+          isLoading={appearanceLoading}
         />
       )}
     </div>

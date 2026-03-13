@@ -15,16 +15,20 @@ interface StepAppearanceProps {
   fields: AppearanceFields;
   onFieldChange: (key: keyof AppearanceFields, value: string) => void;
   onGenerate: () => void;
+  onRegenerate?: () => void;
   onSkip: () => void;
   onBack: () => void;
+  isLoading?: boolean;
 }
 
 export function StepAppearance({
   fields,
   onFieldChange,
   onGenerate,
+  onRegenerate,
   onSkip,
   onBack,
+  isLoading,
 }: StepAppearanceProps) {
   const t = useLanguageStore((s) => s.t);
   const [focusedField, setFocusedField] = useState<string | null>(null);
@@ -53,47 +57,67 @@ export function StepAppearance({
       </div>
 
       <div className="px-6 pb-6 space-y-3">
-        {APPEARANCE_FIELD_KEYS.map((key) => {
-          const isFocused = focusedField === key;
-          return (
-            <div key={key}>
-              <label className="block text-xs font-cinzel text-[#c9a227]/80 mb-1 tracking-wide">
-                {t(`appearance.${key}`)}
-              </label>
-              <input
-                type="text"
-                value={fields[key]}
-                onChange={(e) => onFieldChange(key, e.target.value)}
-                onFocus={() => setFocusedField(key)}
-                onBlur={() => setFocusedField(null)}
-                placeholder={t(`appearance.${key}Placeholder`)}
-                maxLength={120}
-                className={`w-full rounded-lg px-3 py-2 text-sm text-white placeholder:text-[#444] bg-[#0f0f0f] border transition-colors focus:outline-none ${
-                  isFocused ? "border-[#c9a227]" : "border-[#333]"
-                }`}
-                style={isFocused ? { boxShadow: "0 0 8px rgba(201,162,39,0.15)" } : undefined}
-              />
-            </div>
-          );
-        })}
+        {isLoading ? (
+          <div className="text-center py-8 text-[#c9a227]/70 text-sm animate-pulse font-cinzel tracking-wide">
+            Conjuring your hero&apos;s appearance&hellip;
+          </div>
+        ) : (
+          <>
+            {APPEARANCE_FIELD_KEYS.map((key) => {
+              const isFocused = focusedField === key;
+              return (
+                <div key={key}>
+                  <label className="block text-xs font-cinzel text-[#c9a227]/80 mb-1 tracking-wide">
+                    {t(`appearance.${key}`)}
+                  </label>
+                  <input
+                    type="text"
+                    value={fields[key]}
+                    onChange={(e) => onFieldChange(key, e.target.value)}
+                    onFocus={() => setFocusedField(key)}
+                    onBlur={() => setFocusedField(null)}
+                    placeholder={t(`appearance.${key}Placeholder`)}
+                    maxLength={120}
+                    className={`w-full rounded-lg px-3 py-2 text-sm text-white placeholder:text-[#444] bg-[#0f0f0f] border transition-colors focus:outline-none ${
+                      isFocused ? "border-[#c9a227]" : "border-[#333]"
+                    }`}
+                    style={isFocused ? { boxShadow: "0 0 8px rgba(201,162,39,0.15)" } : undefined}
+                  />
+                </div>
+              );
+            })}
 
-        <p className="text-xs italic text-[#8a8a8a] pt-1">
-          {filledCount === 0
-            ? t("appearance.allOptional")
-            : t("appearance.filledCount").replace("{count}", String(filledCount)).replace("{total}", String(APPEARANCE_FIELD_KEYS.length))}
-        </p>
+            <p className="text-xs italic text-[#8a8a8a] pt-1">
+              {filledCount === 0
+                ? t("appearance.allOptional")
+                : t("appearance.filledCount").replace("{count}", String(filledCount)).replace("{total}", String(APPEARANCE_FIELD_KEYS.length))}
+            </p>
+
+            {onRegenerate && (
+              <button
+                type="button"
+                onClick={onRegenerate}
+                className="text-xs text-[#8a8a8a] hover:text-[#c9a227] transition-colors cursor-pointer"
+              >
+                &#x21BB; Re-generate appearance
+              </button>
+            )}
+          </>
+        )}
 
         <div className="space-y-2 pt-2">
           <div className="flex gap-3">
             <Button
               variant="outline"
               onClick={onBack}
+              disabled={isLoading}
               className="flex-1 bg-transparent border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-300 hover:bg-transparent"
             >
               {t("common.back")}
             </Button>
             <Button
               onClick={onGenerate}
+              disabled={isLoading}
               className="flex-1 bg-[#6b0000] hover:bg-[#7a0000] text-white border border-[#c9a227] font-cinzel tracking-wide transition-shadow hover:shadow-[0_0_12px_rgba(201,162,39,0.3)]"
             >
               {t("appearance.generate")}
@@ -102,6 +126,7 @@ export function StepAppearance({
           <button
             type="button"
             onClick={onSkip}
+            disabled={isLoading}
             className="w-full text-center text-xs text-[#8a8a8a] hover:text-[#c9a227] transition-colors cursor-pointer py-1"
           >
             {t("appearance.skip")}
