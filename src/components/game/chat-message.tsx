@@ -126,7 +126,9 @@ function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
   const [retried, setRetried] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
-  const src = `/.netlify/functions/proxy-portrait?prompt=${encodeURIComponent(prompt)}&seed=${seed}&width=800&height=450`;
+  const token = process.env.NEXT_PUBLIC_POLLINATIONS_TOKEN || "";
+  const fullPrompt = `environment landscape ${prompt} no people wide shot dark fantasy`;
+  const src = `https://gen.pollinations.ai/image/${encodeURIComponent(fullPrompt)}?model=flux&width=800&height=450&seed=${seed}&nologo=true&enhance=true${token ? `&key=${token}` : ""}`;
 
   useEffect(() => {
     console.log("[SceneImage] MOUNTED — prompt:", prompt, "src:", src);
@@ -136,10 +138,11 @@ function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
     console.warn("[SceneImage] image load failed:", src, "retried:", retried);
     if (!retried) {
       setRetried(true);
-      // Retry after 2 seconds
+      // Retry after 2 seconds with different seed
       setTimeout(() => {
         if (imgRef.current) {
-          imgRef.current.src = src + "&retry=1";
+          const retryPrompt = `environment landscape ${prompt} no people wide shot dark fantasy`;
+          imgRef.current.src = `https://gen.pollinations.ai/image/${encodeURIComponent(retryPrompt)}?model=flux&width=800&height=450&seed=${seed + 1}&nologo=true&enhance=true${token ? `&key=${token}` : ""}`;
         }
       }, 2000);
     } else {
