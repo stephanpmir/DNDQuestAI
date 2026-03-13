@@ -135,6 +135,27 @@ export function parseDMResponse(raw: string): ParsedDMResponse {
 }
 
 /**
+ * Track consecutive turns with the same location and log a warning
+ * when it exceeds 3 turns — indicates the LLM is ignoring LOCATION updates.
+ */
+let _lastLocation: string | null = null;
+let _sameLocationCount = 0;
+
+export function checkLocationStagnation(currentLocation: string): void {
+  if (_lastLocation && currentLocation.toLowerCase() === _lastLocation.toLowerCase()) {
+    _sameLocationCount++;
+    if (_sameLocationCount > 3) {
+      console.warn(
+        `[parse-response] LOCATION STAGNATION: "${currentLocation}" has not changed for ${_sameLocationCount} consecutive turns`
+      );
+    }
+  } else {
+    _sameLocationCount = 1;
+    _lastLocation = currentLocation;
+  }
+}
+
+/**
  * Try to parse checkRequired from a JSON string or key-value text.
  */
 function parseCheckRequired(raw: string): CheckRequired | undefined {

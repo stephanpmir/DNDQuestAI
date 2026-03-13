@@ -161,6 +161,13 @@ export function postGenerate(
     ? buildContradictionHint(hardContradictions)
     : "";
 
+  // Award XP for successful skill checks based on DC difficulty
+  if (engineOutcome.roll?.success && engineOutcome.roll.dc) {
+    const dc = engineOutcome.roll.dc;
+    const xpAward = dc >= 16 ? 3 : dc >= 11 ? 2 : 1;
+    engineOutcome.xpGained = (engineOutcome.xpGained || 0) + xpAward;
+  }
+
   // STEP 7: Update — generate new facts from this turn
   const newFacts: Fact[] = [];
   const turnId = `t${gameState.turnCount}`;

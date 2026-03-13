@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { buildSystemPrompt, buildEngineContextMessage } from "@/lib/ai/dm-prompt";
-import { parseDMResponse } from "@/lib/ai/parse-response";
+import { parseDMResponse, checkLocationStagnation } from "@/lib/ai/parse-response";
 import { preGenerate, postGenerate } from "@/lib/engine/pipeline";
 import type { PipelineInput } from "@/lib/engine/pipeline";
 import { getRandomThemeForLevel, getRandomCampaign } from "@/lib/campaigns";
@@ -254,6 +254,9 @@ async function runDMTurn(
   if (eo.completeQuest) gs.questLog = gs.questLog.filter(q => q !== eo.completeQuest);
 
   gs.history.push({ role: "assistant", content: narrative });
+
+  // Track location stagnation
+  checkLocationStagnation(gs.location);
 
   return { narrative, checkRoll: parsed.checkRequired ? { stat: parsed.checkRequired.stat, skill: parsed.checkRequired.skill, dc: parsed.checkRequired.dc, description: parsed.checkRequired.description } : null, imagePrompt: parsed.sceneImagePrompt ?? null, provider, tagsFound, rawResponse: rawText };
 }

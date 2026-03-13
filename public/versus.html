@@ -389,6 +389,12 @@
     html += `<div class="report-row"><span class="label">Avg DM Response</span><span class="value">${r.avgResponseTimes.dmMs}ms</span></div>`;
     html += `<div class="report-row"><span class="label">Assessment</span><span class="value">${escapeHtml(r.overallAssessment)}</span></div>`;
 
+    // Mechanical engagement
+    const checksTriggered = r.checkRollAssessment.totalCheckRolls;
+    const combatEncounters = data.turns.filter(t => t.dm && t.dm.checkRoll && t.dm.checkRoll.skill && /attack|initiative/i.test(t.dm.checkRoll.skill)).length;
+    const imagesGenerated = r.imagePrompts.length;
+    html += `<div class="report-row"><span class="label">Mechanical Engagement</span><span class="value">${checksTriggered} checks triggered / ${combatEncounters} combat encounters / ${imagesGenerated} images generated</span></div>`;
+
     // Final character state
     const fs = data.finalState;
     html += `<div class="report-row"><span class="label">Final HP</span><span class="value">${fs.hp}/${fs.maxHp}</span></div>`;
