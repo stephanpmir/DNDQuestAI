@@ -128,21 +128,28 @@ function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
 
   const token = process.env.NEXT_PUBLIC_POLLINATIONS_TOKEN || "";
   const fullPrompt = `environment landscape ${prompt} no people wide shot dark fantasy`;
-  const src = `https://gen.pollinations.ai/image/${encodeURIComponent(fullPrompt)}?model=flux&width=800&height=450&seed=${seed}&nologo=true&enhance=true${token ? `&key=${token}` : ""}`;
+  // Try keyless first — Pollinations allows unauthenticated access for some requests
+  const baseUrl = `https://gen.pollinations.ai/image/${encodeURIComponent(fullPrompt)}?model=flux&width=800&height=450&seed=${seed}&nologo=true&enhance=true`;
+  const src = baseUrl; // keyless attempt first
 
   useEffect(() => {
-    console.log("[SceneImage] MOUNTED — prompt:", prompt, "src:", src);
-  }, [prompt, src]);
+    console.log("[SceneImage] MOUNTED — prompt:", prompt);
+    console.log("[SceneImage] URL (keyless):", src);
+    console.log("[SceneImage] Token:", token ? "KEY_PRESENT" : "KEY_MISSING");
+  }, [prompt, src, token]);
 
   const handleError = () => {
-    console.warn("[SceneImage] image load failed:", src, "retried:", retried);
+    console.warn("[SceneImage] image load failed, retried:", retried);
     if (!retried) {
       setRetried(true);
-      // Retry after 2 seconds with different seed
+      // Retry after 2 seconds with API key added
       setTimeout(() => {
         if (imgRef.current) {
-          const retryPrompt = `environment landscape ${prompt} no people wide shot dark fantasy`;
-          imgRef.current.src = `https://gen.pollinations.ai/image/${encodeURIComponent(retryPrompt)}?model=flux&width=800&height=450&seed=${seed + 1}&nologo=true&enhance=true${token ? `&key=${token}` : ""}`;
+          const retryUrl = token
+            ? `${baseUrl}&key=${token}`
+            : `${baseUrl}&seed=${seed + 1}`;
+          console.log("[SceneImage] Retrying with:", token ? "key added" : "new seed");
+          imgRef.current.src = retryUrl;
         }
       }, 2000);
     } else {

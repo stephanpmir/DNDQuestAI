@@ -252,12 +252,16 @@ function cleanNarrative(text: string): string {
     cleaned = cleaned.replace(/```(?:json)?[\s\S]*?```/g, "");
   }
 
-  // Remove any stray [TAG] lines that leaked into narrative portion
+  // Remove any stray [TAG] lines that leaked into narrative portion (known tags)
   const tagPattern = new RegExp(
     `^\\s*\\[(?:${TAGS.join("|")})\\].*$`,
     "gm"
   );
   cleaned = cleaned.replace(tagPattern, "");
+
+  // Strip ALL unknown bracket tags the LLM may invent (e.g. [LIPICONSHIELD])
+  // Matches [ANY_CAPS_TAG] followed by content until newline
+  cleaned = cleaned.replace(/\[[A-Z_]+\][^\n]*/g, "");
 
   // Remove bracketed stage directions the LLM may embed in the narrative
   // e.g. "[The market square bustles with merchants]" or "[A dark cave looms ahead]"
