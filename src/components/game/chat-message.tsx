@@ -124,14 +124,13 @@ function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
 
-  if (error) return null;
-
   const src = `/.netlify/functions/proxy-portrait?prompt=${encodeURIComponent(prompt)}&seed=${seed}&width=800&height=450`;
 
-  // Debug: confirm sceneImagePrompt is reaching the component
   useEffect(() => {
     console.log("[SceneImage] prompt:", prompt, "src:", src);
   }, [prompt, src]);
+
+  if (error) return null;
 
   return (
     <div
