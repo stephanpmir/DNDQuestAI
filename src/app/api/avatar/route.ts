@@ -8,6 +8,7 @@ interface AvatarRequest {
   class: CharacterClass;
   gender: Gender;
   avatar: AvatarCustomization;
+  equipped?: string[];
 }
 
 export async function POST(request: Request) {
@@ -21,7 +22,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const prompt = buildAvatarPrompt(body);
+    const prompt = buildAvatarPrompt({
+      race: body.race,
+      class: body.class,
+      gender: body.gender,
+      avatar: body.avatar,
+      wornItems: body.equipped,
+    });
     const seed = nameToSeed(body.name);
     const key = process.env.NEXT_PUBLIC_POLLINATIONS_TOKEN || "";
 

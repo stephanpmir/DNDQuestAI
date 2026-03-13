@@ -122,7 +122,8 @@ export function parseDMResponse(raw: string): ParsedDMResponse {
   }
 
   // Extract structured fields
-  const sceneImagePrompt = fields.get("SCENE_IMAGE_PROMPT") || undefined;
+  const rawScenePrompt = fields.get("SCENE_IMAGE_PROMPT") || undefined;
+  const sceneImagePrompt = rawScenePrompt ? sanitizeScenePrompt(rawScenePrompt) : undefined;
 
   let checkRequired: CheckRequired | undefined;
   const crRaw = fields.get("CHECK_REQUIRED");
@@ -227,7 +228,7 @@ function tryExtractFromJSON(raw: string): ParsedDMResponse | null {
       }
       return {
         narrative: cleanNarrative(obj.narrative),
-        sceneImagePrompt: typeof obj.sceneImagePrompt === "string" ? obj.sceneImagePrompt : undefined,
+        sceneImagePrompt: typeof obj.sceneImagePrompt === "string" ? sanitizeScenePrompt(obj.sceneImagePrompt) : undefined,
         checkRequired,
         gameStateUpdate: {},
       };
@@ -237,6 +238,49 @@ function tryExtractFromJSON(raw: string): ParsedDMResponse | null {
   }
 
   return null;
+}
+
+/**
+ * Strip NPC descriptions, character names, dialogue, inventory references,
+ * and living beings from scene image prompts. Keep only: location, environment,
+ * architecture, lighting, time of day, weather, atmosphere, objects.
+ */
+function sanitizeScenePrompt(raw: string): string {
+  let prompt = raw.trim();
+
+  // Remove quoted dialogue
+  prompt = prompt.replace(/"[^"]{2,}"/g, "");
+  prompt = prompt.replace(/'[^']{2,}'/g, "");
+
+  // Remove NPC/character name patterns: "a tall elf named Galadriel", "the merchant Boros", etc.
+  prompt = prompt.replace(/\b(?:named|called)\s+[A-Z][a-z]+/gi, "");
+
+  // Remove references to specific people/NPCs/characters by capitalized name
+  // (but keep environment proper nouns like "Waterdeep" which are locations)
+  prompt = prompt.replace(/\b(?:the\s+)?(?:old|young|tall|short|hooded|cloaked|armored|masked|wounded|mysterious)\s+(?:man|woman|figure|stranger|person|merchant|guard|soldier|knight|thief|priest|mage|wizard|sorcerer|bartender|innkeeper|barkeep|shopkeeper|vendor|blacksmith|beggar|noble|lord|lady|king|queen|prince|princess|peasant|villager|warrior|ranger|rogue|bard|cleric|druid|paladin|monk|barbarian|warlock|fighter)\b/gi, "");
+  prompt = prompt.replace(/\b(?:a|an|the|some|several|many|few|two|three)\s+(?:men|women|figures|strangers|people|merchants|guards|soldiers|knights|thieves|priests|mages|wizards|sorcerers|bartenders|innkeepers|shopkeepers|vendors|blacksmiths|beggars|nobles|lords|ladies|peasants|villagers|warriors|rangers|rogues|bards|clerics|druids|paladins|monks|barbarians|warlocks|fighters|adventurers|travelers|travellers|crowds?|groups?|bands?|parties|patrons|townsfolk|citizens|dwarves|elves|halflings|gnomes|orcs|goblins|kobolds|humans|tieflings|dragonborn|half-orcs|half-elves)\b/gi, "");
+
+  // Remove lone NPC/character role words
+  prompt = prompt.replace(/\b(?:NPC|character|hero|heroine|protagonist|companion|ally|enemy|foe|villain|boss)\b/gi, "");
+
+  // Remove D&D race words when referring to people (not locations)
+  prompt = prompt.replace(/\b(?:a|an|the)\s+(?:human|elf|dwarf|halfling|gnome|half-elf|half-orc|tiefling|dragonborn|orc|goblin|kobold)\b/gi, "");
+
+  // Remove clothing/equipment on people: "wearing leather armor", "carrying a sword"
+  prompt = prompt.replace(/\b(?:wearing|wielding|carrying|holding|brandishing|clutching|gripping)\s+[^,.\n]{3,40}/gi, "");
+
+  // Remove inventory item references: "a potion of healing", "a +1 longsword"
+  prompt = prompt.replace(/\b(?:a\s+)?(?:\+\d\s+)?(?:potion|scroll|wand|staff|amulet|ring|cloak|helm|shield|sword|dagger|bow|axe|mace|hammer)\s+(?:of\s+)?[^,.\n]{0,30}/gi, "");
+
+  // Remove dialogue tags
+  prompt = prompt.replace(/\b(?:says?|said|speaks?|spoke|whispers?|whispered|shouts?|shouted|asks?|asked|replies?|replied|mutters?|muttered)\b[^,.\n]{0,40}/gi, "");
+
+  // Collapse extra whitespace and commas
+  prompt = prompt.replace(/,\s*,/g, ",");
+  prompt = prompt.replace(/\s{2,}/g, " ");
+  prompt = prompt.replace(/^[\s,]+|[\s,]+$/g, "");
+
+  return prompt || raw.trim();
 }
 
 /**

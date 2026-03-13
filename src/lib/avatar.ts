@@ -28,20 +28,20 @@ const RACE_FEATURES: Record<string, string> = {
   Dragonborn: "draconic head with scales, snout, no hair, reptilian eyes",
 };
 
-/** Class-specific visual cues */
+/** Class-specific posture, expression, and fighting style — never clothing or equipment */
 const CLASS_FEATURES: Record<string, string> = {
-  Barbarian: "wearing fur armor, war paint, fierce expression",
-  Bard: "wearing colorful traveling clothes, lute on back",
-  Cleric: "wearing vestments with holy symbol, serene expression",
-  Druid: "wearing natural leather armor, leaves and vines in hair",
-  Fighter: "wearing polished armor, confident stance",
-  Monk: "wearing simple robes, calm focused expression",
-  Paladin: "wearing plate armor with holy crest, noble bearing",
-  Ranger: "wearing forest cloak and leather armor, bow on back",
-  Rogue: "wearing dark hooded leather armor, sly expression",
-  Sorcerer: "arcane energy swirling around hands, mystical robes",
-  Warlock: "dark robes with eldritch symbols, intense gaze",
-  Wizard: "wearing arcane robes, spellbook at hip, wise expression",
+  Barbarian: "fierce battle-ready stance, war paint, primal fury in eyes",
+  Bard: "charismatic confident posture, playful smirk, performer's flair",
+  Cleric: "serene devoted expression, hands clasped in prayer, calm authority",
+  Druid: "wild untamed presence, leaves and vines in hair, nature-attuned gaze",
+  Fighter: "disciplined military stance, confident bearing, battle-hardened resolve",
+  Monk: "centered balanced posture, calm focused expression, coiled readiness",
+  Paladin: "noble righteous bearing, resolute jaw, commanding holy presence",
+  Ranger: "alert watchful stance, keen tracking eyes, wilderness-hardened demeanor",
+  Rogue: "alert and nimble posture, sly expression, street-smart bearing",
+  Sorcerer: "arcane energy crackling around hands, intense concentration, raw power",
+  Warlock: "brooding intense gaze, eldritch shadows around fingertips, dark resolve",
+  Wizard: "scholarly thoughtful expression, wise knowing eyes, arcane focus",
 };
 
 export interface AvatarPromptInput {
@@ -49,16 +49,21 @@ export interface AvatarPromptInput {
   class: CharacterClass;
   gender: Gender;
   avatar: AvatarCustomization;
+  /** Currently worn/equipped items — injected as "equipped with: ..." segment */
+  wornItems?: string[];
 }
 
 /** Build a D&D portrait prompt from character attributes */
 export function buildAvatarPrompt(data: AvatarPromptInput): string {
-  const { race, class: cls, gender, avatar } = data;
+  const { race, class: cls, gender, avatar, wornItems } = data;
   const skinTone = getSkinToneName(avatar.skinTone);
   const hairColor = getHairColorName(avatar.hairColor);
   const hairDesc = avatar.hairStyle === "bald" ? "bald" : `${hairColor} ${avatar.hairStyle} hair`;
   const raceFeatures = RACE_FEATURES[race] ?? "";
   const classFeatures = CLASS_FEATURES[cls] ?? "";
+  const equippedSegment = wornItems && wornItems.length > 0
+    ? `equipped with: ${wornItems.join(", ")}`
+    : "";
 
   const parts = [
     `fantasy portrait`,
@@ -69,6 +74,7 @@ export function buildAvatarPrompt(data: AvatarPromptInput): string {
     `${avatar.height} height`,
     raceFeatures,
     classFeatures,
+    equippedSegment,
     `D&D character art`,
     `detailed painting`,
     `dark fantasy style`,
@@ -148,6 +154,7 @@ export async function generateAvatar(character: Character): Promise<string | nul
         class: character.class,
         gender: character.gender,
         avatar: character.avatar,
+        equipped: character.equipped,
       }),
     });
 
