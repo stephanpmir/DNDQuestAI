@@ -126,30 +126,16 @@ function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
   const [retried, setRetried] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
-  const token = process.env.NEXT_PUBLIC_POLLINATIONS_TOKEN || "";
   const fullPrompt = `environment landscape ${prompt} no people wide shot dark fantasy`;
-  // Try keyless first — Pollinations allows unauthenticated access for some requests
-  const baseUrl = `https://gen.pollinations.ai/image/${encodeURIComponent(fullPrompt)}?model=flux&width=800&height=450&seed=${seed}&nologo=true&enhance=true`;
-  const src = baseUrl; // keyless attempt first
-
-  useEffect(() => {
-    console.log("[SceneImage] MOUNTED — prompt:", prompt);
-    console.log("[SceneImage] URL (keyless):", src);
-    console.log("[SceneImage] Token:", token ? "KEY_PRESENT" : "KEY_MISSING");
-  }, [prompt, src, token]);
+  const src = `/.netlify/functions/proxy-portrait?prompt=${encodeURIComponent(fullPrompt)}&width=800&height=450&seed=${seed}`;
 
   const handleError = () => {
     console.warn("[SceneImage] image load failed, retried:", retried);
     if (!retried) {
       setRetried(true);
-      // Retry after 2 seconds with API key added
       setTimeout(() => {
         if (imgRef.current) {
-          const retryUrl = token
-            ? `${baseUrl}&key=${token}`
-            : `${baseUrl}&seed=${seed + 1}`;
-          console.log("[SceneImage] Retrying with:", token ? "key added" : "new seed");
-          imgRef.current.src = retryUrl;
+          imgRef.current.src = src + "&retry=1";
         }
       }, 2000);
     } else {
