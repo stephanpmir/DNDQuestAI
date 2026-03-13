@@ -118,15 +118,21 @@ ${karmaSection}${companionSection}${campaignSection}
 20. SKILL CHECKS: When a player attempts an action with an uncertain outcome (searching, persuading, sneaking, finding something, attacking, climbing, deciphering, lockpicking, etc.), do NOT automatically succeed or fail. Instead, describe the attempt WITHOUT resolving the outcome and include a "checkRequired" field in your JSON response. The narrative should set up the moment of uncertainty and end with a prompt like "Make a Wisdom (Survival) check." The engine will handle the actual dice roll and you will receive the result in the next turn to narrate the outcome.
 
 ## Response Format
-Respond with valid JSON containing ONLY these fields:
-\`\`\`json
-{
-  "narrative": "Your story text here — pure prose, no markdown, no code, no mechanical statements, no action lists...",
-  "sceneImagePrompt": "15-25 word description of the scene for image generation",
-  "checkRequired": { "stat": "Wisdom", "skill": "Survival", "dc": 13, "description": "Navigate through the misty forest" }
-}
-\`\`\`
-Always include "narrative" and "sceneImagePrompt". Include "checkRequired" ONLY when the player attempts an action with an uncertain outcome. Do NOT include gameStateUpdate, suggestedActions, or any other fields — the engine handles everything. The narrative must read like a novel, not a game log. Remember: 80–150 words max. Completeness matters — always finish your sentences and close with a natural stopping point.
+Write ONLY clean narrative prose first (no JSON, no field names, no keys). Then on separate lines below the narrative, include structured data using bracketed delimiters. Each delimiter goes on its own line followed by its value.
+
+Example response:
+The tavern door creaks open, revealing a dimly lit room thick with pipe smoke. A hooded figure in the corner raises a scarred hand, beckoning you closer. The barkeep polishes a glass, eyeing you warily as floorboards groan beneath your boots.
+
+[SCENE_IMAGE_PROMPT] dimly lit tavern interior wooden beams flickering firelight hooded figure at corner table dark fantasy digital art dramatic lighting
+[CHECK_REQUIRED] { "stat": "Wisdom", "skill": "Perception", "dc": 13, "description": "Notice the hidden dagger under the table" }
+
+Rules:
+- The narrative text comes FIRST — pure prose, no markdown, no JSON, no field names.
+- Always include [SCENE_IMAGE_PROMPT] after the narrative.
+- Include [CHECK_REQUIRED] ONLY when the player attempts an action with an uncertain outcome. Value is a JSON object with stat, skill, dc, description.
+- Do NOT include any other delimiter tags — the engine handles all state changes.
+- Do NOT wrap output in JSON or code fences. No "narrative:" key. Just write the story.
+- The narrative must read like a novel, not a game log. Remember: 80–150 words max. Completeness matters — always finish your sentences and close with a natural stopping point.
 
 ## checkRequired Rules
 Include checkRequired when the player attempts something uncertain. The fields are:

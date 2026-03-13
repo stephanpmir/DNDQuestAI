@@ -1,32 +1,25 @@
 /**
- * Parse the LLM response and extract ONLY the narrative text.
+ * Parse the LLM response using bracket-delimiter format.
  *
- * Critical: The LLM is the NARRATOR, not the game master. We extract
- * narrative text only. All gameStateUpdate, items, gold, XP, etc. come
- * from the rules engine, never from the LLM. Any mechanical data the
- * LLM tries to include is discarded.
+ * The LLM outputs clean narrative text first, followed by structured fields
+ * on their own lines using [TAG] delimiters. Everything before the first
+ * [TAG] is the narrative shown to the player.
+ *
+ * Supported tags:
+ *   [SCENE_IMAGE_PROMPT] — scene description for image generation
+ *   [CHECK_REQUIRED]     — JSON object: { stat, skill, dc, description }
+ *   [HP]                 — integer HP change (e.g. -5 or +3)
+ *   [XP]                 — integer XP gained
+ *   [GOLD]               — integer gold change
+ *   [LOCATION]           — new location name
+ *   [KARMA]              — integer karma shift
+ *   [FAME]               — integer fame change
+ *   [AC]                 — integer AC value
+ *   [WORN]               — pipe-delimited worn items
+ *   [BACKPACK]           — pipe-delimited backpack items
+ *   [RESOURCES]          — pipe-delimited resources
+ *   [CRIMES]             — pipe-delimited crimes
  */
-
-/**
- * Attempt JSON.parse, also handling Python-style single-quoted dicts.
- */
-function tryParseJSON(text: string): unknown | null {
-  try {
-    return JSON.parse(text);
-  } catch {
-    // ignore
-  }
-  try {
-    const fixed = text
-      .replace(/'/g, '"')
-      .replace(/None/g, "null")
-      .replace(/True/g, "true")
-      .replace(/False/g, "false");
-    return JSON.parse(fixed);
-  } catch {
-    return null;
-  }
-}
 
 interface CheckRequired {
   stat: string;
@@ -35,7 +28,7 @@ interface CheckRequired {
   description: string;
 }
 
-interface ParsedDMResponse {
+export interface ParsedDMResponse {
   narrative: string;
   sceneImagePrompt?: string;
   checkRequired?: CheckRequired;
@@ -43,131 +36,234 @@ interface ParsedDMResponse {
 }
 
 /**
- * Extract narrative text, sceneImagePrompt, and checkRequired from the LLM response.
- * gameStateUpdate is always empty — the engine decides state, not the LLM.
+ * All recognized bracket tags. Order doesn't matter — we split on any of them.
+ */
+const TAGS = [
+  "SCENE_IMAGE_PROMPT",
+  "CHECK_REQUIRED",
+  "HP",
+  "XP",
+  "GOLD",
+  "LOCATION",
+  "KARMA",
+  "FAME",
+  "AC",
+  "WORN",
+  "BACKPACK",
+  "RESOURCES",
+  "CRIMES",
+] as const;
+
+/**
+ * Regex that matches any [TAG] at the start of a line (with optional whitespace).
+ * Captures the tag name.
+ */
+const TAG_LINE_REGEX = new RegExp(
+  `^\\s*\\[(${TAGS.join("|")})\\]\\s*`,
+  "m"
+);
+
+/**
+ * Parse the LLM response. Everything before the first [TAG] line is the
+ * narrative. Each [TAG] value runs until the next [TAG] or end of string.
  */
 export function parseDMResponse(raw: string): ParsedDMResponse {
-  let narrative = "";
-  let sceneImagePrompt: string | undefined;
+  // First, try to handle the case where the LLM still outputs JSON despite instructions
+  const jsonFallback = tryExtractFromJSON(raw);
+  if (jsonFallback) return jsonFallback;
+
+  const fields = new Map<string, string>();
+
+  // Find the first tag to split narrative from structured data
+  const firstTagMatch = raw.match(TAG_LINE_REGEX);
+  let narrative: string;
+  let remainder: string;
+
+  if (firstTagMatch && firstTagMatch.index !== undefined) {
+    narrative = raw.slice(0, firstTagMatch.index);
+    remainder = raw.slice(firstTagMatch.index);
+  } else {
+    // No tags found — entire response is narrative
+    narrative = raw;
+    remainder = "";
+  }
+
+  // Parse each [TAG] value from the remainder
+  if (remainder) {
+    const tagSplitRegex = new RegExp(
+      `\\[(?:${TAGS.join("|")})\\]`,
+      "g"
+    );
+    const tagNames: string[] = [];
+    const tagPositions: number[] = [];
+    let match: RegExpExecArray | null;
+
+    while ((match = tagSplitRegex.exec(remainder)) !== null) {
+      const tagName = match[0].slice(1, -1); // strip [ and ]
+      tagNames.push(tagName);
+      tagPositions.push(match.index + match[0].length);
+    }
+
+    for (let i = 0; i < tagNames.length; i++) {
+      const start = tagPositions[i];
+      const end = i + 1 < tagNames.length
+        ? remainder.lastIndexOf("[", tagPositions[i + 1])
+        : remainder.length;
+      const value = remainder.slice(start, end).trim();
+      if (value) {
+        fields.set(tagNames[i], value);
+      }
+    }
+  }
+
+  // Extract structured fields
+  const sceneImagePrompt = fields.get("SCENE_IMAGE_PROMPT") || undefined;
+
   let checkRequired: CheckRequired | undefined;
-
-  /** Helper: extract fields from a parsed JSON object */
-  function extractFields(obj: Record<string, unknown>) {
-    if (typeof obj.narrative === "string") narrative = obj.narrative;
-    if (typeof obj.sceneImagePrompt === "string") sceneImagePrompt = obj.sceneImagePrompt;
-    if (obj.checkRequired && typeof obj.checkRequired === "object") {
-      const cr = obj.checkRequired as Record<string, unknown>;
-      if (typeof cr.stat === "string" && typeof cr.skill === "string" && typeof cr.dc === "number") {
-        checkRequired = {
-          stat: cr.stat,
-          skill: cr.skill,
-          dc: cr.dc,
-          description: typeof cr.description === "string" ? cr.description : "",
-        };
-      }
-    }
+  const crRaw = fields.get("CHECK_REQUIRED");
+  if (crRaw) {
+    checkRequired = parseCheckRequired(crRaw);
   }
 
-  // Try direct JSON parse
-  const direct = tryParseJSON(raw);
-  if (direct && typeof direct === "object") {
-    extractFields(direct as Record<string, unknown>);
-  }
-
-  // Try extracting from markdown code fences
-  if (!narrative) {
-    const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenceMatch) {
-      const parsed = tryParseJSON(fenceMatch[1].trim());
-      if (parsed && typeof parsed === "object") {
-        extractFields(parsed as Record<string, unknown>);
-      }
-      // If JSON parse failed but the fence contains a "narrative" key,
-      // try to extract the value with a regex
-      if (!narrative) {
-        const narMatch = fenceMatch[1].match(/"narrative"\s*:\s*"([\s\S]*?)"\s*[,}]/);
-        if (narMatch) {
-          narrative = narMatch[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
-        }
-      }
-    }
-  }
-
-  // Try finding a JSON object with "narrative" key in the raw text
-  if (!narrative) {
-    const braceStart = raw.indexOf("{");
-    const braceEnd = raw.lastIndexOf("}");
-    if (braceStart !== -1 && braceEnd > braceStart) {
-      const parsed = tryParseJSON(raw.slice(braceStart, braceEnd + 1));
-      if (parsed && typeof parsed === "object") {
-        extractFields(parsed as Record<string, unknown>);
-      }
-    }
-  }
-
-  // Last resort: use raw text but strip any JSON/syntax artifacts
-  if (!narrative) {
-    // Try extracting narrative value even from malformed JSON
-    const narRegex = /"narrative"\s*:\s*"([\s\S]*?)"\s*[,}]/;
-    const narFallback = raw.match(narRegex);
-    if (narFallback) {
-      narrative = narFallback[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
-    } else {
-      narrative = raw;
-    }
-  }
-
-  // Try extracting sceneImagePrompt via regex if not found yet
-  if (!sceneImagePrompt) {
-    const sipMatch = raw.match(/"sceneImagePrompt"\s*:\s*"([^"]{10,200})"/);
-    if (sipMatch) sceneImagePrompt = sipMatch[1];
-  }
-
-  // Clean the narrative of any syntax artifacts
+  // Clean narrative
   narrative = cleanNarrative(narrative);
 
   return { narrative, sceneImagePrompt, checkRequired, gameStateUpdate: {} };
 }
 
 /**
- * Strip JSON syntax, code fences, gameStateUpdate blocks, markdown
- * artifacts, and mechanical override text from the narrative.
+ * Try to parse checkRequired from a JSON string or key-value text.
+ */
+function parseCheckRequired(raw: string): CheckRequired | undefined {
+  // Try JSON parse first
+  try {
+    const obj = JSON.parse(raw);
+    if (typeof obj.stat === "string" && typeof obj.skill === "string" && typeof obj.dc === "number") {
+      return {
+        stat: obj.stat,
+        skill: obj.skill,
+        dc: obj.dc,
+        description: typeof obj.description === "string" ? obj.description : "",
+      };
+    }
+  } catch {
+    // Try fixing Python-style quotes
+    try {
+      const fixed = raw
+        .replace(/'/g, '"')
+        .replace(/None/g, "null")
+        .replace(/True/g, "true")
+        .replace(/False/g, "false");
+      const obj = JSON.parse(fixed);
+      if (typeof obj.stat === "string" && typeof obj.skill === "string" && typeof obj.dc === "number") {
+        return {
+          stat: obj.stat,
+          skill: obj.skill,
+          dc: obj.dc,
+          description: typeof obj.description === "string" ? obj.description : "",
+        };
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Fallback: if the LLM ignores bracket instructions and outputs JSON,
+ * try to extract narrative/sceneImagePrompt/checkRequired from it.
+ */
+function tryExtractFromJSON(raw: string): ParsedDMResponse | null {
+  const trimmed = raw.trim();
+
+  // Only attempt if response looks like JSON (starts with { or has code fence)
+  let jsonStr: string | null = null;
+
+  if (trimmed.startsWith("{")) {
+    jsonStr = trimmed;
+  } else {
+    const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenceMatch) {
+      jsonStr = fenceMatch[1].trim();
+    } else {
+      const braceStart = trimmed.indexOf("{");
+      const braceEnd = trimmed.lastIndexOf("}");
+      if (braceStart !== -1 && braceEnd > braceStart) {
+        // Only use this if the content before the brace is short (likely preamble)
+        const beforeBrace = trimmed.slice(0, braceStart).trim();
+        if (beforeBrace.length < 100) {
+          jsonStr = trimmed.slice(braceStart, braceEnd + 1);
+        }
+      }
+    }
+  }
+
+  if (!jsonStr) return null;
+
+  try {
+    const obj = JSON.parse(jsonStr);
+    if (typeof obj.narrative === "string") {
+      let checkRequired: CheckRequired | undefined;
+      if (obj.checkRequired && typeof obj.checkRequired === "object") {
+        const cr = obj.checkRequired as Record<string, unknown>;
+        if (typeof cr.stat === "string" && typeof cr.skill === "string" && typeof cr.dc === "number") {
+          checkRequired = {
+            stat: cr.stat,
+            skill: cr.skill,
+            dc: cr.dc,
+            description: typeof cr.description === "string" ? cr.description : "",
+          };
+        }
+      }
+      return {
+        narrative: cleanNarrative(obj.narrative),
+        sceneImagePrompt: typeof obj.sceneImagePrompt === "string" ? obj.sceneImagePrompt : undefined,
+        checkRequired,
+        gameStateUpdate: {},
+      };
+    }
+  } catch {
+    // Not valid JSON — fall through to bracket parsing
+  }
+
+  return null;
+}
+
+/**
+ * Strip leftover JSON syntax, code fences, markdown formatting, engine
+ * directives, and mechanical override text from the narrative.
  */
 function cleanNarrative(text: string): string {
   let cleaned = text;
 
-  // Remove preamble text before code fences (e.g. "Response JSON", "Here is the response:")
+  // Remove code fences and their contents if they contain JSON
   if (cleaned.includes("```")) {
     cleaned = cleaned.replace(/^[\s\S]*?(?=```)/, "");
+    cleaned = cleaned.replace(/```(?:json)?[\s\S]*?```/g, "");
   }
 
-  // Remove code fences and their contents if they contain JSON
-  cleaned = cleaned.replace(/```(?:json)?[\s\S]*?```/g, "");
+  // Remove any stray [TAG] lines that leaked into narrative portion
+  const tagPattern = new RegExp(
+    `^\\s*\\[(?:${TAGS.join("|")})\\].*$`,
+    "gm"
+  );
+  cleaned = cleaned.replace(tagPattern, "");
 
-  // Remove non-narrative label lines the LLM echoes from system/context messages.
-  // Covers all section headers from the system prompt and engine context messages.
+  // Remove non-narrative label lines the LLM echoes
   const labelPatterns = [
     "engine\\s*outcome", "response\\s*(?:json|format|language)", "critical\\s*rules",
     "permanent\\s*facts", "context\\s*window", "current\\s*state", "player\\s*(?:character|action)",
     "campaign\\s*tone", "mandatory\\s*escalation", "here\\s*is\\s*(?:my|the)\\s*response",
     "json\\s*response", "narrative\\s*(?:response)?", "dm\\s*response",
-    "dice\\s*roll", "hp\\s*change", "items?\\s*(?:gained|lost)", "gold\\s*change",
-    "xp\\s*gained", "location\\s*change", "new\\s*quest", "quest\\s*completed",
-    "rest\\s*(?:interrupted|event|denied)", "(?:long|short)\\s*rest", "death\\s*save",
-    "damage\\s*(?:dealt|taken)", "item\\s*not\\s*found", "karma\\s*shift",
-    "divine\\s*intervention", "action\\s*denied", "resources?\\s*used",
-    "travel\\s*encounter", "guard\\s*(?:investigation|confrontation)",
-    "trade(?:\\s*failed)?", "pickup(?:\\s*failed)?", "loot\\s*dropped",
-    "drop(?:\\s*failed)?", "equip\\s*:", "identify\\s*:",
   ].join("|");
   const labelRegex = new RegExp(`^\\s*(?:#{1,6}\\s*)?(?:${labelPatterns})[^\\n]*$`, "gim");
   cleaned = cleaned.replace(labelRegex, "");
 
-  // Catch-all: lines that look like engine directives (ALL CAPS label followed by colon)
-  // e.g. "REST DENIED: The character..." or "TRADE FAILED: Player tried..."
+  // Catch-all: ALL CAPS directive lines
   cleaned = cleaned.replace(/^\s*[A-Z][A-Z _]{3,}:\s.*$/gm, "");
 
-  // Remove inline gameStateUpdate blocks (any format)
+  // Remove inline gameStateUpdate blocks
   cleaned = cleaned.replace(/\*{0,2}gameStateUpdate\*{0,2}\s*[:=]\s*\{[\s\S]*?\}/gi, "");
   cleaned = cleaned.replace(/\*{0,2}game_state_update\*{0,2}\s*[:=]\s*\{[\s\S]*?\}/gi, "");
 
@@ -176,53 +272,46 @@ function cleanNarrative(text: string): string {
   cleaned = cleaned.replace(/\*{0,2}mentionedNpcs\*{0,2}\s*[:=]\s*\[[\s\S]*?\]/gi, "");
   cleaned = cleaned.replace(/\*{0,2}locationDescription\*{0,2}\s*[:=]\s*"[^"]*"/gi, "");
 
-  // Remove mechanical override statements the LLM shouldn't make
-  // Items, gold, XP, levels, HP — the engine controls all of these
+  // Remove mechanical override statements
   cleaned = cleaned.replace(
-    /\n?[*_]*\(?(?:You|Player)[\s:]*(?:gain|receive|find|pick up|loot|obtain|acquire|earn|get|are awarded|have been granted|level up to|advance to|reach level|are now level)\s+[\s\S]{1,80}?(?:\.|!|\))\)?[*_]*/gi,
+    /\n?[*_]*\(?(?:You|Player)[\s:]*(?:gain|receive|find|pick up|loot|obtain|acquire|earn|get|are awarded|have been granted|level up to|advance to|reach level|are now level)\s+[\s\S]{1,80}?(?:\.|\!|\))\)?[*_]*/gi,
     ""
   );
 
-  // Remove sceneImagePrompt values leaked into prose (key + quoted value)
+  // Remove sceneImagePrompt/checkRequired values leaked into prose
   cleaned = cleaned.replace(/\*{0,2}sceneImagePrompt\*{0,2}\s*[:=]\s*"[^"]*"/gi, "");
-  // Remove checkRequired objects leaked into prose
   cleaned = cleaned.replace(/\*{0,2}checkRequired\*{0,2}\s*[:=]\s*\{[^}]*\}/gi, "");
 
-  // Remove stray JSON keys that leaked into prose
+  // Remove stray JSON keys
   cleaned = cleaned.replace(/"(?:narrative|sceneImagePrompt|checkRequired|gameStateUpdate|suggestedActions|mentionedNpcs|locationDescription)"\s*:/gi, "");
 
-  // Remove markdown headers like #narrative, ## narrative, ### DM, etc.
+  // Remove markdown headers
   cleaned = cleaned.replace(/^#{1,6}\s*(?:narrative|dm)\b[^\n]*/gim, "");
-
-  // Remove standalone "DM" label lines
   cleaned = cleaned.replace(/^\s*DM\s*$/gm, "");
 
-  // Strip markdown formatting (**, __, ##) from narrative prose
+  // Strip markdown formatting
   cleaned = cleaned.replace(/#{1,6}\s+/g, "");
   cleaned = cleaned.replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1");
   cleaned = cleaned.replace(/_{1,2}([^_]+)_{1,2}/g, "$1");
 
-  // Remove orphaned braces/brackets from stripped JSON
+  // Remove orphaned braces/brackets
   cleaned = cleaned.replace(/^\s*[{}\[\]]\s*$/gm, "");
 
-  // Remove trailing commas left from stripped content
+  // Remove trailing commas
   cleaned = cleaned.replace(/,\s*$/gm, "");
 
-  // Remove suggested actions lists that leaked through
-  // e.g. "1. Attack the goblin\n2. Sneak past\n3. Negotiate"
+  // Remove suggested actions lists
   cleaned = cleaned.replace(/\n\s*(?:\d+\.\s+(?:You could|Attack|Sneak|Talk|Rest|Explore|Search|Go|Move|Try|Use|Cast|Check)[^\n]{5,}\n?){2,}/gi, "");
-  // e.g. "- Attack the goblin\n- Sneak past\n- Negotiate"
   cleaned = cleaned.replace(/\n\s*(?:[-*]\s+(?:You could|Attack|Sneak|Talk|Rest|Explore|Search|Go|Move|Try|Use|Cast|Check)[^\n]{5,}\n?){2,}/gi, "");
-  // "What do you do?" / "You could..." trailing prompts
   cleaned = cleaned.replace(/\n\s*(?:What (?:do you|will you|would you)[^?]*\??)\s*$/i, "");
   cleaned = cleaned.replace(/\n\s*(?:You (?:could|can|might|may):?)\s*$/i, "");
 
-  // Remove state preamble at the start (e.g. "As a level 5 Fighter with 30 HP...")
+  // Remove state preamble
   cleaned = cleaned.replace(/^(?:As (?:a|an) (?:level \d+|Lv\.? ?\d+)[\s\S]{0,100}?(?:\.\s))/i, "");
   cleaned = cleaned.replace(/^(?:Currently (?:at|in|with)[\s\S]{0,80}?(?:\.\s))/i, "");
   cleaned = cleaned.replace(/^(?:With (?:your|an?) (?:HP|health|hit points)[\s\S]{0,80}?(?:\.\s))/i, "");
 
-  // Collapse multiple blank lines into one
+  // Collapse multiple blank lines
   cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
 
   return cleaned.trim();
