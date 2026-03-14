@@ -787,6 +787,18 @@ function cleanNarrative(text: string): string {
   cleaned = cleaned.replace(/\*{0,2}sceneImagePrompt\*{0,2}\s*[:=]\s*"[^"]*"/gi, "");
   cleaned = cleaned.replace(/\*{0,2}checkRequired\*{0,2}\s*[:=]\s*\{[^}]*\}/gi, "");
 
+  // Remove raw CHECK_REQUIRED JSON objects leaked into narrative
+  cleaned = cleaned.replace(/\{[^{}]*"stat"\s*:\s*"[^"]*"[^{}]*"skill"\s*:\s*"[^"]*"[^{}]*"dc"\s*:\s*\d+[^{}]*\}/g, "");
+  cleaned = cleaned.replace(/\{[^{}]*"skill"\s*:\s*"[^"]*"[^{}]*"stat"\s*:\s*"[^"]*"[^{}]*\}/g, "");
+  cleaned = cleaned.replace(/CHECK_REQUIRED\s*[:=]?\s*\{[^}]*\}/gi, "");
+
+  // Remove raw state tag lines (State: - LOCATION: - HP: etc)
+  cleaned = cleaned.replace(/^\s*State\s*:.*$/gm, "");
+  cleaned = cleaned.replace(/^\s*-\s*(?:LOCATION|HP|AC|Karma|XP|GOLD|WORN|BACKPACK|RESOURCES|FAME)\s*:.*$/gim, "");
+
+  // Remove bracket state tag lines that leaked (e.g. [HP: 10/10], [LOCATION: Market])
+  cleaned = cleaned.replace(/^\s*\[(?:HP|XP|GOLD|LOCATION|AC|KARMA|FAME|WORN|BACKPACK|RESOURCES)\s*:.*$/gim, "");
+
   // Remove stray JSON keys
   cleaned = cleaned.replace(/"(?:narrative|sceneImagePrompt|checkRequired|gameStateUpdate|suggestedActions|mentionedNpcs|locationDescription)"\s*:/gi, "");
 

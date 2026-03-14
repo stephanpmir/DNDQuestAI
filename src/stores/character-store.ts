@@ -60,20 +60,20 @@ const HIT_DICE: Record<string, number> = {
 
 /** D&D 5e starting equipment by class */
 function getStartingEquipment(cls: CharacterClass): string[] {
-  const base = ["Backpack", "Waterskin", "Rations (3 days)", "Torch"];
+  const base = ["Backpack", "Waterskin", "Rations x4", "Torch x4"];
   const classGear: Record<string, string[]> = {
     Barbarian: ["Greataxe", "Handaxe", "Explorer's Pack"],
-    Bard: ["Rapier", "Lute", "Leather Armor", "Diplomat's Pack"],
-    Cleric: ["Mace", "Shield", "Scale Mail", "Priest's Pack", "Holy Symbol"],
-    Druid: ["Wooden Shield", "Scimitar", "Leather Armor", "Explorer's Pack", "Druidic Focus"],
-    Fighter: ["Longsword", "Shield", "Chain Mail", "Dungeoneer's Pack"],
-    Monk: ["Shortsword", "Dungeoneer's Pack"],
-    Paladin: ["Longsword", "Shield", "Chain Mail", "Priest's Pack", "Holy Symbol"],
-    Ranger: ["Longbow", "Quiver (20 Arrows)", "Shortsword", "Leather Armor", "Explorer's Pack"],
-    Rogue: ["Shortsword", "Shortbow", "Quiver (20 Arrows)", "Leather Armor", "Burglar's Pack", "Thieves' Tools"],
+    Bard: ["Rapier", "Leather Armor", "Lute", "Diplomat's Pack"],
+    Cleric: ["Mace", "Scale Mail", "Shield", "Holy Symbol", "Priest's Pack"],
+    Druid: ["Scimitar", "Leather Armor", "Wooden Shield", "Druidic Focus", "Explorer's Pack"],
+    Fighter: ["Longsword", "Chain Mail", "Shield", "Dungeoneer's Pack"],
+    Monk: ["Shortsword", "Dart x10", "Dungeoneer's Pack"],
+    Paladin: ["Longsword", "Chain Mail", "Shield", "Holy Symbol", "Priest's Pack"],
+    Ranger: ["Shortsword", "Shortbow", "Leather Armor", "Quiver with 20 Arrows", "Explorer's Pack"],
+    Rogue: ["Shortsword", "Shortbow", "Leather Armor", "Thieves' Tools", "Quiver with 20 Arrows", "Burglar's Pack"],
     Sorcerer: ["Dagger", "Arcane Focus", "Dungeoneer's Pack"],
-    Warlock: ["Dagger", "Arcane Focus", "Scholar's Pack", "Leather Armor"],
-    Wizard: ["Quarterstaff", "Spellbook", "Arcane Focus", "Scholar's Pack"],
+    Warlock: ["Dagger", "Arcane Focus", "Leather Armor", "Scholar's Pack"],
+    Wizard: ["Quarterstaff", "Arcane Focus", "Spellbook", "Scholar's Pack"],
   };
   return [...base, ...(classGear[cls] ?? [])];
 }

@@ -283,6 +283,11 @@ export async function POST(request: Request) {
       };
     }
 
+    // ── Force scene image on game start ─────────────────────────────
+    if (isFirstTurn && !sceneImagePrompt) {
+      sceneImagePrompt = `${gameState.location} dark fantasy establishing shot warm atmospheric lighting`;
+    }
+
     // ── PIPELINE STEP 8: Deliver ──────────────────────────────────
     return NextResponse.json({
       narrative: postResult.narrative,

@@ -68,6 +68,7 @@ const ITEM_DB: ItemInfo[] = [
 
   // ── Small / misc weapons ──
   { name: "dagger", description: "A small, concealable blade. Light and throwable, uses finesse.", isMagical: false, category: "weapon", slot: "weapon", damageDice: 1, damageSides: 4, icon: "\u{1F5E1}\uFE0F", basePrice: 2 },
+  { name: "dart", description: "A simple thrown weapon, light and easy to carry in quantity.", isMagical: false, category: "weapon", slot: "none", damageDice: 1, damageSides: 4, icon: "\u{1F3AF}", basePrice: 1 },
   { name: "quarterstaff", description: "A simple wooden staff, versatile in combat.", isMagical: false, category: "weapon", slot: "weapon", damageDice: 1, damageSides: 6, icon: "\u{1FA84}", basePrice: 1 },
   { name: "whip", description: "A flexible weapon with reach and finesse.", isMagical: false, category: "weapon", slot: "weapon", damageDice: 1, damageSides: 4, icon: "\u{1FA83}", basePrice: 2 },
 
@@ -228,13 +229,18 @@ export function getEquipSlot(itemName: string): EquipSlot {
 
 /**
  * Get default equipped items for starting equipment.
- * Weapons, armor, shields, and focuses are auto-equipped.
+ * Weapons, armor, shields, focuses, and tools are auto-equipped.
+ * Consumables, packs, food, torches, and ammunition stay in inventory.
  */
 export function getDefaultEquipped(inventory: string[]): string[] {
   return inventory.filter((item) => {
     const info = getItemInfo(item);
     if (!info) return false;
-    return info.slot !== "none";
+    // Items with a slot are equippable (weapons, armor, shields, focuses)
+    if (info.slot !== "none") return true;
+    // Tools are worn/carried even though they don't occupy a slot
+    if (info.category === "tool") return true;
+    return false;
   });
 }
 

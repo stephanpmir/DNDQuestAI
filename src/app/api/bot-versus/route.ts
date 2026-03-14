@@ -121,18 +121,18 @@ function computeAC(cls: string, dexScore: number, conScore: number, wisScore: nu
 }
 
 const STARTING_EQUIPMENT: Record<string, string[]> = {
-  Barbarian: ["Backpack", "Waterskin", "Rations (3 days)", "Torch", "Greataxe", "Handaxe", "Explorer's Pack"],
-  Bard: ["Backpack", "Waterskin", "Rations (3 days)", "Torch", "Rapier", "Lute", "Leather Armor", "Diplomat's Pack"],
-  Cleric: ["Backpack", "Waterskin", "Rations (3 days)", "Torch", "Mace", "Shield", "Scale Mail", "Priest's Pack", "Holy Symbol"],
-  Druid: ["Backpack", "Waterskin", "Rations (3 days)", "Torch", "Wooden Shield", "Scimitar", "Leather Armor", "Explorer's Pack", "Druidic Focus"],
-  Fighter: ["Backpack", "Waterskin", "Rations (3 days)", "Torch", "Longsword", "Shield", "Chain Mail", "Dungeoneer's Pack"],
-  Monk: ["Backpack", "Waterskin", "Rations (3 days)", "Torch", "Shortsword", "Dungeoneer's Pack"],
-  Paladin: ["Backpack", "Waterskin", "Rations (3 days)", "Torch", "Longsword", "Shield", "Chain Mail", "Priest's Pack", "Holy Symbol"],
-  Ranger: ["Backpack", "Waterskin", "Rations (3 days)", "Torch", "Longbow", "Quiver (20 Arrows)", "Shortsword", "Leather Armor", "Explorer's Pack"],
-  Rogue: ["Backpack", "Waterskin", "Rations (3 days)", "Torch", "Shortsword", "Shortbow", "Quiver (20 Arrows)", "Leather Armor", "Burglar's Pack", "Thieves' Tools"],
-  Sorcerer: ["Backpack", "Waterskin", "Rations (3 days)", "Torch", "Dagger", "Arcane Focus", "Dungeoneer's Pack"],
-  Warlock: ["Backpack", "Waterskin", "Rations (3 days)", "Torch", "Dagger", "Arcane Focus", "Scholar's Pack", "Leather Armor"],
-  Wizard: ["Backpack", "Waterskin", "Rations (3 days)", "Torch", "Quarterstaff", "Spellbook", "Arcane Focus", "Scholar's Pack"],
+  Barbarian: ["Greataxe", "Handaxe", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Explorer's Pack"],
+  Bard: ["Rapier", "Leather Armor", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Lute", "Diplomat's Pack"],
+  Cleric: ["Mace", "Scale Mail", "Shield", "Holy Symbol", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Priest's Pack"],
+  Druid: ["Scimitar", "Leather Armor", "Wooden Shield", "Druidic Focus", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Explorer's Pack"],
+  Fighter: ["Longsword", "Chain Mail", "Shield", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Dungeoneer's Pack"],
+  Monk: ["Shortsword", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Dart x10", "Dungeoneer's Pack"],
+  Paladin: ["Longsword", "Chain Mail", "Shield", "Holy Symbol", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Priest's Pack"],
+  Ranger: ["Shortsword", "Shortbow", "Leather Armor", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Quiver with 20 Arrows", "Explorer's Pack"],
+  Rogue: ["Shortsword", "Shortbow", "Leather Armor", "Thieves' Tools", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Quiver with 20 Arrows", "Burglar's Pack"],
+  Sorcerer: ["Dagger", "Arcane Focus", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Dungeoneer's Pack"],
+  Warlock: ["Dagger", "Arcane Focus", "Leather Armor", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Scholar's Pack"],
+  Wizard: ["Quarterstaff", "Arcane Focus", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Spellbook", "Scholar's Pack"],
 };
 
 const XP_THRESHOLDS = [0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000];
