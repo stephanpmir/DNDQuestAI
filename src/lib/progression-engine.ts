@@ -233,6 +233,109 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+// ── Enemy presence detection keywords ─────────────────────────────
+
+const ENEMY_PRESENCE_KEYWORDS = /\b(?:approaches|spots you|notices you|eyes you|stalks|lurks nearby|emerges|steps out|blocks your path)\b/i;
+
+/**
+ * Build a flat list of all thematic enemy names (lowercased) for narrative scanning.
+ */
+const ALL_THEMATIC_ENEMY_NAMES: string[] = (() => {
+  const names = new Set<string>();
+  for (const list of Object.values(THEMATIC_ENEMIES)) {
+    if (list) for (const name of list) names.add(name.toLowerCase());
+  }
+  return [...names];
+})();
+
+/**
+ * Scan narrative text for enemy presence signals:
+ * - Any monster name from THEMATIC_ENEMIES appearing in text
+ * - Enemy presence keywords (approaches, spots you, etc.)
+ */
+function detectEnemyPresence(text: string): boolean {
+  const lower = text.toLowerCase();
+  if (ENEMY_PRESENCE_KEYWORDS.test(text)) return true;
+  return ALL_THEMATIC_ENEMY_NAMES.some(name => lower.includes(name));
+}
+
+/**
+ * Roll a d20 (1-20).
+ */
+function rollD20(): number {
+  return Math.floor(Math.random() * 20) + 1;
+}
+
+/**
+ * Run a perception contest between an enemy and the player.
+ * Returns a combat or tension escalation based on the result.
+ *
+ * - Enemy wins by 5+: surprise attack (combat, enemy advantage)
+ * - Within 5: mutual awareness (combat, normal initiative)
+ * - Player wins by 5+: player spots enemy first (tension, player has advantage)
+ */
+function runPerceptionContest(ctx: DangerContext): EscalationResult | null {
+  const theme = ctx.campaignTheme as CampaignTheme | undefined;
+
+  // Find a thematic monster for this encounter
+  let monster: Monster | null = null;
+  if (theme && THEMATIC_ENEMIES[theme]) {
+    const candidates = THEMATIC_ENEMIES[theme]!;
+    const shuffled = [...candidates].sort(() => Math.random() - 0.5);
+    for (const name of shuffled) {
+      const found = getMonsterByName(name);
+      if (found && found.cr <= Math.max(1, ctx.playerLevel + 1)) {
+        monster = found;
+        break;
+      }
+    }
+  }
+  if (!monster) {
+    monster = pickEncounterMonster(ctx.location, ctx.playerLevel);
+  }
+  if (!monster) return null;
+
+  // Enemy perception: d20 + passive perception modifier (default +0, using 10 as base)
+  const enemyPerceptionMod = 0; // default passive perception modifier
+  const enemyRoll = rollD20() + enemyPerceptionMod;
+
+  // Player perception: d20 + WIS modifier + proficiency bonus
+  // WIS modifier derived from playerLevel context (approximate: level-based prof bonus)
+  const profBonus = Math.ceil(ctx.playerLevel / 4) + 1;
+  // We don't have WIS score directly, so use a default WIS mod of 0
+  const playerWisMod = 0;
+  const playerRoll = rollD20() + playerWisMod + profBonus;
+
+  const diff = enemyRoll - playerRoll;
+  const article = /^[aeiou]/i.test(monster.name) ? "an" : "a";
+  const monsterLower = monster.name.toLowerCase();
+  const combatTag = `${monster.name} HP:${monster.hp} AC:${monster.ac}`;
+
+  if (diff >= 5) {
+    // Surprise attack — enemy catches player off guard
+    return {
+      type: "combat",
+      monster,
+      narrativeInjection: `${article.charAt(0).toUpperCase() + article.slice(1)} ${monsterLower} strikes from the shadows before you can react! The creature had you dead to rights — you are caught completely off guard. [Surprise round: enemy attacks with advantage]`,
+      combatStartTag: combatTag,
+    };
+  } else if (diff > -5) {
+    // Mutual awareness — both sides see each other
+    return {
+      type: "combat",
+      monster,
+      narrativeInjection: `You lock eyes with ${article} ${monsterLower} at the same moment it spots you. Neither side has the element of surprise — steel yourselves for battle.`,
+      combatStartTag: combatTag,
+    };
+  } else {
+    // Player spots enemy first — advantage if they engage
+    return {
+      type: "tension",
+      narrativeInjection: `Your keen senses detect ${article} ${monsterLower} lurking ahead before it notices you. You have the drop on it — if you choose to strike, your first attack will have advantage.`,
+    };
+  }
+}
+
 // ── Core escalation logic ─────────────────────────────────────────
 
 /**
@@ -246,6 +349,15 @@ function pickRandom<T>(arr: T[]): T {
  *   10:   80% combat, 20% tension (guaranteed something happens)
  */
 export function getNextEscalation(ctx: DangerContext): EscalationResult {
+  // Enemy encounter detection — scan most recent DM response for enemy presence
+  if (ctx.recentDMResponses && ctx.recentDMResponses.length > 0) {
+    const mostRecent = ctx.recentDMResponses[0];
+    if (detectEnemyPresence(mostRecent)) {
+      const contestResult = runPerceptionContest(ctx);
+      if (contestResult) return contestResult;
+    }
+  }
+
   const danger = assessDangerLevel(ctx);
 
   // Revelation escalation for urban/mystery campaigns after 5+ quiet turns
