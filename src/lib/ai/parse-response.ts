@@ -22,6 +22,11 @@
  *   [CRIMES]             — pipe-delimited crimes
  */
 
+import { resolveCombatTurn } from "@/lib/combat-engine";
+import type { CombatState } from "@/lib/combat-engine";
+import { getMonsterByName } from "@/lib/monsters";
+import type { Character } from "@/types/character";
+
 interface CheckRequired {
   stat: string;
   skill: string;
@@ -38,6 +43,7 @@ export interface ParsedGameState {
   backpack?: string[];
   worn?: string[];
   combatStart?: string;
+  combatRound?: boolean;
 }
 
 export interface ParsedDMResponse {
@@ -66,6 +72,7 @@ const TAGS = [
   "RESOURCES",
   "CRIMES",
   "COMBAT_START",
+  "COMBAT_ROUND",
 ] as const;
 
 /**
@@ -182,6 +189,8 @@ export function parseDMResponse(raw: string): ParsedDMResponse {
   const combatRaw = fields.get("COMBAT_START");
   if (combatRaw) parsedState.combatStart = combatRaw.trim();
 
+  if (fields.has("COMBAT_ROUND")) parsedState.combatRound = true;
+
   // Clean narrative
   narrative = cleanNarrative(narrative);
 
@@ -220,13 +229,9 @@ function trackFrozenField(field: string, currentValue: unknown): void {
 // ── Combat injection (Fix 3) ─────────────────────────────────────
 let _turnsWithoutCombat = 0;
 
-const DANGEROUS_INJECTION_LOCATIONS = ["bazaar", "forest", "docks", "alley", "warehouse", "dungeon", "ruins", "outskirts"];
-
-const CR_QUARTER_ENEMIES = ["Thug", "Bandit", "Giant Rat"];
-
-const AMBUSH_NARRATIVES = [
-  "A shadow detaches from the darkness — too late, you hear the scrape of steel. An ambush!",
-  "Something stirs in the gloom ahead. Before you can react, a shape lunges from cover with bared teeth.",
+const DANGEROUS_INJECTION_LOCATIONS = [
+  "forest", "woods", "mist", "alley", "bazaar", "dungeon", "tavern",
+  "dock", "docks", "palace", "warehouse", "ruins", "outskirts",
 ];
 
 // ── enforceGameState: single function for all 4 fixes ────────────
@@ -271,6 +276,7 @@ export function enforceGameState(
   },
   rawResponse: string,
   combatLoot?: { gold: number; items: string[]; xp: number; narrative: string },
+  combatContext?: { combatState: CombatState | null; character: Character },
 ): EnforcedResult {
   const warnings: string[] = [];
   let narrative = parsed.narrative;
@@ -278,37 +284,14 @@ export function enforceGameState(
   // ── Fix 1: Apply parsed state unconditionally ──────────────────
   // Start from current, apply engine outcome, then override with parsed tags
 
-  // HP: engine outcome first
+  // HP: engine outcome first, then parsed tag overrides unconditionally
   let hp = current.hp;
   if (engineOutcome.hpChange) {
-    const candidateHp = Math.max(0, Math.min(current.maxHp, hp + engineOutcome.hpChange));
-    // HP guard: only allow decrease if combat is active
-    if (candidateHp < hp) {
-      const hasCombatTag = /\[COMBAT_START\]/i.test(rawResponse);
-      const hasDamageTag = /\[DAMAGE\]/i.test(rawResponse);
-      if (_combatActive || hasCombatTag || hasDamageTag) {
-        if (hasCombatTag) markCombatStarted();
-        hp = candidateHp;
-      } else {
-        warnings.push("HP change blocked — no combat active");
-      }
-    } else {
-      hp = candidateHp;
-    }
+    hp = Math.max(0, Math.min(current.maxHp, hp + engineOutcome.hpChange));
   }
   // Override with parsed [HP] tag if present (treat as absolute value)
   if (parsed.parsedState.hp !== undefined) {
-    const parsedHp = Math.max(0, Math.min(current.maxHp, parsed.parsedState.hp));
-    // Same HP guard for tag-driven decreases
-    if (parsedHp < hp) {
-      if (_combatActive || parsed.parsedState.combatStart) {
-        hp = parsedHp;
-      } else {
-        warnings.push("HP change blocked — no combat active");
-      }
-    } else {
-      hp = parsedHp;
-    }
+    hp = Math.max(0, Math.min(current.maxHp, parsed.parsedState.hp));
   }
 
   // XP
@@ -321,10 +304,12 @@ export function enforceGameState(
   if (engineOutcome.goldChange) gold += engineOutcome.goldChange;
   if (parsed.parsedState.gold !== undefined) gold = parsed.parsedState.gold;
 
-  // Location
+  // Location — strip bracket metadata when applying parsed tag
   let location = current.location;
   if (engineOutcome.locationChange) location = engineOutcome.locationChange;
-  if (parsed.parsedState.location) location = parsed.parsedState.location;
+  if (parsed.parsedState.location) {
+    location = parsed.parsedState.location.replace(/\[.*$/, "").trim() || parsed.parsedState.location;
+  }
 
   // DEBUG: movement word detection for location extraction
   const MOVEMENT_WORDS = /\b(?:entered|arrived|reached|emerged|stepped\s+into|made\s+your\s+way\s+to|found\s+yourself\s+in|walked\s+to|headed\s+toward)\b/i;
@@ -373,30 +358,97 @@ export function enforceGameState(
   trackFrozenField("gold", gold);
   trackFrozenField("location", location);
 
-  // ── Fix 3: Combat injection after 5 safe turns ─────────────────
-  if (parsed.parsedState.combatStart) {
+  // ── Fix 3: Combat injection after 6 safe turns ─────────────────
+  if (parsed.parsedState.combatStart || _combatActive) {
     _turnsWithoutCombat = 0;
-    markCombatStarted();
+    if (parsed.parsedState.combatStart) markCombatStarted();
   } else {
     _turnsWithoutCombat++;
   }
 
-  // DEBUG: log combat check every turn
   const locLower = location.toLowerCase();
   const isDangerous = DANGEROUS_INJECTION_LOCATIONS.some(d => locLower.includes(d));
-  console.log(`Combat check: turns=${_turnsWithoutCombat} location=${location} dangerous=${isDangerous}`);
+  const failedStealth = engineOutcome.roll?.success === false
+    && /stealth/i.test(rawResponse);
 
-  if (!parsed.parsedState.combatStart && _turnsWithoutCombat >= 5 && isDangerous) {
+  // Force combat: 6+ safe turns OR dangerous location with failed Stealth
+  const shouldForceCombat = !parsed.parsedState.combatStart && !_combatActive
+    && (_turnsWithoutCombat >= 6 || (isDangerous && failedStealth));
+
+  if (shouldForceCombat) {
     _turnsWithoutCombat = 0;
-    const enemy = CR_QUARTER_ENEMIES[Math.floor(Math.random() * CR_QUARTER_ENEMIES.length)];
-    const ambushText = AMBUSH_NARRATIVES[Math.floor(Math.random() * AMBUSH_NARRATIVES.length)];
-    narrative = narrative + `\n\n${ambushText}\n[COMBAT_START] ${enemy} CR1/4`;
+    narrative = narrative
+      + "\n\nA shape peels from the shadows, blade glinting. The ambush is sprung before you can draw breath."
+      + "\n[COMBAT_START] Shadow Lurker HP:16 AC:13";
     markCombatStarted();
   }
 
   // Detect combat end
   if (/\b(?:defeated|slain|killed|fled|escaped|retreated)\b/i.test(narrative) && !parsed.parsedState.combatStart) {
     markCombatEnded();
+  }
+
+  // ── Change 4: Set currentEnemy on COMBAT_START via getMonsterByName ──
+  if (parsed.parsedState.combatStart && combatContext?.character) {
+    const enemyName = parsed.parsedState.combatStart
+      .replace(/\s*(?:HP|AC|CR)\s*[:=]?\s*\d+\/?\.?\d*/gi, "")
+      .replace(/\s*CR\s*[\d/]+\s*$/i, "")
+      .trim();
+    const monster = getMonsterByName(enemyName);
+    if (monster && combatContext.combatState) {
+      // Store the looked-up monster in the combatState so rounds can use it
+      combatContext.combatState.monster = monster;
+      combatContext.combatState.enemyName = monster.name;
+      combatContext.combatState.enemyHp = monster.hp;
+      combatContext.combatState.enemyMaxHp = monster.hp;
+      combatContext.combatState.enemyAc = monster.ac;
+    }
+  }
+
+  // ── Change 3: Call combat engine on COMBAT_ROUND ──────────────────
+  if (parsed.parsedState.combatRound && _combatActive
+    && combatContext?.combatState?.active && combatContext.character) {
+    const roundResult = resolveCombatTurn(
+      "attack", // default action for LLM-triggered rounds
+      combatContext.character,
+      combatContext.combatState,
+    );
+    // Append full dice roll breakdown to narrative
+    const roundNum = roundResult.combatState.roundNumber - 1;
+    const playerAtkStr = roundResult.playerAttack
+      ? `d20(${roundResult.playerAttack.rolled})+${roundResult.playerAttack.modifier}=${roundResult.playerAttack.total} vs AC ${combatContext.combatState.enemyAc}`
+      : "—";
+    const enemyAtkStr = roundResult.enemyAttack
+      ? `d20(${roundResult.enemyAttack.rolled})+${roundResult.enemyAttack.modifier}=${roundResult.enemyAttack.total} vs AC ${combatContext.character.ac}`
+      : "—";
+    const combatLog = [
+      `\n\n--- Round ${roundNum} ---`,
+      `Player Attack: ${playerAtkStr} → ${roundResult.playerDamage} damage`,
+      `Enemy Attack: ${enemyAtkStr} → ${roundResult.enemyDamage} damage`,
+      `Player HP: ${combatContext.character.hp + roundResult.playerHpChange}/${combatContext.character.maxHp}`,
+      `Enemy HP: ${roundResult.combatState.enemyHp}/${roundResult.combatState.enemyMaxHp}`,
+    ];
+    narrative = narrative + combatLog.join("\n");
+
+    // Apply combat HP change
+    hp = Math.max(0, hp + roundResult.playerHpChange);
+
+    // Update combat state
+    combatContext.combatState.enemyHp = roundResult.combatState.enemyHp;
+    combatContext.combatState.roundNumber = roundResult.combatState.roundNumber;
+    combatContext.combatState.active = roundResult.combatState.active;
+
+    if (roundResult.combatEndReason === "enemy_killed") {
+      markCombatEnded();
+      xp += roundResult.xpAwarded;
+      gold += roundResult.goldDropped;
+      if (roundResult.itemsDropped.length > 0) inventory.push(...roundResult.itemsDropped);
+      if (roundResult.lootNarrative) {
+        narrative = narrative + "\n" + roundResult.lootNarrative;
+      }
+    } else if (roundResult.combatEndReason === "player_down") {
+      markCombatEnded();
+    }
   }
 
   // ── Fix 4: XP and loot on successful checks ───────────────────

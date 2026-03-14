@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { buildSystemPrompt, buildEngineContextMessage } from "@/lib/ai/dm-prompt";
-import { parseDMResponse } from "@/lib/ai/parse-response";
+import { parseDMResponse, enforceGameState } from "@/lib/ai/parse-response";
 import { preGenerate, postGenerate } from "@/lib/engine/pipeline";
 import type { PipelineInput } from "@/lib/engine/pipeline";
 import { getRandomThemeForLevel, getRandomCampaign } from "@/lib/campaigns";
@@ -123,6 +123,8 @@ export async function POST(request: Request) {
     let checkRequired: { stat: string; skill: string; dc: number; description: string } | undefined;
     let postResult = null;
     let contradictionHint: string | undefined;
+    let lastParsed: ReturnType<typeof parseDMResponse> | null = null;
+    let lastRawText = "";
 
     for (let attempt = 0; attempt <= MAX_REGENERATION_ATTEMPTS; attempt++) {
       const engineContext = buildEngineContextMessage(
@@ -152,7 +154,9 @@ export async function POST(request: Request) {
       }
 
       const { text: rawText } = await callWithCascade(messages);
+      lastRawText = rawText;
       const parsed = parseDMResponse(rawText);
+      lastParsed = parsed;
       narrative = parsed.narrative;
       sceneImagePrompt = parsed.sceneImagePrompt;
       checkRequired = parsed.checkRequired;
@@ -180,8 +184,70 @@ export async function POST(request: Request) {
       throw new Error("Pipeline failed to produce a result");
     }
 
-    // ── Crime Processing ────────────────────────────────────────────
+    // ── ENFORCE: Apply parsed state tags to gameState ──────────────
     const eo = preResult.engineOutcome;
+    if (lastParsed) {
+      const enforced = enforceGameState(
+        lastParsed,
+        {
+          hp: character.hp,
+          maxHp: character.maxHp,
+          xp: character.xp ?? 0,
+          gold: character.gold,
+          location: gameState.location,
+          inventory: character.inventory,
+        },
+        {
+          hpChange: eo.hpChange,
+          goldChange: eo.goldChange,
+          xpGained: eo.xpGained,
+          locationChange: eo.locationChange,
+          itemsGained: eo.itemsGained,
+          itemsLost: eo.itemsLost,
+          roll: eo.roll ? { success: eo.roll.success, dc: eo.roll.dc } : undefined,
+        },
+        lastRawText,
+        combatResult?.combatEndReason === "enemy_killed" ? {
+          gold: combatResult.goldDropped,
+          items: combatResult.itemsDropped,
+          xp: combatResult.xpAwarded,
+          narrative: combatResult.lootNarrative,
+        } : undefined,
+        { combatState: activeCombatState, character },
+      );
+
+      // Use enforced values — overwrite engine outcome so the response reflects them
+      narrative = enforced.narrative;
+      eo.hpChange = enforced.hp - character.hp;
+      eo.goldChange = enforced.gold - character.gold;
+      eo.xpGained = enforced.xp - (character.xp ?? 0);
+      if (enforced.location !== gameState.location) {
+        eo.locationChange = enforced.location;
+      }
+      // Items: enforced.inventory is the final set; compute diff
+      const gainedItems = enforced.inventory.filter(
+        (item, i) => !character.inventory.includes(item) || enforced.inventory.indexOf(item) !== character.inventory.indexOf(item)
+      );
+      // Only override if enforced added items beyond what engine already granted
+      if (gainedItems.length > eo.itemsGained.length) {
+        eo.itemsGained = gainedItems;
+      }
+
+      // Handle combat injection from enforceGameState (Fix 3: safe turn combat)
+      if (enforced.narrative.includes("[COMBAT_START]") && !activeCombatState?.active) {
+        const combatMatch = enforced.narrative.match(/\[COMBAT_START\]\s*(.+?)$/m);
+        if (combatMatch) {
+          const newCombat = initCombat(combatMatch[1].trim(), character);
+          if (newCombat) {
+            activeCombatState = newCombat;
+          }
+          // Strip the [COMBAT_START] line from narrative
+          narrative = enforced.narrative.replace(/\[COMBAT_START\][^\n]*/g, "").trim();
+        }
+      }
+    }
+
+    // ── Crime Processing ────────────────────────────────────────────
 
     // Run guard investigations on existing crimes (background, once per turn)
     const crimeList = crimes ?? [];
