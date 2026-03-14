@@ -117,8 +117,10 @@ export function assessDangerLevel(ctx: DangerContext): number {
 
   // Base danger from location keywords
   let danger = 2; // default for unknown locations
+  const matchedKeywords: string[] = [];
   for (const [keyword, score] of Object.entries(LOCATION_DANGER)) {
     if (locLower.includes(keyword)) {
+      matchedKeywords.push(`${keyword}(${score})`);
       danger = Math.max(danger, score);
     }
   }
@@ -170,7 +172,9 @@ export function assessDangerLevel(ctx: DangerContext): number {
   if (narrativeDanger >= 2.0 && danger >= 4) danger += 2;
   else if (narrativeDanger >= 1.0 && danger >= 3) danger += 1;
 
-  return Math.max(0, Math.min(10, danger));
+  const finalScore = Math.max(0, Math.min(10, danger));
+  console.log(`DANGER ASSESSMENT location=${ctx.location} keywords found=[${matchedKeywords.join(", ")}] score=${finalScore}`);
+  return finalScore;
 }
 
 // ── Escalation result ─────────────────────────────────────────────

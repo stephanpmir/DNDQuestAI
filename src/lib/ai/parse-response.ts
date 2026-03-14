@@ -26,7 +26,7 @@ import { resolveCombatTurn } from "@/lib/combat-engine";
 import type { CombatState } from "@/lib/combat-engine";
 import { getMonsterByName } from "@/lib/monsters";
 import type { Character } from "@/types/character";
-import { getNextEscalation, detectCampaignType, type DangerContext } from "@/lib/progression-engine";
+import { getNextEscalation, assessDangerLevel, detectCampaignType, type DangerContext } from "@/lib/progression-engine";
 
 interface CheckRequired {
   stat: string;
@@ -404,7 +404,10 @@ export function enforceGameState(
       recentDMResponses: [..._recentDMResponses],
     };
 
+    const dangerScore = assessDangerLevel(dangerCtx);
     const escalation = getNextEscalation(dangerCtx);
+
+    console.log(`PROGRESSION CHECK turn=${_turnsSinceCombat} safeTurns=${_turnsSinceLastEscalation} campaignType=${campaignTheme ?? "none"} danger=${dangerScore} escalation=${escalation.type}`);
 
     if (escalation.type === "combat" && escalation.combatStartTag) {
       _turnsSinceCombat = 0;
