@@ -8,7 +8,7 @@ import { getRandomThemeForLevel, getRandomCampaign } from "@/lib/campaigns";
 import type { CampaignTheme } from "@/lib/campaigns";
 import type { Character, CharacterClass, Race, AbilityScores } from "@/types/character";
 import type { GameState } from "@/types/game";
-import { getDefaultEquipped, getItemInfo } from "@/lib/items";
+import { getItemInfo } from "@/lib/items";
 import { RACIAL_DATA, applyRacialBonuses } from "@/lib/races";
 import { buildResourcePool } from "@/lib/resources";
 import { callWithCascade } from "@/lib/ai/providers";
@@ -80,19 +80,55 @@ function computeAC(cls: string, dexScore: number, conScore: number, wisScore: nu
   return 10 + dexMod + shieldBonus;
 }
 
-const STARTING_EQUIPMENT: Record<string, string[]> = {
-  Barbarian: ["Greataxe", "Handaxe", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Explorer's Pack"],
-  Bard: ["Rapier", "Leather Armor", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Lute", "Diplomat's Pack"],
-  Cleric: ["Mace", "Scale Mail", "Shield", "Holy Symbol", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Priest's Pack"],
-  Druid: ["Scimitar", "Leather Armor", "Wooden Shield", "Druidic Focus", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Explorer's Pack"],
-  Fighter: ["Longsword", "Chain Mail", "Shield", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Dungeoneer's Pack"],
-  Monk: ["Shortsword", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Dart x10", "Dungeoneer's Pack"],
-  Paladin: ["Longsword", "Chain Mail", "Shield", "Holy Symbol", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Priest's Pack"],
-  Ranger: ["Shortsword", "Shortbow", "Leather Armor", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Quiver with 20 Arrows", "Explorer's Pack"],
-  Rogue: ["Shortsword", "Shortbow", "Leather Armor", "Thieves' Tools", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Quiver with 20 Arrows", "Burglar's Pack"],
-  Sorcerer: ["Dagger", "Arcane Focus", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Dungeoneer's Pack"],
-  Warlock: ["Dagger", "Arcane Focus", "Leather Armor", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Scholar's Pack"],
-  Wizard: ["Quarterstaff", "Arcane Focus", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Spellbook", "Scholar's Pack"],
+const STARTING_EQUIPMENT: Record<string, { worn: string[]; backpack: string[] }> = {
+  Barbarian: {
+    worn: ["Greataxe", "Handaxe"],
+    backpack: ["Backpack", "Waterskin", "Rations x4", "Torch x4", "Explorer's Pack"],
+  },
+  Bard: {
+    worn: ["Rapier", "Leather Armor"],
+    backpack: ["Backpack", "Waterskin", "Rations x4", "Torch x4", "Lute", "Diplomat's Pack"],
+  },
+  Cleric: {
+    worn: ["Mace", "Scale Mail", "Shield", "Holy Symbol"],
+    backpack: ["Backpack", "Waterskin", "Rations x4", "Torch x4", "Priest's Pack"],
+  },
+  Druid: {
+    worn: ["Scimitar", "Leather Armor", "Wooden Shield", "Druidic Focus"],
+    backpack: ["Backpack", "Waterskin", "Rations x4", "Torch x4", "Explorer's Pack"],
+  },
+  Fighter: {
+    worn: ["Longsword", "Chain Mail", "Shield"],
+    backpack: ["Backpack", "Waterskin", "Rations x4", "Torch x4", "Dungeoneer's Pack"],
+  },
+  Monk: {
+    worn: ["Shortsword"],
+    backpack: ["Backpack", "Waterskin", "Rations x4", "Torch x4", "Dart x10", "Dungeoneer's Pack"],
+  },
+  Paladin: {
+    worn: ["Longsword", "Chain Mail", "Shield", "Holy Symbol"],
+    backpack: ["Backpack", "Waterskin", "Rations x4", "Torch x4", "Priest's Pack"],
+  },
+  Ranger: {
+    worn: ["Shortsword", "Shortbow", "Leather Armor"],
+    backpack: ["Backpack", "Waterskin", "Rations x4", "Torch x4", "Quiver with 20 Arrows", "Explorer's Pack"],
+  },
+  Rogue: {
+    worn: ["Shortsword", "Shortbow", "Leather Armor", "Thieves' Tools"],
+    backpack: ["Backpack", "Waterskin", "Rations x4", "Torch x4", "Quiver with 20 Arrows", "Burglar's Pack"],
+  },
+  Sorcerer: {
+    worn: ["Dagger", "Arcane Focus"],
+    backpack: ["Backpack", "Waterskin", "Rations x4", "Torch x4", "Dungeoneer's Pack"],
+  },
+  Warlock: {
+    worn: ["Dagger", "Arcane Focus", "Leather Armor"],
+    backpack: ["Backpack", "Waterskin", "Rations x4", "Torch x4", "Scholar's Pack"],
+  },
+  Wizard: {
+    worn: ["Quarterstaff", "Arcane Focus"],
+    backpack: ["Backpack", "Waterskin", "Rations x4", "Torch x4", "Spellbook", "Scholar's Pack"],
+  },
 };
 
 const XP_THRESHOLDS = [0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000];
@@ -139,8 +175,9 @@ function buildCharacter(data: {
   if (race === "Half-Orc" && !skillProfs.includes("Intimidation")) skillProfs.push("Intimidation");
 
   const hp = computeStartingHp(cls, abilityScores.constitution);
-  const inventory = STARTING_EQUIPMENT[cls] ?? STARTING_EQUIPMENT.Fighter;
-  const equipped = getDefaultEquipped(inventory);
+  const gear = STARTING_EQUIPMENT[cls] ?? STARTING_EQUIPMENT.Fighter;
+  const equipped = [...gear.worn];
+  const inventory = [...gear.worn, ...gear.backpack];
   const ac = computeAC(cls, abilityScores.dexterity, abilityScores.constitution, abilityScores.wisdom, equipped, data.fightingStyle);
   const identifiedItems = inventory.filter((item) => {
     const info = getItemInfo(item);

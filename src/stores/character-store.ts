@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Character, Gender, Race, CharacterClass, AbilityScores, AvatarCustomization, BeginnerSurvey } from "@/types/character";
 import { createDefaultCharacter, getXpToNextLevel } from "@/types/character";
-import { getDefaultEquipped, getItemInfo, getEquipSlot, SLOT_LIMITS } from "@/lib/items";
+import { getItemInfo, getEquipSlot, SLOT_LIMITS } from "@/lib/items";
 import { RACIAL_DATA, applyRacialBonuses } from "@/lib/races";
 import { buildResourcePool, recalculateResources, rechargeResources } from "@/lib/resources";
 import type { ResourcePool } from "@/lib/resources";
@@ -58,24 +58,64 @@ const HIT_DICE: Record<string, number> = {
   Sorcerer: 6, Wizard: 6,
 };
 
-/** D&D 5e starting equipment by class */
-function getStartingEquipment(cls: CharacterClass): string[] {
-  const base = ["Backpack", "Waterskin", "Rations x4", "Torch x4"];
-  const classGear: Record<string, string[]> = {
-    Barbarian: ["Greataxe", "Handaxe", "Explorer's Pack"],
-    Bard: ["Rapier", "Leather Armor", "Lute", "Diplomat's Pack"],
-    Cleric: ["Mace", "Scale Mail", "Shield", "Holy Symbol", "Priest's Pack"],
-    Druid: ["Scimitar", "Leather Armor", "Wooden Shield", "Druidic Focus", "Explorer's Pack"],
-    Fighter: ["Longsword", "Chain Mail", "Shield", "Dungeoneer's Pack"],
-    Monk: ["Shortsword", "Dart x10", "Dungeoneer's Pack"],
-    Paladin: ["Longsword", "Chain Mail", "Shield", "Holy Symbol", "Priest's Pack"],
-    Ranger: ["Shortsword", "Shortbow", "Leather Armor", "Quiver with 20 Arrows", "Explorer's Pack"],
-    Rogue: ["Shortsword", "Shortbow", "Leather Armor", "Thieves' Tools", "Quiver with 20 Arrows", "Burglar's Pack"],
-    Sorcerer: ["Dagger", "Arcane Focus", "Dungeoneer's Pack"],
-    Warlock: ["Dagger", "Arcane Focus", "Leather Armor", "Scholar's Pack"],
-    Wizard: ["Quarterstaff", "Arcane Focus", "Spellbook", "Scholar's Pack"],
+/** D&D 5e starting equipment by class — split into worn (equipped) and backpack (inventory) */
+function getStartingEquipment(cls: CharacterClass): { worn: string[]; backpack: string[] } {
+  const baseBackpack = ["Backpack", "Waterskin", "Rations x4", "Torch x4"];
+  const classGear: Record<string, { worn: string[]; backpack: string[] }> = {
+    Barbarian: {
+      worn: ["Greataxe", "Handaxe"],
+      backpack: ["Explorer's Pack"],
+    },
+    Bard: {
+      worn: ["Rapier", "Leather Armor"],
+      backpack: ["Lute", "Diplomat's Pack"],
+    },
+    Cleric: {
+      worn: ["Mace", "Scale Mail", "Shield", "Holy Symbol"],
+      backpack: ["Priest's Pack"],
+    },
+    Druid: {
+      worn: ["Scimitar", "Leather Armor", "Wooden Shield", "Druidic Focus"],
+      backpack: ["Explorer's Pack"],
+    },
+    Fighter: {
+      worn: ["Longsword", "Chain Mail", "Shield"],
+      backpack: ["Dungeoneer's Pack"],
+    },
+    Monk: {
+      worn: ["Shortsword"],
+      backpack: ["Dart x10", "Dungeoneer's Pack"],
+    },
+    Paladin: {
+      worn: ["Longsword", "Chain Mail", "Shield", "Holy Symbol"],
+      backpack: ["Priest's Pack"],
+    },
+    Ranger: {
+      worn: ["Shortsword", "Shortbow", "Leather Armor"],
+      backpack: ["Quiver with 20 Arrows", "Explorer's Pack"],
+    },
+    Rogue: {
+      worn: ["Shortsword", "Shortbow", "Leather Armor", "Thieves' Tools"],
+      backpack: ["Quiver with 20 Arrows", "Burglar's Pack"],
+    },
+    Sorcerer: {
+      worn: ["Dagger", "Arcane Focus"],
+      backpack: ["Dungeoneer's Pack"],
+    },
+    Warlock: {
+      worn: ["Dagger", "Arcane Focus", "Leather Armor"],
+      backpack: ["Scholar's Pack"],
+    },
+    Wizard: {
+      worn: ["Quarterstaff", "Arcane Focus"],
+      backpack: ["Spellbook", "Scholar's Pack"],
+    },
   };
-  return [...base, ...(classGear[cls] ?? [])];
+  const gear = classGear[cls] ?? classGear.Fighter;
+  return {
+    worn: gear.worn,
+    backpack: [...baseBackpack, ...gear.backpack],
+  };
 }
 
 /** Calculate AC based on equipped armor and class features */
@@ -258,8 +298,9 @@ export const useCharacterStore = create<CharacterStore>()(
           }
 
           const hp = computeStartingHp(c.class, abilityScores.constitution);
-          const inventory = getStartingEquipment(c.class);
-          const equipped = getDefaultEquipped(inventory);
+          const gear = getStartingEquipment(c.class);
+          const equipped = [...gear.worn];
+          const inventory = [...gear.worn, ...gear.backpack];
           // Use full computeAC with equipped items so shield bonus is included
           const ac = computeAC(c.class, abilityScores.dexterity, abilityScores.constitution, abilityScores.wisdom, equipped, c.fightingStyle);
           const identifiedItems = inventory.filter((item) => {
