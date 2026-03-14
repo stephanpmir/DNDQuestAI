@@ -171,6 +171,20 @@ export interface EngineOutcome {
   lastTravelEncounterTurn?: number;
   /** Updated resource pool after resource consumption */
   resourceUpdates?: import("@/lib/resources").ResourcePool;
+  /** Condition applied to the player this turn */
+  conditionApplied?: import("@/types/combat").Condition;
+  /** Condition removed from the player this turn */
+  conditionRemoved?: import("@/types/combat").Condition;
+  /** Whether concentration broke this turn */
+  concentrationBroke?: boolean;
+  /** Death save successes (when at 0 HP) */
+  deathSaveSuccesses?: number;
+  /** Death save failures (when at 0 HP) */
+  deathSaveFailures?: number;
+  /** Whether the player died this turn */
+  playerDied?: boolean;
+  /** Reference to the current combat state */
+  combatState?: import("@/lib/combat-engine").CombatState;
 }
 
 /** What the LLM receives to narrate — it does NOT decide outcomes. */

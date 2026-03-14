@@ -1,5 +1,8 @@
 import type { Character } from "@/types/character";
+import type { Condition } from "@/types/combat";
 import type { EngineOutcome, WorldEvent } from "@/types/world";
+import type { CombatState } from "@/lib/combat-engine";
+import { resolveCombatTurn } from "@/lib/combat-engine";
 import { abilityCheck, attackRoll, damageRoll, modifier, d20, d20Lucky, d } from "./dice";
 import {
   detectKarmaAction,
@@ -664,8 +667,48 @@ export function resolveAction(
   gameState: { location: string; questLog: string[]; turnCount: number },
   recentEvents: WorldEvent[],
   karma?: number,
-  groundItems?: string[]
+  groundItems?: string[],
+  combatState?: CombatState,
 ): EngineOutcome {
+  // ── Combat routing — delegate to full combat engine when active ──
+  if (combatState?.active) {
+    const combatResult = resolveCombatTurn(playerInput, character, combatState);
+    const outcome: EngineOutcome = {
+      hpChange: combatResult.playerHpChange,
+      itemsGained: combatResult.itemsDropped,
+      itemsLost: [],
+      goldChange: combatResult.goldDropped,
+      xpGained: combatResult.xpAwarded,
+      newNpcs: [],
+      roll: combatResult.playerAttack ?? combatResult.enemyAttack ?? undefined,
+      damageDealt: combatResult.playerDamage,
+      isCriticalHit: combatResult.diceBreakdown.playerAttackRoll?.crit,
+      damageTaken: combatResult.enemyDamage > 0 ? combatResult.enemyDamage : undefined,
+      combatState: combatResult.combatState,
+    };
+
+    // Track conditions applied/removed
+    const playerConditions = combatResult.combatState.playerCombatant.conditions;
+    if (playerConditions.size > 0) {
+      const firstCondition = [...playerConditions][0];
+      outcome.conditionApplied = firstCondition;
+    }
+
+    // Track concentration break
+    if (combatResult.narrative.includes("concentration") && combatResult.narrative.includes("breaks")) {
+      outcome.concentrationBroke = true;
+    }
+
+    // Death save tracking
+    if (combatResult.combatEndReason === "player_down") {
+      outcome.deathSaveSuccesses = 0;
+      outcome.deathSaveFailures = 0;
+      outcome.playerDied = false;
+    }
+
+    return outcome;
+  }
+
   const action = detectAction(playerInput, character);
   // Halfling Lucky trait: reroll natural 1s on d20 rolls
   const lucky = character.race === "Halfling";

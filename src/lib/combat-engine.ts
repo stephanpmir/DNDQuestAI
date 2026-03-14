@@ -9,11 +9,13 @@
 
 import type { Character } from "@/types/character";
 import type { RollResult } from "@/types/world";
+import type { Condition, CombatantState } from "@/types/combat";
+import { createDefaultCombatantState } from "@/types/combat";
 import { getMonsterByName, getMonstersByCR, MONSTER_DB } from "@/lib/monsters";
 import type { Monster, MonsterAttack } from "@/lib/monsters";
 import { getWeaponDamage, getItemInfo } from "@/lib/items";
 import { generateLoot } from "@/lib/loot-engine";
-import { attackRoll, damageRoll, modifier, d20, roll } from "@/lib/engine/dice";
+import { attackRoll, damageRoll, modifier, d20, roll, savingThrow } from "@/lib/engine/dice";
 
 // ── Combat state ─────────────────────────────────────────────────
 
@@ -29,6 +31,20 @@ export interface CombatState {
   enemyInitiative: number;
   /** Full monster data from the SRD DB */
   monster: Monster;
+  /** Combatant state for the player */
+  playerCombatant: CombatantState;
+  /** Combatant state for the enemy */
+  enemyCombatant: CombatantState;
+  /** Turn order within a round */
+  initiativeOrder: ("player" | "enemy")[];
+  /** Index into initiativeOrder for whose turn it is */
+  currentTurnIndex: number;
+  /** Number of remaining attacks for enemy multiattack this turn */
+  enemyRemainingAttacks: number;
+  /** Whether this is a surprise round */
+  surpriseRound: boolean;
+  /** Which side is surprised ("none" for normal rounds) */
+  surprisedSide: "player" | "enemy" | "none";
 }
 
 /** Full dice breakdown for transparency in combat log */
@@ -259,6 +275,9 @@ export function initCombat(
   const playerInit = d20() + playerDexMod;
   const enemyInit = d20() + enemyDexMod;
 
+  const initiativeOrder: ("player" | "enemy")[] =
+    playerInit >= enemyInit ? ["player", "enemy"] : ["enemy", "player"];
+
   return {
     active: true,
     enemyName: monster.name,
@@ -270,6 +289,552 @@ export function initCombat(
     playerInitiative: playerInit,
     enemyInitiative: enemyInit,
     monster,
+    playerCombatant: createDefaultCombatantState(),
+    enemyCombatant: createDefaultCombatantState(),
+    initiativeOrder,
+    currentTurnIndex: 0,
+    enemyRemainingAttacks: resolveMonsterMultiattack(monster.name),
+    surpriseRound: false,
+    surprisedSide: "none",
+  };
+}
+
+// ── Saving throw proficiencies by class ──────────────────────────
+
+export const SAVING_THROW_PROFICIENCIES: Record<string, [string, string]> = {
+  Barbarian: ["strength", "constitution"],
+  Bard: ["dexterity", "charisma"],
+  Cleric: ["wisdom", "charisma"],
+  Druid: ["intelligence", "wisdom"],
+  Fighter: ["strength", "constitution"],
+  Monk: ["strength", "dexterity"],
+  Paladin: ["wisdom", "charisma"],
+  Ranger: ["strength", "dexterity"],
+  Rogue: ["dexterity", "intelligence"],
+  Sorcerer: ["constitution", "charisma"],
+  Warlock: ["wisdom", "charisma"],
+  Wizard: ["intelligence", "wisdom"],
+};
+
+// ── Monster multiattack counts (SRD) ────────────────────────────
+
+export const MONSTER_MULTIATTACK: Record<string, number> = {
+  Wolf: 1,
+  "Dire Wolf": 1,
+  "Brown Bear": 2,
+  "Giant Spider": 1,
+  Bandit: 1,
+  "Bandit Captain": 3,
+  Thug: 2,
+  Veteran: 3,
+  Knight: 2,
+  Gladiator: 3,
+  Troll: 3,
+  Ogre: 1,
+  Giant: 2,
+  Vampire: 3,
+  Zombie: 1,
+  Skeleton: 1,
+  Ghoul: 2,
+  Wight: 2,
+  Wraith: 1,
+  Shadow: 1,
+  Specter: 1,
+  Mummy: 2,
+  Lich: 3,
+  Dragon: 3,
+  Hydra: 5,
+};
+
+// ── Monster special abilities ────────────────────────────────────
+
+export interface MonsterSpecialAbility {
+  type: "condition" | "save" | "effect";
+  condition?: Condition;
+  saveAbility?: string;
+  saveDC?: number;
+  durationTurns?: number;
+  immuneRaces?: string[];
+  description: string;
+  /** For effect type: special mechanic name */
+  effectName?: string;
+  /** For regeneration-style effects */
+  hpRegain?: number;
+  /** Damage on failed save (dice notation) */
+  damageDice?: string;
+  /** Recharge mechanic (roll d6, recharge on N-6) */
+  rechargeMin?: number;
+}
+
+export const MONSTER_SPECIAL_ABILITIES: Record<string, MonsterSpecialAbility> = {
+  Ghoul: {
+    type: "condition",
+    condition: "paralyzed",
+    saveAbility: "constitution",
+    saveDC: 10,
+    durationTurns: 10, // 1 minute = 10 rounds
+    immuneRaces: ["Elf", "Half-Elf"],
+    description: "Ghoul's claws carry a paralyzing toxin. CON save DC 10 or be paralyzed.",
+  },
+  "Giant Spider": {
+    type: "condition",
+    condition: "restrained",
+    saveAbility: "strength",
+    saveDC: 12,
+    durationTurns: 1, // break free as action
+    description: "Giant Spider's web restrains the target. STR save DC 12 to break free.",
+  },
+  Wolf: {
+    type: "effect",
+    effectName: "Pack Tactics",
+    description: "Wolf has advantage on attack rolls when an ally is within 5 feet of the target.",
+  },
+  Zombie: {
+    type: "effect",
+    effectName: "Undead Fortitude",
+    saveAbility: "constitution",
+    saveDC: 5, // DC 5 + damage dealt
+    description: "When reduced to 0 HP, CON save DC 5 + damage dealt. On success, stays at 1 HP (unless radiant or crit).",
+  },
+  Troll: {
+    type: "effect",
+    effectName: "Regeneration",
+    hpRegain: 10,
+    description: "Troll regains 10 HP at the start of each turn unless it took acid or fire damage this round.",
+  },
+  "Vampire Spawn": {
+    type: "condition",
+    condition: "charmed",
+    saveAbility: "wisdom",
+    saveDC: 17,
+    durationTurns: 24, // 24 hours
+    description: "Vampire's charm. WIS save DC 17 or be charmed.",
+  },
+  "Green Dragon": {
+    type: "save",
+    saveAbility: "constitution",
+    saveDC: 14,
+    damageDice: "12d6",
+    rechargeMin: 5,
+    description: "Poison Breath (Recharge 5-6). CON save DC 14, 12d6 poison damage, half on success.",
+  },
+};
+
+// ── Condition mechanical effects ─────────────────────────────────
+
+export interface ConditionEffect {
+  attackAdvantage: "advantage" | "disadvantage" | "none";
+  attackedAdvantage: "advantage" | "disadvantage" | "none";
+  autoFailSaves?: string[];
+  autoCritMelee?: boolean;
+  speedZero?: boolean;
+  incapacitated?: boolean;
+  disadvantageOnChecks?: boolean;
+  cannotMoveCloser?: boolean;
+  standUpCost?: string;
+  rangedDisadvantage?: boolean;
+  description: string;
+}
+
+export const CONDITIONS_EFFECTS: Partial<Record<Condition, ConditionEffect>> = {
+  prone: {
+    attackAdvantage: "disadvantage",
+    attackedAdvantage: "advantage", // melee within 5ft
+    rangedDisadvantage: true,
+    standUpCost: "half movement",
+    description: "Attackers within 5 feet have advantage, ranged attackers have disadvantage. Costs half movement to stand up.",
+  },
+  restrained: {
+    attackAdvantage: "disadvantage",
+    attackedAdvantage: "advantage",
+    autoFailSaves: ["dexterity"],
+    speedZero: true,
+    description: "Attackers have advantage. Creature has disadvantage on attacks and DEX saves. Speed becomes 0.",
+  },
+  paralyzed: {
+    attackAdvantage: "none",
+    attackedAdvantage: "advantage",
+    autoFailSaves: ["strength", "dexterity"],
+    autoCritMelee: true,
+    incapacitated: true,
+    description: "Incapacitated, auto-fail STR and DEX saves. Melee attacks within 5 feet auto-crit.",
+  },
+  grappled: {
+    attackAdvantage: "none",
+    attackedAdvantage: "none",
+    speedZero: true,
+    description: "Speed becomes 0. Ends if grappler is incapacitated.",
+  },
+  stunned: {
+    attackAdvantage: "none",
+    attackedAdvantage: "advantage",
+    autoFailSaves: ["strength", "dexterity"],
+    incapacitated: true,
+    description: "Incapacitated, auto-fail STR and DEX saves. Attackers have advantage.",
+  },
+  poisoned: {
+    attackAdvantage: "disadvantage",
+    attackedAdvantage: "none",
+    disadvantageOnChecks: true,
+    description: "Disadvantage on attack rolls and ability checks.",
+  },
+  frightened: {
+    attackAdvantage: "disadvantage",
+    attackedAdvantage: "none",
+    disadvantageOnChecks: true,
+    cannotMoveCloser: true,
+    description: "Disadvantage on attack rolls and ability checks while source of fear is in line of sight. Cannot move closer to source.",
+  },
+  blinded: {
+    attackAdvantage: "disadvantage",
+    attackedAdvantage: "advantage",
+    description: "Auto-fails sight-based Perception. Attackers have advantage. Creature has disadvantage on attacks.",
+  },
+  invisible: {
+    attackAdvantage: "advantage",
+    attackedAdvantage: "disadvantage",
+    description: "Attackers have disadvantage against it. Creature has advantage on attacks.",
+  },
+};
+
+// ── Resolve condition saving throw ───────────────────────────────
+
+export function resolveConditionSave(
+  character: Character,
+  condition: Condition,
+  dc: number,
+  proficiency: number,
+): { success: boolean; roll: RollResult } {
+  const saveProfs = SAVING_THROW_PROFICIENCIES[character.class] ?? [];
+  // Determine the save ability based on common condition saves
+  const saveAbility = condition === "paralyzed" || condition === "poisoned" || condition === "petrified"
+    ? "constitution"
+    : condition === "charmed" || condition === "frightened"
+    ? "wisdom"
+    : condition === "restrained" || condition === "prone"
+    ? "strength"
+    : "constitution";
+
+  const abilityScore = character.abilityScores[saveAbility as keyof typeof character.abilityScores] ?? 10;
+  const isProficient = saveProfs.includes(saveAbility);
+  const prof = isProficient ? proficiency : 0;
+  const lucky = character.race === "Halfling";
+
+  const result = savingThrow(abilityScore, dc, saveAbility, prof, lucky);
+  return { success: result.success, roll: result };
+}
+
+// ── Resolve concentration save ───────────────────────────────────
+
+export function resolveConcentrationSave(
+  character: Character,
+  damageTaken: number,
+): { success: boolean; concentrationBroke: boolean; roll: RollResult } {
+  const dc = Math.max(10, Math.floor(damageTaken / 2));
+  const saveProfs = SAVING_THROW_PROFICIENCIES[character.class] ?? [];
+  const isProficient = saveProfs.includes("constitution");
+  const profBonus = isProficient ? (Math.floor((character.level - 1) / 4) + 2) : 0;
+  const lucky = character.race === "Halfling";
+
+  const result = savingThrow(
+    character.abilityScores.constitution,
+    dc,
+    "constitution",
+    profBonus,
+    lucky,
+  );
+
+  return {
+    success: result.success,
+    concentrationBroke: !result.success,
+    roll: result,
+  };
+}
+
+// ── Resolve monster special ability ──────────────────────────────
+
+export function resolveMonsterSpecialAbility(
+  monsterName: string,
+  character: Character,
+): { conditionApplied: Condition | null; duration: number; narrative: string } | null {
+  const ability = MONSTER_SPECIAL_ABILITIES[monsterName];
+  if (!ability) return null;
+
+  // Recharge check for breath weapons
+  if (ability.rechargeMin) {
+    const rechargeRoll = Math.floor(Math.random() * 6) + 1;
+    if (rechargeRoll < ability.rechargeMin) return null;
+  }
+
+  if (ability.type === "condition" && ability.condition && ability.saveAbility && ability.saveDC) {
+    // Check racial immunity
+    if (ability.immuneRaces?.includes(character.race)) {
+      return {
+        conditionApplied: null,
+        duration: 0,
+        narrative: `The ${monsterName}'s ${ability.description.split(".")[0]} has no effect — your ${character.race} heritage grants immunity.`,
+      };
+    }
+
+    const abilityScore = character.abilityScores[ability.saveAbility as keyof typeof character.abilityScores] ?? 10;
+    const saveProfs = SAVING_THROW_PROFICIENCIES[character.class] ?? [];
+    const isProficient = saveProfs.includes(ability.saveAbility);
+    const prof = isProficient ? (Math.floor((character.level - 1) / 4) + 2) : 0;
+    const lucky = character.race === "Halfling";
+
+    const result = savingThrow(abilityScore, ability.saveDC, ability.saveAbility, prof, lucky);
+
+    if (!result.success) {
+      return {
+        conditionApplied: ability.condition,
+        duration: ability.durationTurns ?? 1,
+        narrative: `You fail the ${ability.saveAbility.toUpperCase()} save (${result.total} vs DC ${ability.saveDC}). You are ${ability.condition}!`,
+      };
+    }
+    return {
+      conditionApplied: null,
+      duration: 0,
+      narrative: `You resist the ${monsterName}'s special attack (${ability.saveAbility.toUpperCase()} save ${result.total} vs DC ${ability.saveDC}).`,
+    };
+  }
+
+  if (ability.type === "effect") {
+    return {
+      conditionApplied: null,
+      duration: 0,
+      narrative: ability.description,
+    };
+  }
+
+  if (ability.type === "save" && ability.saveAbility && ability.saveDC && ability.damageDice) {
+    const abilityScore = character.abilityScores[ability.saveAbility as keyof typeof character.abilityScores] ?? 10;
+    const saveProfs = SAVING_THROW_PROFICIENCIES[character.class] ?? [];
+    const isProficient = saveProfs.includes(ability.saveAbility);
+    const prof = isProficient ? (Math.floor((character.level - 1) / 4) + 2) : 0;
+    const lucky = character.race === "Halfling";
+
+    const result = savingThrow(abilityScore, ability.saveDC, ability.saveAbility, prof, lucky);
+    // Damage dice are handled externally, just return the save result
+    return {
+      conditionApplied: null,
+      duration: 0,
+      narrative: result.success
+        ? `You brace against the ${monsterName}'s breath weapon (${ability.saveAbility.toUpperCase()} save ${result.total} vs DC ${ability.saveDC}) — half damage!`
+        : `You fail to dodge the ${monsterName}'s breath weapon (${ability.saveAbility.toUpperCase()} save ${result.total} vs DC ${ability.saveDC}) — full damage!`,
+    };
+  }
+
+  return null;
+}
+
+// ── Resolve monster multiattack ──────────────────────────────────
+
+export function resolveMonsterMultiattack(monsterName: string): number {
+  // Check exact name first
+  if (MONSTER_MULTIATTACK[monsterName] !== undefined) {
+    return MONSTER_MULTIATTACK[monsterName];
+  }
+  // Check partial match (e.g. "Young White Dragon" matches "Dragon")
+  for (const [key, count] of Object.entries(MONSTER_MULTIATTACK)) {
+    if (monsterName.toLowerCase().includes(key.toLowerCase())) {
+      return count;
+    }
+  }
+  return 1; // default: single attack
+}
+
+// ── Resolve opportunity attack ───────────────────────────────────
+
+export function resolveOpportunityAttack(
+  character: Character,
+  combatState: CombatState,
+): { hit: boolean; damage: number; narrative: string } {
+  const monster = combatState.monster;
+  const attack = pickEnemyAttack(monster);
+  if (!attack) return { hit: false, damage: 0, narrative: "" };
+
+  const enemyRolled = d20();
+  const enemyTotal = enemyRolled + attack.attackBonus;
+  const hit = enemyRolled === 20 || (enemyRolled !== 1 && enemyTotal >= character.ac);
+
+  if (!hit) {
+    return {
+      hit: false,
+      damage: 0,
+      narrative: `The ${monster.name} swings at you as you move away, but misses (${enemyTotal} vs AC ${character.ac}).`,
+    };
+  }
+
+  const isCrit = enemyRolled === 20;
+  const dmg = rollDamageDiceDetailed(attack.damageDice);
+  let damage = isCrit ? dmg.dice.reduce((a, b) => a + b, 0) * 2 + dmg.bonus : dmg.total;
+  damage = Math.max(1, damage);
+
+  if (character.raging && PHYSICAL_DAMAGE_TYPES.includes(attack.damageType.toLowerCase())) {
+    damage = Math.floor(damage / 2);
+  }
+
+  return {
+    hit: true,
+    damage,
+    narrative: `The ${monster.name} catches you with an opportunity attack as you move away, dealing ${damage} damage!`,
+  };
+}
+
+// ── Resolve death saving throw ───────────────────────────────────
+
+export interface DeathSaveResult {
+  roll: number;
+  type: "nat20" | "nat1" | "success" | "failure";
+  totalSuccesses: number;
+  totalFailures: number;
+  stabilized: boolean;
+  revived: boolean;
+  died: boolean;
+}
+
+export function resolveDeathSave(
+  currentSuccesses: number,
+  currentFailures: number,
+): DeathSaveResult {
+  const rolled = d20();
+  let successes = currentSuccesses;
+  let failures = currentFailures;
+  let revived = false;
+  let type: DeathSaveResult["type"];
+
+  if (rolled === 20) {
+    // Natural 20: regain 1 HP, wake up
+    type = "nat20";
+    revived = true;
+    successes = 0;
+    failures = 0;
+  } else if (rolled === 1) {
+    // Natural 1: two failures
+    type = "nat1";
+    failures += 2;
+  } else if (rolled >= 10) {
+    type = "success";
+    successes += 1;
+  } else {
+    type = "failure";
+    failures += 1;
+  }
+
+  return {
+    roll: rolled,
+    type,
+    totalSuccesses: successes,
+    totalFailures: failures,
+    stabilized: successes >= 3,
+    revived,
+    died: failures >= 3,
+  };
+}
+
+// ── Resolve grapple attempt ──────────────────────────────────────
+
+export function resolveGrapple(
+  character: Character,
+  combatState: CombatState,
+): { success: boolean; narrative: string } {
+  const monster = combatState.monster;
+  const prof = proficiencyBonus(character.level);
+  const lucky = character.race === "Halfling";
+
+  // Player Athletics check
+  const strScore = character.abilityScores.strength;
+  const playerRoll = (lucky ? (() => { const r = d20(); return r === 1 ? d20() : r; })() : d20())
+    + modifier(strScore) + prof;
+
+  // Monster Athletics or Acrobatics (use higher of STR or DEX)
+  const monsterStr = modifier(monster.abilities.STR);
+  const monsterDex = modifier(monster.abilities.DEX);
+  const monsterRoll = d20() + Math.max(monsterStr, monsterDex);
+
+  if (playerRoll >= monsterRoll) {
+    return {
+      success: true,
+      narrative: `You grab hold of the ${monster.name} and wrestle it into a grapple! (${playerRoll} vs ${monsterRoll}). Its speed drops to 0.`,
+    };
+  }
+  return {
+    success: false,
+    narrative: `You reach for the ${monster.name} but it wrenches free of your grip (${playerRoll} vs ${monsterRoll}).`,
+  };
+}
+
+// ── Resolve shove attempt ────────────────────────────────────────
+
+export function resolveShove(
+  character: Character,
+  combatState: CombatState,
+  choice: "prone" | "push" = "prone",
+): { success: boolean; narrative: string } {
+  const monster = combatState.monster;
+  const prof = proficiencyBonus(character.level);
+  const lucky = character.race === "Halfling";
+
+  const strScore = character.abilityScores.strength;
+  const playerRoll = (lucky ? (() => { const r = d20(); return r === 1 ? d20() : r; })() : d20())
+    + modifier(strScore) + prof;
+
+  const monsterStr = modifier(monster.abilities.STR);
+  const monsterDex = modifier(monster.abilities.DEX);
+  const monsterRoll = d20() + Math.max(monsterStr, monsterDex);
+
+  if (playerRoll >= monsterRoll) {
+    const effect = choice === "prone"
+      ? `knocking it prone`
+      : `pushing it 5 feet away`;
+    return {
+      success: true,
+      narrative: `You shove the ${monster.name}, ${effect}! (${playerRoll} vs ${monsterRoll})`,
+    };
+  }
+  return {
+    success: false,
+    narrative: `You try to shove the ${monster.name} but it holds its ground (${playerRoll} vs ${monsterRoll}).`,
+  };
+}
+
+// ── Resolve player spell cast in combat ──────────────────────────
+
+export interface SpellCastResult {
+  success: boolean;
+  narrative: string;
+  bonusActionSpellCast: boolean;
+}
+
+export function resolvePlayerCastSpell(
+  character: Character,
+  combatState: CombatState,
+  spellName: string,
+  isBonusAction: boolean,
+  previousBonusActionSpell: boolean,
+): SpellCastResult {
+  // Bonus action spell restriction: if a bonus action spell was cast,
+  // the action can only be a cantrip
+  if (previousBonusActionSpell && !isBonusAction) {
+    // This is the action after a bonus action spell — only cantrips allowed
+    // The caller should check if the spell is a cantrip before calling this
+  }
+
+  // Concentration: new concentration spell ends the previous one
+  if (combatState.playerCombatant.concentrationSpell) {
+    const oldSpell = combatState.playerCombatant.concentrationSpell.spellName;
+    combatState.playerCombatant.concentrationSpell = null;
+    return {
+      success: true,
+      narrative: `You release concentration on ${oldSpell} and begin casting ${spellName}.`,
+      bonusActionSpellCast: isBonusAction,
+    };
+  }
+
+  return {
+    success: true,
+    narrative: `You cast ${spellName}.`,
+    bonusActionSpellCast: isBonusAction,
   };
 }
 
@@ -369,7 +934,85 @@ export function resolvePlayerAttack(
   const isHalfling = character.race === "Halfling";
   const breakdown: DiceBreakdown = {};
 
-  // ── Player attacks ─────────────────────────────────────────────
+  // Reset sneak attack tracking at start of round
+  combatState.playerCombatant.sneakAttackUsedThisTurn = false;
+
+  // ── Check player conditions that prevent attacking ─────────────
+  const playerConditions = combatState.playerCombatant.conditions;
+  if (playerConditions.has("paralyzed") || playerConditions.has("stunned") || playerConditions.has("incapacitated") || playerConditions.has("unconscious")) {
+    // Player cannot attack — skip to enemy attacks
+    const attack = pickEnemyAttack(monster);
+    let enemyAtk: RollResult | null = null;
+    let enemyDamage = 0;
+    let playerHpChange = 0;
+
+    if (attack) {
+      const numAttacks = resolveMonsterMultiattack(monster.name);
+      for (let i = 0; i < numAttacks; i++) {
+        const enemyRolled = d20();
+        const enemyTotal = enemyRolled + attack.attackBonus;
+        // Paralyzed/stunned: attackers have advantage (simulated by taking better of two rolls)
+        const advantageRoll = d20();
+        const bestRoll = Math.max(enemyRolled, advantageRoll);
+        const bestTotal = bestRoll + attack.attackBonus;
+        // Auto-crit if paralyzed and melee
+        const autoCrit = playerConditions.has("paralyzed");
+
+        enemyAtk = {
+          type: "attack",
+          dc: character.ac,
+          rolled: bestRoll,
+          modifier: attack.attackBonus,
+          total: bestTotal,
+          success: bestRoll === 20 || autoCrit || (bestRoll !== 1 && bestTotal >= character.ac),
+          reason: `${monster.name} ${attack.name} (attack ${i + 1}/${numAttacks})`,
+        };
+
+        if (enemyAtk.success) {
+          const isCrit = bestRoll === 20 || autoCrit;
+          const enemyDmgDice = rollDamageDiceDetailed(attack.damageDice);
+          let thisDmg = isCrit
+            ? (enemyDmgDice.dice.reduce((a, b) => a + b, 0) * 2 + enemyDmgDice.bonus)
+            : enemyDmgDice.total;
+          thisDmg = Math.max(1, thisDmg);
+          if (character.raging && PHYSICAL_DAMAGE_TYPES.includes(attack.damageType.toLowerCase())) {
+            thisDmg = Math.floor(thisDmg / 2);
+          }
+          enemyDamage += thisDmg;
+        }
+      }
+      playerHpChange = -enemyDamage;
+    }
+
+    const playerDown = (character.hp + playerHpChange) <= 0;
+    const conditionName = playerConditions.has("paralyzed") ? "paralyzed" : playerConditions.has("stunned") ? "stunned" : "incapacitated";
+    const updatedCombatState: CombatState = {
+      ...combatState,
+      roundNumber: combatState.roundNumber + 1,
+      active: !playerDown,
+    };
+
+    return {
+      narrative: `You are ${conditionName} and cannot act! The ${monster.name} takes advantage of your helplessness${enemyDamage > 0 ? `, dealing ${enemyDamage} total damage` : ""}.`,
+      diceBreakdown: breakdown,
+      playerAttack: null,
+      playerDamage: 0,
+      playerDamageResisted: false,
+      playerDamageImmune: false,
+      enemyAttack: enemyAtk,
+      enemyDamage,
+      combatState: updatedCombatState,
+      playerHpChange,
+      xpAwarded: 0,
+      goldDropped: 0,
+      itemsDropped: [],
+      lootNarrative: "",
+      combatOver: playerDown,
+      combatEndReason: playerDown ? "player_down" : "ongoing",
+    };
+  }
+
+  // ── Player attack (check prone/condition modifiers) ─────────────
   const playerAtk = attackRoll(atkScore, monster.ac, prof, isHalfling);
   let playerDamage = 0;
   let playerDamageResisted = false;
@@ -392,11 +1035,12 @@ export function resolvePlayerAttack(
     let rawDamage = weaponDice.reduce((a, b) => a + b, 0) + dmgBonus;
 
     // ── Sneak Attack: Rogues deal extra 1d6 damage ──────────────
-    // Conditions: Rogue class, using finesse or ranged weapon, hit landed
-    if (character.class === "Rogue" && isSneakAttackEligible(character)) {
+    // Only once per round (tracked by sneakAttackUsedThisTurn)
+    if (character.class === "Rogue" && isSneakAttackEligible(character) && !combatState.playerCombatant.sneakAttackUsedThisTurn) {
       const sneakDiceCount = isCrit ? 2 : 1; // double on crit
       sneakAttackDice = roll(sneakDiceCount, 6);
       rawDamage += sneakAttackDice.reduce((a, b) => a + b, 0);
+      combatState.playerCombatant.sneakAttackUsedThisTurn = true;
     }
 
     rawDamage = Math.max(1, rawDamage); // minimum 1 damage
@@ -422,57 +1066,103 @@ export function resolvePlayerAttack(
   // Apply damage to enemy
   const newEnemyHp = Math.max(0, combatState.enemyHp - playerDamage);
 
-  // ── Enemy attacks (if still alive) ─────────────────────────────
+  // ── Enemy attacks with multiattack (if still alive) ────────────
   let enemyAtk: RollResult | null = null;
   let enemyDamage = 0;
   let playerHpChange = 0;
+  let specialAbilityNarrative = "";
 
   if (newEnemyHp > 0) {
     const attack = pickEnemyAttack(monster);
     if (attack) {
-      // Use the attack's bonus directly from the SRD data
-      const enemyRolled = isHalfling ? (() => { const r = d20(); return r === 1 ? d20() : r; })() : d20();
-      const enemyTotal = enemyRolled + attack.attackBonus;
-      enemyAtk = {
-        type: "attack",
-        dc: character.ac,
-        rolled: enemyRolled,
-        modifier: attack.attackBonus,
-        total: enemyTotal,
-        success: enemyRolled === 20 || (enemyRolled !== 1 && enemyTotal >= character.ac),
-        reason: `${monster.name} ${attack.name}`,
-      };
+      const numAttacks = resolveMonsterMultiattack(monster.name);
 
-      breakdown.enemyAttackRoll = {
-        d20: enemyRolled,
-        modifier: attack.attackBonus,
-        total: enemyTotal,
-        targetAC: character.ac,
-        hit: enemyAtk.success,
-        crit: enemyRolled === 20,
-        attackName: attack.name,
-      };
-
-      if (enemyAtk.success) {
-        const isCrit = enemyRolled === 20;
-        const enemyDmgDice = rollDamageDiceDetailed(attack.damageDice);
-        enemyDamage = isCrit
-          ? (enemyDmgDice.dice.reduce((a, b) => a + b, 0) * 2 + enemyDmgDice.bonus)
-          : enemyDmgDice.total;
-        enemyDamage = Math.max(1, enemyDamage);
-
-        // Barbarian rage: halve physical damage
-        if (character.raging && PHYSICAL_DAMAGE_TYPES.includes(attack.damageType.toLowerCase())) {
-          enemyDamage = Math.floor(enemyDamage / 2);
+      for (let i = 0; i < numAttacks; i++) {
+        // Check if enemy is prone/restrained (disadvantage on attacks)
+        const enemyConditions = combatState.enemyCombatant.conditions;
+        let enemyRolled: number;
+        if (enemyConditions.has("prone") || enemyConditions.has("restrained") || enemyConditions.has("poisoned") || enemyConditions.has("frightened") || enemyConditions.has("blinded")) {
+          // Disadvantage: roll twice, take lower
+          const r1 = d20();
+          const r2 = d20();
+          enemyRolled = Math.min(r1, r2);
+        } else {
+          enemyRolled = d20();
         }
-        playerHpChange = -enemyDamage;
 
-        breakdown.enemyDamageRoll = {
-          dice: enemyDmgDice.dice,
-          bonus: enemyDmgDice.bonus,
-          total: enemyDamage,
-          damageType: attack.damageType,
+        // Player prone: melee attackers have advantage, ranged have disadvantage
+        if (playerConditions.has("prone")) {
+          const advantageRoll = d20();
+          enemyRolled = Math.max(enemyRolled, advantageRoll); // advantage for melee
+        }
+
+        const enemyTotal = enemyRolled + attack.attackBonus;
+        enemyAtk = {
+          type: "attack",
+          dc: character.ac,
+          rolled: enemyRolled,
+          modifier: attack.attackBonus,
+          total: enemyTotal,
+          success: enemyRolled === 20 || (enemyRolled !== 1 && enemyTotal >= character.ac),
+          reason: `${monster.name} ${attack.name} (attack ${i + 1}/${numAttacks})`,
         };
+
+        if (i === 0) {
+          breakdown.enemyAttackRoll = {
+            d20: enemyRolled,
+            modifier: attack.attackBonus,
+            total: enemyTotal,
+            targetAC: character.ac,
+            hit: enemyAtk.success,
+            crit: enemyRolled === 20,
+            attackName: `${attack.name}${numAttacks > 1 ? ` (×${numAttacks})` : ""}`,
+          };
+        }
+
+        if (enemyAtk.success) {
+          const isCrit = enemyRolled === 20;
+          const enemyDmgDice = rollDamageDiceDetailed(attack.damageDice);
+          let thisDmg = isCrit
+            ? (enemyDmgDice.dice.reduce((a, b) => a + b, 0) * 2 + enemyDmgDice.bonus)
+            : enemyDmgDice.total;
+          thisDmg = Math.max(1, thisDmg);
+
+          // Barbarian rage: halve physical damage
+          if (character.raging && PHYSICAL_DAMAGE_TYPES.includes(attack.damageType.toLowerCase())) {
+            thisDmg = Math.floor(thisDmg / 2);
+          }
+          enemyDamage += thisDmg;
+
+          // Apply monster special ability after each hit
+          const specialResult = resolveMonsterSpecialAbility(monster.name, character);
+          if (specialResult) {
+            specialAbilityNarrative += " " + specialResult.narrative;
+            if (specialResult.conditionApplied) {
+              combatState.playerCombatant.conditions.add(specialResult.conditionApplied);
+              combatState.playerCombatant.turnsUntilConditionExpires[specialResult.conditionApplied] = specialResult.duration;
+            }
+          }
+
+          if (i === 0) {
+            breakdown.enemyDamageRoll = {
+              dice: enemyDmgDice.dice,
+              bonus: enemyDmgDice.bonus,
+              total: enemyDamage,
+              damageType: attack.damageType,
+            };
+          }
+        }
+      }
+      playerHpChange = -enemyDamage;
+
+      // ── Concentration save if player takes damage ──────────────
+      if (enemyDamage > 0 && combatState.playerCombatant.concentrationSpell) {
+        const concResult = resolveConcentrationSave(character, enemyDamage);
+        if (concResult.concentrationBroke) {
+          const spellName = combatState.playerCombatant.concentrationSpell.spellName;
+          combatState.playerCombatant.concentrationSpell = null;
+          specialAbilityNarrative += ` Your concentration on ${spellName} breaks!`;
+        }
       }
     }
   }
@@ -497,20 +1187,43 @@ export function resolvePlayerAttack(
     combatEndReason = "player_down";
   }
 
-  // Clear combatState completely on victory or player down
-  const updatedCombatState: CombatState = combatEndReason === "ongoing"
-    ? { ...combatState, enemyHp: newEnemyHp, roundNumber: combatState.roundNumber + 1, active: true }
-    : { ...combatState, enemyHp: newEnemyHp, roundNumber: combatState.roundNumber + 1, active: false };
+  // Increment round number — a full round is both sides acting
+  const updatedCombatState: CombatState = {
+    ...combatState,
+    enemyHp: newEnemyHp,
+    roundNumber: combatState.roundNumber + 1,
+    active: combatEndReason === "ongoing",
+    enemyRemainingAttacks: resolveMonsterMultiattack(monster.name),
+  };
+
+  // Tick condition durations
+  for (const [cond, turns] of Object.entries(updatedCombatState.playerCombatant.turnsUntilConditionExpires)) {
+    if (turns !== undefined && turns > 0) {
+      updatedCombatState.playerCombatant.turnsUntilConditionExpires[cond as Condition] = turns - 1;
+    } else if (turns !== undefined && turns <= 0) {
+      updatedCombatState.playerCombatant.conditions.delete(cond as Condition);
+      delete updatedCombatState.playerCombatant.turnsUntilConditionExpires[cond as Condition];
+    }
+  }
+
+  // Reset per-turn flags
+  updatedCombatState.playerCombatant.reactionUsed = false;
+  updatedCombatState.playerCombatant.bonusActionUsed = false;
+  updatedCombatState.enemyCombatant.reactionUsed = false;
 
   // ── Build narrative ────────────────────────────────────────────
   const isCrit = playerAtk.rolled === 20 && playerAtk.success;
-  const narrative = buildCombatNarrative({
+  let narrative = buildCombatNarrative({
     playerAtk, playerDamage, playerDamageResisted, playerDamageImmune,
     enemyAtk, enemyDamage, monster, character,
     enemyHpRemaining: newEnemyHp, enemyKilled, playerDown,
     isCrit, damageType, sneakAttackDice,
     xpAwarded, goldDropped, itemsDropped, lootNarrative,
   });
+
+  if (specialAbilityNarrative) {
+    narrative += specialAbilityNarrative;
+  }
 
   return {
     narrative,
