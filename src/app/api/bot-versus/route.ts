@@ -660,6 +660,7 @@ async function runVersus(): Promise<NextResponse> {
       bugNotes,
       narrativeConsistencyScore: `${narrativeConsistencyScore}%`,
       consistencyIssues,
+      combatEncounters: turns.filter(t => t.dm.tagsFound.includes("COMBAT_START")).length,
       checkRollAssessment: {
         totalCheckRolls: checkRolls.length,
         details: checkRolls,
