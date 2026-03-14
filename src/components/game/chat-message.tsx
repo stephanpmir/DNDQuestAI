@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage as ChatMessageType } from "@/types/game";
+import type { DiceBreakdown } from "@/lib/combat-engine";
 import { DiceRollDisplay } from "./dice-roll-display";
 import { useLanguageStore } from "@/stores/language-store";
 
@@ -142,6 +143,9 @@ export function ChatMessage({ message, avatarUrl, onSendMessage, onCheckRoll, di
             <SceneImage prompt={message.sceneImagePrompt} seed={message.timestamp % 1000000} />
           )}
           <TypewriterText text={message.narrative} />
+          {message.combatResult && (
+            <CombatRoundCard combatResult={message.combatResult} />
+          )}
           {message.checkRequired && onCheckRoll && (
             <SkillCheckRoll
               check={message.checkRequired}
@@ -373,6 +377,91 @@ function RollResultCard({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Combat round card — displays attack rolls, damage, and enemy HP in a structured card. */
+function CombatRoundCard({ combatResult }: { combatResult: NonNullable<ChatMessageType["combatResult"]> }) {
+  const db = combatResult.diceBreakdown;
+
+  return (
+    <div
+      style={{
+        marginTop: 12, marginBottom: 8, padding: "12px 16px", borderRadius: 8,
+        backgroundColor: "rgba(107,0,0,0.12)",
+        border: "1px solid rgba(107,0,0,0.3)",
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#c9a227", marginBottom: 8, letterSpacing: "0.05em", fontFamily: "'Cinzel', serif" }}>
+        {combatResult.enemyName ? `Combat — ${combatResult.enemyName}` : "Combat Round"}
+      </div>
+
+      {/* Player attack */}
+      {db.playerAttackRoll && (
+        <div style={{ fontSize: 12, marginBottom: 4, color: db.playerAttackRoll.hit ? "#c9a227" : "#6b6b6b" }}>
+          <span style={{ fontWeight: 600 }}>Your Attack:</span>{" "}
+          d20({db.playerAttackRoll.d20}) + {db.playerAttackRoll.modifier} = {db.playerAttackRoll.total} vs AC {db.playerAttackRoll.targetAC}
+          {" — "}
+          <span style={{ fontWeight: 700, color: db.playerAttackRoll.crit ? "#c9a227" : db.playerAttackRoll.hit ? "#c9a227" : "#6b6b6b" }}>
+            {db.playerAttackRoll.crit ? "CRITICAL HIT!" : db.playerAttackRoll.hit ? "Hit" : "Miss"}
+          </span>
+        </div>
+      )}
+
+      {/* Player damage */}
+      {db.playerDamageRoll && db.playerAttackRoll?.hit && (
+        <div style={{ fontSize: 12, marginBottom: 4, color: "#c9a227" }}>
+          <span style={{ fontWeight: 600 }}>Damage Dealt:</span>{" "}
+          {db.playerDamageRoll.finalDamage} {db.playerDamageRoll.damageType}
+          {db.playerDamageRoll.resisted && <span style={{ color: "#8a8a8a" }}> (resisted)</span>}
+          {db.playerDamageRoll.immune && <span style={{ color: "#6b6b6b" }}> (immune!)</span>}
+        </div>
+      )}
+
+      {/* Enemy HP remaining */}
+      {combatResult.enemyHp !== undefined && combatResult.enemyMaxHp !== undefined && (
+        <div style={{ fontSize: 12, marginBottom: 4, color: "#e8d5b0" }}>
+          <span style={{ fontWeight: 600 }}>Enemy HP:</span>{" "}
+          <span style={{ color: combatResult.enemyHp <= 0 ? "#6b0000" : "#e8d5b0" }}>
+            {Math.max(0, combatResult.enemyHp)}/{combatResult.enemyMaxHp}
+          </span>
+          {combatResult.enemyHp <= 0 && <span style={{ color: "#c9a227", fontWeight: 700 }}> — DEFEATED</span>}
+        </div>
+      )}
+
+      {/* Enemy attack */}
+      {db.enemyAttackRoll && (
+        <div style={{ fontSize: 12, marginBottom: 4, color: db.enemyAttackRoll.hit ? "#b91c1c" : "#6b6b6b" }}>
+          <span style={{ fontWeight: 600 }}>Enemy {db.enemyAttackRoll.attackName}:</span>{" "}
+          d20({db.enemyAttackRoll.d20}) + {db.enemyAttackRoll.modifier} = {db.enemyAttackRoll.total} vs AC {db.enemyAttackRoll.targetAC}
+          {" — "}
+          <span style={{ fontWeight: 700, color: db.enemyAttackRoll.crit ? "#ef4444" : db.enemyAttackRoll.hit ? "#b91c1c" : "#6b6b6b" }}>
+            {db.enemyAttackRoll.crit ? "CRITICAL HIT!" : db.enemyAttackRoll.hit ? "Hit" : "Miss"}
+          </span>
+        </div>
+      )}
+
+      {/* Enemy damage */}
+      {db.enemyDamageRoll && db.enemyAttackRoll?.hit && (
+        <div style={{ fontSize: 12, marginBottom: 4, color: "#b91c1c" }}>
+          <span style={{ fontWeight: 600 }}>Damage Taken:</span>{" "}
+          {db.enemyDamageRoll.total} {db.enemyDamageRoll.damageType}
+        </div>
+      )}
+
+      {/* Combat over indicator */}
+      {combatResult.combatOver && combatResult.combatEndReason !== "ongoing" && (
+        <div style={{
+          marginTop: 6, paddingTop: 6, borderTop: "1px solid rgba(201,162,39,0.15)",
+          fontSize: 12, fontWeight: 700,
+          color: combatResult.combatEndReason === "enemy_killed" ? "#c9a227" : "#b91c1c",
+        }}>
+          {combatResult.combatEndReason === "enemy_killed" && "Victory!"}
+          {combatResult.combatEndReason === "player_fled" && "Fled from combat"}
+          {combatResult.combatEndReason === "player_down" && "You have fallen..."}
+        </div>
+      )}
     </div>
   );
 }

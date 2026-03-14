@@ -267,6 +267,41 @@ async function runDMTurn(
   };
 
   const preResult = preGenerate(pipelineInput);
+
+  // ── Resolve active combat BEFORE LLM call ──────────────────────
+  let preCombatResult: CombatRoundResult | null = null;
+  if (gs.combatState?.active) {
+    preCombatResult = resolveCombatTurn(message, gs.character, gs.combatState);
+    gs.combatState = preCombatResult.combatState;
+    gs.character.hp = Math.max(0, gs.character.hp + preCombatResult.playerHpChange);
+
+    // Inject combat results into engine outcome so LLM can narrate them
+    const eo = preResult.engineOutcome;
+    eo.hpChange = (eo.hpChange || 0) + preCombatResult.playerHpChange;
+    eo.damageDealt = preCombatResult.playerDamage;
+    eo.isCriticalHit = preCombatResult.diceBreakdown.playerAttackRoll?.crit ?? false;
+    eo.damageTaken = preCombatResult.enemyDamage > 0 ? preCombatResult.enemyDamage : undefined;
+
+    if (preCombatResult.combatEndReason === "enemy_killed") {
+      eo.xpGained = (eo.xpGained || 0) + preCombatResult.xpAwarded;
+      eo.goldChange = (eo.goldChange || 0) + preCombatResult.goldDropped;
+      if (preCombatResult.itemsDropped.length > 0) {
+        eo.itemsGained.push(...preCombatResult.itemsDropped);
+      }
+    }
+
+    if (preCombatResult.combatOver) {
+      console.log(`[bot-versus] COMBAT ENDED (pre-LLM): ${preCombatResult.combatEndReason}`);
+      if (preCombatResult.combatEndReason === "enemy_killed") {
+        gs.character.xp += preCombatResult.xpAwarded;
+        gs.character.gold += preCombatResult.goldDropped;
+        gs.character.inventory.push(...preCombatResult.itemsDropped);
+      }
+      gs.combatState = null;
+      gs.combatActive = false;
+    }
+  }
+
   const systemPrompt = buildSystemPrompt(gs.character, gameState, undefined, undefined, campaignTheme);
   const engineContext = buildEngineContextMessage(message, preResult.engineOutcome, preResult.formattedContext);
 
@@ -276,6 +311,14 @@ async function runDMTurn(
     { role: "system", content: engineContext },
     { role: "user", content: message },
   ];
+
+  // Inject combat round context so the LLM can narrate around the mechanical outcome
+  if (preCombatResult) {
+    messages.push({
+      role: "system",
+      content: `## Combat Round Result\n${preCombatResult.narrative}${preCombatResult.combatOver ? `\nCOMBAT ENDED: ${preCombatResult.combatEndReason}.${preCombatResult.lootNarrative ? ` ${preCombatResult.lootNarrative}` : ""}` : `\nEnemy HP: ${preCombatResult.combatState.enemyHp}/${preCombatResult.combatState.enemyMaxHp}`}\nNarrate this combat round. Use the dice results above exactly.`,
+    });
+  }
 
   const { text: rawText, provider } = await callWithCascade(messages);
   const parsed = parseDMResponse(rawText);
@@ -354,6 +397,27 @@ async function runDMTurn(
   }
 
   // ── Progression engine: getNextEscalation ──────────────────────
+  // Skip escalation entirely on turn 1 — opening turn is world introduction only
+  if (gs.turnCount <= 1) {
+    gs.turnsSinceCombat++;
+    gs.turnsSinceLastEscalation++;
+    gs.turnsSinceLoot++;
+
+    // ── Update recent DM response buffer (keep last 3) ─────────────
+    gs.recentDMResponses.unshift(finalNarrative);
+    if (gs.recentDMResponses.length > 3) gs.recentDMResponses.length = 3;
+
+    // Apply quest changes
+    if (eo.newQuest && !gs.questLog.includes(eo.newQuest)) gs.questLog.push(eo.newQuest);
+    if (eo.completeQuest) gs.questLog = gs.questLog.filter(q => q !== eo.completeQuest);
+
+    gs.history.push({ role: "assistant", content: finalNarrative });
+    checkLocationStagnation(gs.location);
+    checkItemAcquisition(finalNarrative, backpackBefore, gs.character.inventory);
+
+    return { narrative: finalNarrative, checkRoll: parsed.checkRequired ? { stat: parsed.checkRequired.stat, skill: parsed.checkRequired.skill, dc: parsed.checkRequired.dc, description: parsed.checkRequired.description } : null, imagePrompt: parsed.sceneImagePrompt ?? null, provider, tagsFound, rawResponse: rawText };
+  }
+
   const dangerCtx: DangerContext = {
     location: gs.location,
     campaignTheme,
@@ -417,8 +481,9 @@ async function runDMTurn(
     finalNarrative = finalNarrative.replace(/\[COMBAT_START\][^\n]*/g, "").trim();
   }
 
-  // ── Resolve active combat round ────────────────────────────────
-  if (gs.combatState?.active) {
+  // ── Resolve newly-initiated combat round (from COMBAT_START this turn only) ──
+  // Pre-existing combat was already resolved before the LLM call above.
+  if (gs.combatState?.active && !preCombatResult) {
     const combatResult: CombatRoundResult = resolveCombatTurn(message, gs.character, gs.combatState);
     gs.combatState = combatResult.combatState;
     gs.character.hp = Math.max(0, gs.character.hp + combatResult.playerHpChange);
@@ -439,6 +504,15 @@ async function runDMTurn(
       }
       gs.combatState = null;
       gs.combatActive = false;
+    }
+  }
+
+  // Append pre-LLM combat result narrative to the final output
+  if (preCombatResult) {
+    finalNarrative = finalNarrative + "\n\n" + preCombatResult.narrative;
+    if (!tagsFound.includes("COMBAT_ROUND")) tagsFound.push("COMBAT_ROUND");
+    if (preCombatResult.lootNarrative) {
+      finalNarrative += "\n" + preCombatResult.lootNarrative;
     }
   }
 

@@ -33,6 +33,16 @@ export interface ChatMessage {
   };
   /** Whether this is a rules reference answer (not narrative) */
   rulesAnswer?: boolean;
+  /** Combat round result with dice breakdown for styled combat log display */
+  combatResult?: {
+    diceBreakdown: DiceBreakdown;
+    combatOver: boolean;
+    combatEndReason: "ongoing" | "enemy_killed" | "player_fled" | "player_down";
+    lootNarrative?: string;
+    enemyName?: string;
+    enemyHp?: number;
+    enemyMaxHp?: number;
+  };
 }
 
 /** The structured JSON the API returns. */

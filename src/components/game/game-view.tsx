@@ -355,6 +355,12 @@ export function GameView() {
           fameChange: data.fameChange,
           sceneImagePrompt: data.sceneImagePrompt,
           checkRequired: data.checkRequired,
+          combatResult: data.combatResult ? {
+            ...data.combatResult,
+            enemyName: data.combatState?.enemyName,
+            enemyHp: data.combatState?.enemyHp ?? (data.combatResult.combatOver ? 0 : undefined),
+            enemyMaxHp: data.combatState?.enemyMaxHp,
+          } : undefined,
         };
         addMessage(dmMsg);
       } catch (err) {

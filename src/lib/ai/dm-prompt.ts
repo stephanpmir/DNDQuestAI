@@ -73,7 +73,10 @@ export function buildSystemPrompt(
     }
   }
 
-  return `## TURN STRUCTURE — FOLLOW EVERY TURN
+  return `## OPENING TURN RULE — CRITICAL
+On the very first turn of a new game (turn 1), you MUST NOT introduce any combat, enemies, threats, or danger. The opening turn is exclusively for: introducing the setting vividly, establishing the player's location and situation, presenting a clear quest hook or reason to adventure, and giving the player a moment to breathe and orient themselves. No creatures should appear, no attacks should happen, no tension injections. Save danger for turn 3 at the earliest.
+
+## TURN STRUCTURE — FOLLOW EVERY TURN
 1. Narrate the outcome of the player's action in vivid D&D 5e style, 2 to 4 paragraphs.
 2. If the action involves any risk — stealth, exploration, talking to suspicious NPCs, searching dangerous areas, picking locks, or navigating hazards — ALWAYS trigger exactly one skill check using the CHECK_REQUIRED tag.
 3. Trigger at least one check every 2 to 3 turns minimum even if the player's action seems safe. Find a reason for it.

@@ -380,11 +380,18 @@ function runPerceptionContest(ctx: DangerContext): EscalationResult | null {
  */
 export function getNextEscalation(ctx: DangerContext): EscalationResult {
   // Combat continuation — if combat is active, continue the existing fight
+  // (must be checked before the opening-turn guard)
   if (ctx.combatActive) {
     return {
       type: "combat",
       narrativeInjection: "[COMBAT_ROUND]",
     };
+  }
+
+  // Hard guard: no combat or tension on opening turns (turns 1-2).
+  // Player must have at least 2 turns of narrative before anything hostile.
+  if (ctx.turnsSinceCombat === 0 && ctx.turnsSinceLastEscalation < 3) {
+    return { type: "none", narrativeInjection: "" };
   }
 
   // Loot escalation — reward sustained successful skill checks
