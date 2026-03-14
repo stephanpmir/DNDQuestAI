@@ -18,6 +18,8 @@ import { buildResourcePool } from "@/lib/resources";
 import {
   getProxyFetch, callWithCascade, isRetryableError, sleep,
 } from "@/lib/ai/providers";
+import { initCombat, resolveCombatTurn } from "@/lib/combat-engine";
+import type { CombatState, CombatRoundResult } from "@/lib/combat-engine";
 
 /**
  * GET/POST /api/bot-versus — Dynamic AI vs AI playtest.
@@ -237,6 +239,7 @@ interface InternalGameState {
   turnsSinceLoot: number;
   successfulChecksSinceLoot: number;
   combatActive: boolean;
+  combatState: CombatState | null;
 }
 
 interface DMTurnResult {
@@ -399,6 +402,44 @@ async function runDMTurn(
     gs.turnsSinceCombat++;
     gs.turnsSinceLastEscalation++;
     gs.turnsSinceLoot++;
+  }
+
+  // ── Wire COMBAT_START to combat engine ──────────────────────────
+  const combatStartMatch = finalNarrative.match(/\[COMBAT_START\]\s*(.+?)$/m);
+  if (combatStartMatch && !gs.combatState) {
+    const newCombat = initCombat(combatStartMatch[1].trim(), gs.character);
+    if (newCombat) {
+      gs.combatState = newCombat;
+      gs.combatActive = true;
+      console.log(`[bot-versus] COMBAT INITIATED: ${newCombat.enemyName} HP:${newCombat.enemyHp} AC:${newCombat.enemyAc}`);
+    }
+    // Strip the COMBAT_START tag from narrative shown to player
+    finalNarrative = finalNarrative.replace(/\[COMBAT_START\][^\n]*/g, "").trim();
+  }
+
+  // ── Resolve active combat round ────────────────────────────────
+  if (gs.combatState?.active) {
+    const combatResult: CombatRoundResult = resolveCombatTurn(message, gs.character, gs.combatState);
+    gs.combatState = combatResult.combatState;
+    gs.character.hp = Math.max(0, gs.character.hp + combatResult.playerHpChange);
+
+    // Append combat round narrative
+    finalNarrative = finalNarrative + "\n\n" + combatResult.narrative;
+    if (!tagsFound.includes("COMBAT_ROUND")) tagsFound.push("COMBAT_ROUND");
+
+    if (combatResult.combatOver) {
+      console.log(`[bot-versus] COMBAT ENDED: ${combatResult.combatEndReason}`);
+      if (combatResult.combatEndReason === "enemy_killed") {
+        gs.character.xp += combatResult.xpAwarded;
+        gs.character.gold += combatResult.goldDropped;
+        gs.character.inventory.push(...combatResult.itemsDropped);
+        if (combatResult.lootNarrative) {
+          finalNarrative += "\n" + combatResult.lootNarrative;
+        }
+      }
+      gs.combatState = null;
+      gs.combatActive = false;
+    }
   }
 
   // ── Update recent DM response buffer (keep last 3) ─────────────
@@ -583,7 +624,7 @@ async function runVersus(): Promise<NextResponse> {
   const gs: InternalGameState = {
     character, location: campaign.startLocation, questLog: [], turnCount: 0, history: [],
     turnsSinceCombat: 0, turnsSinceLastEscalation: 0, recentFailedChecks: 0, recentDMResponses: [],
-    turnsSinceLoot: 0, successfulChecksSinceLoot: 0, combatActive: false,
+    turnsSinceLoot: 0, successfulChecksSinceLoot: 0, combatActive: false, combatState: null,
   };
 
   // Init Grok
@@ -730,7 +771,11 @@ async function runVersus(): Promise<NextResponse> {
       bugNotes,
       narrativeConsistencyScore: `${narrativeConsistencyScore}%`,
       consistencyIssues,
-      combatEncounters: turns.filter(t => t.dm.tagsFound.includes("COMBAT_START")).length,
+      combatEncounters: turns.filter(t =>
+        t.dm.tagsFound.includes("COMBAT_START") ||
+        t.dm.tagsFound.includes("COMBAT_ROUND") ||
+        /\[COMBAT_START\]/i.test(t.dm.rawResponse)
+      ).length,
       checkRollAssessment: {
         totalCheckRolls: checkRolls.length,
         details: checkRolls,

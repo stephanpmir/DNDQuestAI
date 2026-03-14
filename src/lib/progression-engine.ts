@@ -186,6 +186,14 @@ export function assessDangerLevel(ctx: DangerContext): number {
   }
 
   const finalScore = Math.max(0, Math.min(10, danger));
+
+  // Hard cap: civilized/social locations never exceed danger 3
+  const SAFE_LOCATION_WORDS = ["tavern", "inn", "shop", "market", "town square", "dock", "port"];
+  if (SAFE_LOCATION_WORDS.some(w => locLower.includes(w)) && finalScore > 3) {
+    console.log(`DANGER ASSESSMENT location=${ctx.location} CAPPED from ${finalScore} to 3 (safe location)`);
+    return 3;
+  }
+
   console.log(`DANGER ASSESSMENT location=${ctx.location} keywords found=[${matchedKeywords.join(", ")}] score=${finalScore}`);
   return finalScore;
 }
@@ -471,6 +479,33 @@ export function getNextEscalation(ctx: DangerContext): EscalationResult {
 function pickCombatEscalation(ctx: DangerContext): EscalationResult {
   const theme = ctx.campaignTheme as CampaignTheme | undefined;
 
+  // Plausibility check: does this monster fit the recent narrative context?
+  const recentNarrative = (ctx.recentDMResponses ?? ctx.narrativeHints)
+    .slice(0, 2)
+    .join(" ")
+    .toLowerCase();
+
+  function isPlausible(monsterName: string): boolean {
+    const nameLower = monsterName.toLowerCase();
+    // Always plausible if the recent narrative mentions the enemy type
+    if (recentNarrative.includes(nameLower)) return true;
+    // Check for environment cues that match the monster type
+    const aquaticMonsters = ["sahuagin", "merrow", "giant crab", "reef shark", "sea hag", "giant octopus"];
+    if (aquaticMonsters.includes(nameLower)) {
+      return /ocean|sea|water|underwater|wave|shore|beach|ship|boat|reef|depths/i.test(recentNarrative);
+    }
+    const constructMonsters = ["animated armor", "flying sword", "rug of smothering"];
+    if (constructMonsters.includes(nameLower)) {
+      return /castle|tower|dungeon|vault|treasury|armory|museum|mansion|wizard|magical|enchanted/i.test(recentNarrative);
+    }
+    const wildMonsters = ["owlbear", "axe beak", "brown bear", "dire wolf", "giant spider"];
+    if (wildMonsters.includes(nameLower)) {
+      return /forest|woods|wild|trail|clearing|camp|grove|jungle|path|road/i.test(recentNarrative);
+    }
+    // Default: plausible for any context
+    return true;
+  }
+
   // Try thematic enemies first
   let monster: Monster | null = null;
   if (theme && THEMATIC_ENEMIES[theme]) {
@@ -479,20 +514,23 @@ function pickCombatEscalation(ctx: DangerContext): EscalationResult {
     const shuffled = [...candidates].sort(() => Math.random() - 0.5);
     for (const name of shuffled) {
       const found = getMonsterByName(name);
-      if (found && found.cr <= Math.max(1, ctx.playerLevel + 1)) {
+      if (found && found.cr <= Math.max(1, ctx.playerLevel + 1) && isPlausible(name)) {
         monster = found;
         break;
       }
     }
   }
 
-  // Fall back to location-based encounter
+  // Fall back to location-based encounter (with plausibility check)
   if (!monster) {
-    monster = pickEncounterMonster(ctx.location, ctx.playerLevel);
+    const candidate = pickEncounterMonster(ctx.location, ctx.playerLevel);
+    if (candidate && isPlausible(candidate.name)) {
+      monster = candidate;
+    }
   }
 
   if (!monster) {
-    // Couldn't find any monster — fall back to tension
+    // Couldn't find any plausible monster — fall back to tension
     return {
       type: "tension",
       narrativeInjection: pickRandom(TENSION_NARRATIVES),
