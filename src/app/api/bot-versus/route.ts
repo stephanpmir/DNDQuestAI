@@ -197,6 +197,9 @@ interface InternalGameState {
   turnsSinceLastEscalation: number;
   recentFailedChecks: number;
   recentDMResponses: string[];
+  turnsSinceLoot: number;
+  successfulChecksSinceLoot: number;
+  combatActive: boolean;
 }
 
 interface DMTurnResult {
@@ -293,9 +296,21 @@ async function runDMTurn(
     }
   }
 
-  // ── Track failed checks ────────────────────────────────────────
-  if (eo.roll && !eo.roll.success) {
-    gs.recentFailedChecks++;
+  // ── Track failed and successful checks ──────────────────────────
+  if (eo.roll) {
+    if (!eo.roll.success) {
+      gs.recentFailedChecks++;
+    } else {
+      gs.successfulChecksSinceLoot++;
+    }
+  }
+
+  // ── Track combat state from parsed tags ─────────────────────────
+  if (parsed.parsedState.combatStart) {
+    gs.combatActive = true;
+  }
+  if (/\b(?:defeated|slain|killed|fled|escaped|retreated)\b/i.test(finalNarrative) && !parsed.parsedState.combatStart) {
+    gs.combatActive = false;
   }
 
   // ── Progression engine: getNextEscalation ──────────────────────
@@ -310,6 +325,9 @@ async function runDMTurn(
     playerLevel: gs.character.level,
     narrativeHints: gs.recentDMResponses,
     recentDMResponses: gs.recentDMResponses,
+    combatActive: gs.combatActive,
+    turnsSinceLoot: gs.turnsSinceLoot,
+    successfulChecksSinceLoot: gs.successfulChecksSinceLoot,
   };
 
   const escalation = getNextEscalation(dangerCtx);
@@ -321,7 +339,20 @@ async function runDMTurn(
     gs.turnsSinceCombat = 0;
     gs.turnsSinceLastEscalation = 0;
     gs.recentFailedChecks = 0;
+    gs.combatActive = true;
     tagsFound.push("COMBAT_START");
+  } else if (escalation.type === "loot") {
+    finalNarrative = finalNarrative + "\n\n" + escalation.narrativeInjection;
+    gs.turnsSinceLastEscalation = 0;
+    gs.turnsSinceLoot = 0;
+    gs.successfulChecksSinceLoot = 0;
+    // Award loot: 5-15 gold + one random common item
+    const lootGold = Math.floor(Math.random() * 11) + 5;
+    gs.character.gold += lootGold;
+    const COMMON_LOOT = ["Healing Potion", "Antitoxin", "Rope", "Torch", "Rations (1 day)", "Caltrops"];
+    const lootItem = COMMON_LOOT[Math.floor(Math.random() * COMMON_LOOT.length)];
+    gs.character.inventory.push(lootItem);
+    console.log(`[bot-versus] LOOT awarded: ${lootGold} gold + ${lootItem}`);
   } else if (escalation.type === "tension" || escalation.type === "revelation" || escalation.type === "environment") {
     finalNarrative = finalNarrative + "\n\n" + escalation.narrativeInjection;
     gs.turnsSinceLastEscalation = 0;
@@ -330,6 +361,7 @@ async function runDMTurn(
     // type === "none"
     gs.turnsSinceCombat++;
     gs.turnsSinceLastEscalation++;
+    gs.turnsSinceLoot++;
   }
 
   // ── Update recent DM response buffer (keep last 3) ─────────────
@@ -514,6 +546,7 @@ async function runVersus(): Promise<NextResponse> {
   const gs: InternalGameState = {
     character, location: campaign.startLocation, questLog: [], turnCount: 0, history: [],
     turnsSinceCombat: 0, turnsSinceLastEscalation: 0, recentFailedChecks: 0, recentDMResponses: [],
+    turnsSinceLoot: 0, successfulChecksSinceLoot: 0, combatActive: false,
   };
 
   // Init Grok

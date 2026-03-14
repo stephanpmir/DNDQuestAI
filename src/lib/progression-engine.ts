@@ -52,23 +52,23 @@ export function detectCampaignType(theme?: string): CampaignType {
  * tries these first before falling back to pickEncounterMonster().
  */
 export const THEMATIC_ENEMIES: Partial<Record<CampaignTheme, string[]>> = {
-  dungeon_crawl: ["Skeleton", "Zombie", "Gelatinous Cube", "Mimic", "Animated Armor", "Ghoul", "Specter"],
+  dungeon_crawl: ["Goblin", "Skeleton", "Zombie", "Giant Spider", "Gelatinous Cube", "Mimic", "Animated Armor", "Ghoul", "Specter"],
   wilderness_hex: ["Wolf", "Dire Wolf", "Owlbear", "Giant Spider", "Stirge", "Brown Bear", "Vine Blight"],
   urban_intrigue: ["Thug", "Spy", "Bandit Captain", "Assassin", "Cult Fanatic", "Shadow"],
   horror: ["Shadow", "Specter", "Ghost", "Will-o'-Wisp", "Night Hag", "Wraith"],
   war_military: ["Knight", "Veteran", "Berserker", "Guard", "Bandit Captain"],
-  planar: ["Mephit (any)", "Imp", "Quasit", "Shadow", "Will-o'-Wisp"],
-  mystery: ["Doppelganger", "Spy", "Animated Armor", "Rug of Smothering"],
+  planar: ["Imp", "Quasit", "Shadow", "Will-o'-Wisp"],
+  mystery: ["Cultist", "Doppelganger", "Animated Armor", "Spy", "Rug of Smothering"],
   heist: ["Guard", "Spy", "Animated Armor", "Flying Sword"],
   survival: ["Wolf", "Giant Rat", "Stirge", "Swarm of Insects", "Brown Bear"],
   seafaring: ["Sahuagin", "Merrow", "Giant Crab", "Reef Shark", "Sea Hag"],
   underdark: ["Drow", "Quaggoth", "Piercer", "Darkmantle", "Hook Horror", "Phase Spider"],
   dragon_focused: ["Kobold", "Guard Drake", "Pseudodragon", "Young White Dragon"],
   undead_necromancy: ["Skeleton", "Zombie", "Ghoul", "Wight", "Wraith", "Specter", "Shadow"],
-  fey_nature: ["Sprite", "Dryad", "Blink Dog", "Pixie", "Twig Blight", "Vine Blight"],
+  fey_nature: ["Wolf", "Vine Blight", "Dryad", "Sprite", "Blink Dog", "Pixie", "Twig Blight"],
   desert_arabian: ["Giant Scorpion", "Mummy", "Dust Mephit", "Jackalwere", "Yuan-ti Pureblood"],
   norse_viking: ["Berserker", "Dire Wolf", "Ice Mephit", "Wight", "Troll"],
-  gothic: ["Vampire Spawn", "Dire Wolf", "Ghost", "Specter", "Strahd Zombie"],
+  gothic: ["Shadow", "Specter", "Vampire Spawn", "Dire Wolf", "Ghost", "Strahd Zombie"],
 };
 
 // ── Danger assessment ─────────────────────────────────────────────
@@ -99,6 +99,12 @@ export interface DangerContext {
   narrativeHints: string[]; // recent narrative snippets for context
   /** Last 3 DM responses (most recent first) for weighted narrative analysis */
   recentDMResponses?: string[];
+  /** Whether combat is currently active — used for combat continuation */
+  combatActive?: boolean;
+  /** Turns since last loot was awarded */
+  turnsSinceLoot?: number;
+  /** Count of successful skill checks since last loot */
+  successfulChecksSinceLoot?: number;
 }
 
 /**
@@ -172,6 +178,13 @@ export function assessDangerLevel(ctx: DangerContext): number {
   if (narrativeDanger >= 2.0 && danger >= 4) danger += 2;
   else if (narrativeDanger >= 1.0 && danger >= 3) danger += 1;
 
+  // Player action context — sneaking in dangerous areas accelerates ambush probability
+  const STEALTH_ACTION_KEYWORDS = /\b(?:stealth|sneak|hide|lurk|investigate|creep|skulk)\b/i;
+  const allNarrativeText = [...(ctx.recentDMResponses ?? []), ...ctx.narrativeHints];
+  if (danger > 4 && allNarrativeText.some(t => STEALTH_ACTION_KEYWORDS.test(t))) {
+    danger += 3;
+  }
+
   const finalScore = Math.max(0, Math.min(10, danger));
   console.log(`DANGER ASSESSMENT location=${ctx.location} keywords found=[${matchedKeywords.join(", ")}] score=${finalScore}`);
   return finalScore;
@@ -185,6 +198,7 @@ export type EscalationType =
   | "tension"      // narrative tension — ominous signs, no combat
   | "environment"  // environmental hazard (trap, weather, terrain)
   | "revelation"   // major story revelation for urban/mystery campaigns
+  | "loot"         // small reward for sustained successful skill checks
   ;
 
 export interface EscalationResult {
@@ -222,6 +236,14 @@ const REVELATION_NARRATIVES = [
   "ESCALATION:REVELATION — A critical clue surfaces that connects seemingly unrelated events. The conspiracy runs deeper than anyone suspected.",
   "ESCALATION:REVELATION — Someone the player trusted is not who they claimed to be. Reveal their true allegiance in a dramatic confrontation.",
   "ESCALATION:REVELATION — A document, letter, or overheard conversation exposes a truth that changes everything about the current quest.",
+];
+
+const LOOT_NARRATIVES = [
+  "Your sharp eyes catch the glint of something half-buried in the dust — a small coin pouch, still heavy with gold.",
+  "Tucked behind a loose stone, you discover a forgotten cache: a potion wrapped in oilcloth and a handful of coins.",
+  "Among the debris, something useful catches your attention — a small reward for your keen observation.",
+  "Your careful exploration pays off. Wedged in a crack, you find a small bundle someone left behind in haste.",
+  "A thorough search of the area reveals a hidden compartment containing a modest but welcome treasure.",
 ];
 
 /** Campaign themes that qualify for revelation escalation */
@@ -349,6 +371,22 @@ function runPerceptionContest(ctx: DangerContext): EscalationResult | null {
  *   10:   80% combat, 20% tension (guaranteed something happens)
  */
 export function getNextEscalation(ctx: DangerContext): EscalationResult {
+  // Combat continuation — if combat is active, continue the existing fight
+  if (ctx.combatActive) {
+    return {
+      type: "combat",
+      narrativeInjection: "[COMBAT_ROUND]",
+    };
+  }
+
+  // Loot escalation — reward sustained successful skill checks
+  if ((ctx.successfulChecksSinceLoot ?? 0) >= 4 && (ctx.turnsSinceLoot ?? 0) >= 4) {
+    return {
+      type: "loot",
+      narrativeInjection: pickRandom(LOOT_NARRATIVES),
+    };
+  }
+
   // Enemy encounter detection — scan most recent DM response for enemy presence
   if (ctx.recentDMResponses && ctx.recentDMResponses.length > 0) {
     const mostRecent = ctx.recentDMResponses[0];
