@@ -5,6 +5,7 @@ import {
   parseDMResponse, checkLocationStagnation, checkItemAcquisition,
   enforceGameState,
 } from "@/lib/ai/parse-response";
+import { getNextEscalation, type DangerContext } from "@/lib/progression-engine";
 import { preGenerate, postGenerate } from "@/lib/engine/pipeline";
 import type { PipelineInput } from "@/lib/engine/pipeline";
 import { getRandomThemeForLevel, getRandomCampaign } from "@/lib/campaigns";
@@ -192,6 +193,10 @@ interface InternalGameState {
   questLog: string[];
   turnCount: number;
   history: { role: "user" | "assistant"; content: string }[];
+  turnsSinceCombat: number;
+  turnsSinceLastEscalation: number;
+  recentFailedChecks: number;
+  recentDMResponses: string[];
 }
 
 interface DMTurnResult {
@@ -268,21 +273,72 @@ async function runDMTurn(
   gs.character.gold = enforced.gold;
   gs.location = enforced.location;
   gs.character.inventory = enforced.inventory;
-  const finalNarrative = enforced.narrative;
+  let finalNarrative = enforced.narrative;
 
   // Log enforcement warnings
   for (const w of enforced.warnings) {
     console.warn(`[parse-response] ${w}`);
   }
 
+  // ── Location extraction from movement phrases ──────────────────
+  const MOVEMENT_REGEX = /(?:you\s+arrive\s+at|you\s+enter|you\s+reach|you\s+step\s+into|you\s+emerge|you\s+find\s+yourself\s+in|you\s+make\s+your\s+way\s+to)\s+(?:the\s+)?(.{3,60}?)(?:\.|,|!|\?|$)/i;
+  if (!eo.locationChange) {
+    const movementMatch = finalNarrative.match(MOVEMENT_REGEX);
+    if (movementMatch) {
+      const extracted = movementMatch[1].trim();
+      if (extracted) {
+        gs.location = extracted;
+        console.log(`[bot-versus] Location extracted from narrative: "${extracted}"`);
+      }
+    }
+  }
+
+  // ── Track failed checks ────────────────────────────────────────
+  if (eo.roll && !eo.roll.success) {
+    gs.recentFailedChecks++;
+  }
+
+  // ── Progression engine: getNextEscalation ──────────────────────
+  const dangerCtx: DangerContext = {
+    location: gs.location,
+    campaignTheme,
+    turnsSinceCombat: gs.turnsSinceCombat,
+    turnsSinceCheck: 0,
+    turnsSinceLastEscalation: gs.turnsSinceLastEscalation,
+    recentFailedChecks: gs.recentFailedChecks,
+    playerHpPercent: gs.character.maxHp > 0 ? gs.character.hp / gs.character.maxHp : 1,
+    playerLevel: gs.character.level,
+    narrativeHints: gs.recentDMResponses,
+    recentDMResponses: gs.recentDMResponses,
+  };
+
+  const escalation = getNextEscalation(dangerCtx);
+  console.log(`[bot-versus] PROGRESSION turn=${gs.turnCount} danger=${dangerCtx.turnsSinceCombat} escalation=${escalation.type}`);
+
+  if (escalation.type === "combat" && escalation.combatStartTag) {
+    finalNarrative = finalNarrative + "\n\n" + escalation.narrativeInjection
+      + "\n[COMBAT_START] " + escalation.combatStartTag;
+    gs.turnsSinceCombat = 0;
+    gs.turnsSinceLastEscalation = 0;
+    gs.recentFailedChecks = 0;
+    tagsFound.push("COMBAT_START");
+  } else if (escalation.type === "tension" || escalation.type === "revelation" || escalation.type === "environment") {
+    finalNarrative = finalNarrative + "\n\n" + escalation.narrativeInjection;
+    gs.turnsSinceLastEscalation = 0;
+    gs.recentFailedChecks = 0;
+  } else {
+    // type === "none"
+    gs.turnsSinceCombat++;
+    gs.turnsSinceLastEscalation++;
+  }
+
+  // ── Update recent DM response buffer (keep last 3) ─────────────
+  gs.recentDMResponses.unshift(finalNarrative);
+  if (gs.recentDMResponses.length > 3) gs.recentDMResponses.length = 3;
+
   // Apply quest changes (not part of enforcement)
   if (eo.newQuest && !gs.questLog.includes(eo.newQuest)) gs.questLog.push(eo.newQuest);
   if (eo.completeQuest) gs.questLog = gs.questLog.filter(q => q !== eo.completeQuest);
-
-  // Check if combat injection added the tag
-  if (finalNarrative !== narrative && /\[COMBAT_START\]/.test(finalNarrative)) {
-    tagsFound.push("COMBAT_START");
-  }
 
   gs.history.push({ role: "assistant", content: finalNarrative });
 
@@ -457,6 +513,7 @@ async function runVersus(): Promise<NextResponse> {
 
   const gs: InternalGameState = {
     character, location: campaign.startLocation, questLog: [], turnCount: 0, history: [],
+    turnsSinceCombat: 0, turnsSinceLastEscalation: 0, recentFailedChecks: 0, recentDMResponses: [],
   };
 
   // Init Grok
