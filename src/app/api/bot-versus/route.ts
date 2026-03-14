@@ -3,8 +3,7 @@ import OpenAI from "openai";
 import { buildSystemPrompt, buildEngineContextMessage } from "@/lib/ai/dm-prompt";
 import {
   parseDMResponse, checkLocationStagnation, checkItemAcquisition,
-  guardHpChange, detectMovementLocation, enforceLootReward,
-  checkCombatInjection, markCombatEnded,
+  enforceGameState,
 } from "@/lib/ai/parse-response";
 import { preGenerate, postGenerate } from "@/lib/engine/pipeline";
 import type { PipelineInput } from "@/lib/engine/pipeline";
@@ -244,51 +243,45 @@ async function runDMTurn(
 
   const eo = preResult.engineOutcome;
   const backpackBefore = [...gs.character.inventory];
-  const previousHp = gs.character.hp;
 
-  // Apply HP change with hard guard (Fix 1)
-  if (eo.hpChange) {
-    const candidateHp = Math.max(0, Math.min(gs.character.maxHp, gs.character.hp + eo.hpChange));
-    gs.character.hp = guardHpChange(previousHp, candidateHp, rawText);
+  // Centralized state enforcement — all 4 fixes applied here
+  const enforced = enforceGameState(parsed, {
+    hp: gs.character.hp,
+    maxHp: gs.character.maxHp,
+    xp: gs.character.xp,
+    gold: gs.character.gold,
+    location: gs.location,
+    inventory: gs.character.inventory,
+  }, {
+    hpChange: eo.hpChange,
+    goldChange: eo.goldChange,
+    xpGained: eo.xpGained,
+    locationChange: eo.locationChange,
+    itemsGained: eo.itemsGained,
+    itemsLost: eo.itemsLost,
+    roll: eo.roll,
+  }, rawText);
+
+  // Apply enforced state
+  gs.character.hp = enforced.hp;
+  gs.character.xp = enforced.xp;
+  gs.character.gold = enforced.gold;
+  gs.location = enforced.location;
+  gs.character.inventory = enforced.inventory;
+  const finalNarrative = enforced.narrative;
+
+  // Log enforcement warnings
+  for (const w of enforced.warnings) {
+    console.warn(`[parse-response] ${w}`);
   }
 
-  if (eo.itemsGained.length > 0) gs.character.inventory.push(...eo.itemsGained);
-  if (eo.itemsLost.length > 0) {
-    for (const item of eo.itemsLost) {
-      const idx = gs.character.inventory.indexOf(item);
-      if (idx !== -1) gs.character.inventory.splice(idx, 1);
-    }
-  }
-  if (eo.goldChange) gs.character.gold += eo.goldChange;
-  if (eo.xpGained) gs.character.xp += eo.xpGained;
-  if (eo.locationChange) gs.location = eo.locationChange;
+  // Apply quest changes (not part of enforcement)
   if (eo.newQuest && !gs.questLog.includes(eo.newQuest)) gs.questLog.push(eo.newQuest);
   if (eo.completeQuest) gs.questLog = gs.questLog.filter(q => q !== eo.completeQuest);
 
-  // Fix 2: Detect movement in narrative and override location if stale
-  const locationOverride = detectMovementLocation(narrative, gs.location, eo.locationChange);
-  if (locationOverride) {
-    gs.location = locationOverride;
-  }
-
-  // Fix 3: Force loot after successful DC 12+ checks
-  if (eo.roll?.success && eo.roll.dc && eo.roll.dc >= 12) {
-    const loot = enforceLootReward(eo.roll.dc, true, eo.goldChange !== 0);
-    if (loot.goldBonus > 0) gs.character.gold += loot.goldBonus;
-    if (loot.itemDrop) gs.character.inventory.push(loot.itemDrop);
-  }
-
-  // Fix 5: Combat injection after 5 safe turns in dangerous areas
-  const combatInjection = checkCombatInjection(rawText, gs.location);
-  let finalNarrative = narrative;
-  if (combatInjection) {
-    finalNarrative = narrative + combatInjection.appendNarrative;
+  // Check if combat injection added the tag
+  if (finalNarrative !== narrative && /\[COMBAT_START\]/.test(finalNarrative)) {
     tagsFound.push("COMBAT_START");
-  }
-
-  // Detect combat end (enemy defeated / player fled) to reset combat state
-  if (/\b(?:defeated|slain|killed|fled|escaped|retreated)\b/i.test(narrative) && tagsFound.includes("COMBAT_START") === false) {
-    markCombatEnded();
   }
 
   gs.history.push({ role: "assistant", content: finalNarrative });

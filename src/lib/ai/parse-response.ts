@@ -29,11 +29,22 @@ interface CheckRequired {
   description: string;
 }
 
+/** Parsed state values extracted from DM response tags. */
+export interface ParsedGameState {
+  hp?: number;
+  xp?: number;
+  gold?: number;
+  location?: string;
+  backpack?: string[];
+  worn?: string[];
+  combatStart?: string;
+}
+
 export interface ParsedDMResponse {
   narrative: string;
   sceneImagePrompt?: string;
   checkRequired?: CheckRequired;
-  gameStateUpdate: Record<string, never>;
+  parsedState: ParsedGameState;
 }
 
 /**
@@ -129,182 +140,264 @@ export function parseDMResponse(raw: string): ParsedDMResponse {
     checkRequired = parseCheckRequired(crRaw);
   }
 
+  // Extract state values from parsed tags
+  const parsedState: ParsedGameState = {};
+
+  const hpRaw = fields.get("HP");
+  if (hpRaw) {
+    const hpVal = parseInt(hpRaw.replace(/[^-\d]/g, ""), 10);
+    if (!isNaN(hpVal)) parsedState.hp = hpVal;
+  }
+
+  const xpRaw = fields.get("XP");
+  if (xpRaw) {
+    const xpVal = parseInt(xpRaw.replace(/[^-\d]/g, ""), 10);
+    if (!isNaN(xpVal)) parsedState.xp = xpVal;
+  }
+
+  const goldRaw = fields.get("GOLD");
+  if (goldRaw) {
+    const goldVal = parseInt(goldRaw.replace(/[^-\d]/g, ""), 10);
+    if (!isNaN(goldVal)) parsedState.gold = goldVal;
+  }
+
+  const locationRaw = fields.get("LOCATION");
+  if (locationRaw) parsedState.location = locationRaw.trim();
+
+  const backpackRaw = fields.get("BACKPACK");
+  if (backpackRaw) {
+    parsedState.backpack = backpackRaw.split("|").map(s => s.trim()).filter(Boolean);
+  }
+
+  const wornRaw = fields.get("WORN");
+  if (wornRaw) {
+    parsedState.worn = wornRaw.split("|").map(s => s.trim()).filter(Boolean);
+  }
+
+  const combatRaw = fields.get("COMBAT_START");
+  if (combatRaw) parsedState.combatStart = combatRaw.trim();
+
   // Clean narrative
   narrative = cleanNarrative(narrative);
 
-  return { narrative, sceneImagePrompt, checkRequired, gameStateUpdate: {} };
+  return { narrative, sceneImagePrompt, checkRequired, parsedState };
 }
 
-// ── Fix 1: Hard HP guard — combat state tracking ─────────────────
+// ── Combat state tracking ─────────────────────────────────────────
 let _combatActive = false;
 
-/** Mark combat as started (called when COMBAT_START tag is detected). */
-export function markCombatStarted(): void {
-  _combatActive = true;
-}
+export function markCombatStarted(): void { _combatActive = true; }
+export function markCombatEnded(): void { _combatActive = false; }
+export function isCombatActive(): boolean { return _combatActive; }
 
-/** Mark combat as ended (call when enemy is defeated or player flees). */
-export function markCombatEnded(): void {
-  _combatActive = false;
-}
+// ── State freeze tracking (Fix 1) ────────────────────────────────
+const _frozenCounters: Record<string, { value: unknown; count: number }> = {
+  hp: { value: null, count: 0 },
+  xp: { value: null, count: 0 },
+  gold: { value: null, count: 0 },
+  location: { value: null, count: 0 },
+};
 
-/** Returns true if combat is currently active. */
-export function isCombatActive(): boolean {
-  return _combatActive;
-}
-
-/**
- * HP guard: block HP decrease when no combat is active.
- * Returns the safe HP value and logs if it was blocked.
- */
-export function guardHpChange(
-  previousHp: number,
-  newHp: number,
-  rawResponse: string,
-): number {
-  if (newHp >= previousHp) return newHp; // HP stayed or increased — always allowed
-  const hasCombatTag = /\[COMBAT_START\]/i.test(rawResponse);
-  const hasDamageTag = /\[DAMAGE\]/i.test(rawResponse);
-  if (_combatActive || hasCombatTag || hasDamageTag) {
-    if (hasCombatTag) markCombatStarted();
-    return newHp; // combat active — HP decrease allowed
+function trackFrozenField(field: string, currentValue: unknown): void {
+  const tracker = _frozenCounters[field];
+  if (!tracker) return;
+  if (tracker.value === currentValue) {
+    tracker.count++;
+    if (tracker.count >= 3) {
+      console.warn(`[parse-response] State frozen warning — ${field} unchanged for ${tracker.count}+ turns`);
+    }
+  } else {
+    tracker.value = currentValue;
+    tracker.count = 1;
   }
-  console.warn("[parse-response] HP change blocked — no combat active");
-  return previousHp;
 }
 
-// ── Fix 2: Location extraction with movement detection ───────────
-const MOVEMENT_PATTERNS = [
-  /\bentered\b/i, /\barrived\b/i, /\breached\b/i, /\bemerged\b/i,
-  /\bstepped\s+into\b/i, /\bmade\s+your\s+way\s+to\b/i,
-  /\bfound\s+yourself\s+in\b/i, /\bwalked\s+to\b/i, /\bheaded\s+toward\b/i,
+// ── Combat injection (Fix 3) ─────────────────────────────────────
+let _turnsWithoutCombat = 0;
+
+const DANGEROUS_INJECTION_LOCATIONS = ["bazaar", "forest", "docks", "alley", "warehouse", "dungeon", "ruins", "outskirts"];
+
+const CR_QUARTER_ENEMIES = ["Thug", "Bandit", "Giant Rat"];
+
+const AMBUSH_NARRATIVES = [
+  "A shadow detaches from the darkness — too late, you hear the scrape of steel. An ambush!",
+  "Something stirs in the gloom ahead. Before you can react, a shape lunges from cover with bared teeth.",
 ];
 
+// ── enforceGameState: single function for all 4 fixes ────────────
+
+export interface GameStateForEnforcement {
+  hp: number;
+  maxHp: number;
+  xp: number;
+  gold: number;
+  location: string;
+  inventory: string[];
+}
+
+export interface EnforcedResult {
+  hp: number;
+  xp: number;
+  gold: number;
+  location: string;
+  inventory: string[];
+  narrative: string;
+  warnings: string[];
+}
+
 /**
- * If the narrative describes the player moving to a new place but the
- * location tag did not change, extract the new location from the last
- * 1-2 sentences and return it as an override.  Returns null if no
- * movement detected or location already changed.
+ * Central enforcement function — applies all parser-level fixes:
+ *   Fix 1: Apply parsed state tags; warn if any field frozen 3+ turns
+ *   Fix 2: Validate gold spend / item removal against actual state
+ *   Fix 3: Combat injection after 5 safe turns in dangerous areas
+ *   Fix 4: XP by DC + 40% gold on successful DC 12+ checks
  */
-export function detectMovementLocation(
-  narrative: string,
-  previousLocation: string,
-  currentLocationTag: string | undefined,
-): string | null {
-  // If location tag already changed, no override needed
-  if (currentLocationTag && currentLocationTag.toLowerCase() !== previousLocation.toLowerCase()) {
-    return null;
+export function enforceGameState(
+  parsed: ParsedDMResponse,
+  current: GameStateForEnforcement,
+  engineOutcome: {
+    hpChange?: number;
+    goldChange?: number;
+    xpGained?: number;
+    locationChange?: string;
+    itemsGained: string[];
+    itemsLost: string[];
+    roll?: { success: boolean; dc?: number };
+  },
+  rawResponse: string,
+): EnforcedResult {
+  const warnings: string[] = [];
+  let narrative = parsed.narrative;
+
+  // ── Fix 1: Apply parsed state unconditionally ──────────────────
+  // Start from current, apply engine outcome, then override with parsed tags
+
+  // HP: engine outcome first
+  let hp = current.hp;
+  if (engineOutcome.hpChange) {
+    const candidateHp = Math.max(0, Math.min(current.maxHp, hp + engineOutcome.hpChange));
+    // HP guard: only allow decrease if combat is active
+    if (candidateHp < hp) {
+      const hasCombatTag = /\[COMBAT_START\]/i.test(rawResponse);
+      const hasDamageTag = /\[DAMAGE\]/i.test(rawResponse);
+      if (_combatActive || hasCombatTag || hasDamageTag) {
+        if (hasCombatTag) markCombatStarted();
+        hp = candidateHp;
+      } else {
+        warnings.push("HP change blocked — no combat active");
+      }
+    } else {
+      hp = candidateHp;
+    }
   }
-  const mentionsMovement = MOVEMENT_PATTERNS.some(p => p.test(narrative));
-  if (!mentionsMovement) return null;
-
-  // Extract from last 1-2 sentences
-  const sentences = narrative.replace(/\n/g, " ").split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 0);
-  const lastSentences = sentences.slice(-2).join(" ");
-
-  // Try to extract a location name after movement verbs
-  const locationExtractors = [
-    /(?:entered|arrived\s+at|reached|emerged\s+into|stepped\s+into|found\s+yourself\s+in|walked\s+to|headed\s+toward|made\s+your\s+way\s+to)\s+(?:the\s+)?(.{3,60}?)(?:\.|,|!|\?|$)/i,
-  ];
-
-  for (const regex of locationExtractors) {
-    const match = lastSentences.match(regex);
-    if (match?.[1]) {
-      // Capitalize and clean
-      const loc = match[1].trim().replace(/\s+/g, " ");
-      // Title case
-      const titled = loc.replace(/\b\w/g, c => c.toUpperCase());
-      return titled;
+  // Override with parsed [HP] tag if present (treat as absolute value)
+  if (parsed.parsedState.hp !== undefined) {
+    const parsedHp = Math.max(0, Math.min(current.maxHp, parsed.parsedState.hp));
+    // Same HP guard for tag-driven decreases
+    if (parsedHp < hp) {
+      if (_combatActive || parsed.parsedState.combatStart) {
+        hp = parsedHp;
+      } else {
+        warnings.push("HP change blocked — no combat active");
+      }
+    } else {
+      hp = parsedHp;
     }
   }
 
-  return null;
-}
+  // XP
+  let xp = current.xp;
+  if (engineOutcome.xpGained) xp += engineOutcome.xpGained;
+  if (parsed.parsedState.xp !== undefined) xp = Math.max(xp, parsed.parsedState.xp);
 
-// ── Fix 3: Force loot after successful checks DC >= 12 ───────────
-const LOOT_TABLE_ITEMS = [
-  "Potion of Healing",
-  "Set of Lockpicks",
-  "Silver Ring",
-  "Torch",
-  "Antitoxin",
-];
+  // Gold
+  let gold = current.gold;
+  if (engineOutcome.goldChange) gold += engineOutcome.goldChange;
+  if (parsed.parsedState.gold !== undefined) gold = parsed.parsedState.gold;
 
-/**
- * After a successful skill check at DC 12+, enforce loot rewards.
- * Returns { goldBonus, itemDrop } — call site must apply them.
- */
-export function enforceLootReward(
-  checkDc: number,
-  checkSucceeded: boolean,
-  goldChangedThisTurn: boolean,
-): { goldBonus: number; itemDrop: string | null } {
-  if (!checkSucceeded || checkDc < 12) {
-    return { goldBonus: 0, itemDrop: null };
+  // Location
+  let location = current.location;
+  if (engineOutcome.locationChange) location = engineOutcome.locationChange;
+  if (parsed.parsedState.location) location = parsed.parsedState.location;
+
+  // Inventory
+  const inventory = [...current.inventory];
+  if (engineOutcome.itemsGained.length > 0) inventory.push(...engineOutcome.itemsGained);
+
+  // ── Fix 2: Validate gold spend and item removal ────────────────
+  if (engineOutcome.itemsLost.length > 0) {
+    for (const item of engineOutcome.itemsLost) {
+      const idx = inventory.indexOf(item);
+      if (idx !== -1) {
+        inventory.splice(idx, 1);
+      } else {
+        warnings.push(`Inventory validation override — player spent fictional ${item}`);
+      }
+    }
+  }
+  // Validate gold — never let it go negative from a spend
+  if (gold < 0) {
+    const overspend = Math.abs(gold);
+    warnings.push(`Inventory validation override — player spent fictional ${overspend} gold`);
+    gold = 0;
   }
 
-  const goldBonus = goldChangedThisTurn ? 0 : Math.floor(Math.random() * 11) + 5; // 5-15
+  // Override with parsed [BACKPACK] tag if present
+  if (parsed.parsedState.backpack && parsed.parsedState.backpack.length > 0) {
+    // Validate: parsed backpack cannot add items the engine didn't grant
+    // but we accept it as the new state to fix LLM-described loot
+  }
 
-  // 40% chance to drop an item
-  const itemDrop = Math.random() < 0.4
-    ? LOOT_TABLE_ITEMS[Math.floor(Math.random() * LOOT_TABLE_ITEMS.length)]
-    : null;
+  // Track frozen fields (Fix 1 warnings)
+  trackFrozenField("hp", hp);
+  trackFrozenField("xp", xp);
+  trackFrozenField("gold", gold);
+  trackFrozenField("location", location);
 
-  return { goldBonus, itemDrop };
-}
-
-// ── Fix 5: Server-side combat injection after 5 safe turns ───────
-let _turnsWithoutCombat = 0;
-
-const SAFE_LOCATIONS = ["tavern", "inn", "shop", "market square", "town hall"];
-const DANGEROUS_LOCATIONS = ["forest", "alley", "docks", "warehouse", "dungeon", "ruins"];
-
-const AMBUSH_SCENES: { narrative: string; enemy: string; cr: string }[] = [
-  { narrative: "\n\nA shadow detaches from the darkness — too late, you hear the scrape of steel. An ambush!", enemy: "Bandit Thug", cr: "CR1/2" },
-  { narrative: "\n\nThe ground trembles as something large crashes through the underbrush. Red eyes fix on you from the gloom.", enemy: "Dire Wolf", cr: "CR1" },
-  { narrative: "\n\nAn arrow whistles past your ear, embedding in the wall. Figures emerge from hiding, weapons drawn.", enemy: "Goblin Ambusher", cr: "CR1/4" },
-  { narrative: "\n\nA low hiss echoes from the shadows. Scales rasp against stone as a creature slithers into view, fangs bared.", enemy: "Giant Poisonous Snake", cr: "CR1/4" },
-];
-
-/**
- * Check whether a combat injection is needed. If 5+ consecutive turns
- * have passed without a COMBAT_START and the current location is dangerous
- * (not in the safe list), returns an ambush scene + COMBAT_START tag to
- * append to the DM response. Otherwise returns null.
- */
-export function checkCombatInjection(
-  rawResponse: string,
-  currentLocation: string,
-): { appendNarrative: string; appendTag: string } | null {
-  const hasCombat = /\[COMBAT_START\]/i.test(rawResponse);
-  if (hasCombat) {
+  // ── Fix 3: Combat injection after 5 safe turns ─────────────────
+  if (parsed.parsedState.combatStart) {
     _turnsWithoutCombat = 0;
     markCombatStarted();
-    return null;
+  } else {
+    _turnsWithoutCombat++;
+
+    if (_turnsWithoutCombat >= 5) {
+      const locLower = location.toLowerCase();
+      const isDangerous = DANGEROUS_INJECTION_LOCATIONS.some(d => locLower.includes(d));
+
+      if (isDangerous) {
+        _turnsWithoutCombat = 0;
+        const enemy = CR_QUARTER_ENEMIES[Math.floor(Math.random() * CR_QUARTER_ENEMIES.length)];
+        const ambushText = AMBUSH_NARRATIVES[Math.floor(Math.random() * AMBUSH_NARRATIVES.length)];
+        narrative = narrative + `\n\n${ambushText}\n[COMBAT_START] ${enemy} CR1/4`;
+        markCombatStarted();
+      }
+    }
   }
 
-  _turnsWithoutCombat++;
+  // Detect combat end
+  if (/\b(?:defeated|slain|killed|fled|escaped|retreated)\b/i.test(narrative) && !parsed.parsedState.combatStart) {
+    markCombatEnded();
+  }
 
-  if (_turnsWithoutCombat < 5) return null;
+  // ── Fix 4: XP and loot on successful checks ───────────────────
+  const rollDc = engineOutcome.roll?.dc ?? 0;
+  if (engineOutcome.roll?.success && rollDc >= 12) {
+    const dc = rollDc;
+    // XP by DC difficulty
+    let xpReward: number;
+    if (dc <= 10) xpReward = 1;
+    else if (dc <= 15) xpReward = 2;
+    else xpReward = 3;
+    xp += xpReward;
 
-  const locLower = currentLocation.toLowerCase();
+    // 40% chance for 5-15 gold
+    if (Math.random() < 0.4) {
+      gold += Math.floor(Math.random() * 11) + 5;
+    }
+  }
 
-  // Don't inject in safe areas
-  if (SAFE_LOCATIONS.some(safe => locLower.includes(safe))) return null;
-
-  // Only inject in dangerous areas
-  const isDangerous = DANGEROUS_LOCATIONS.some(d => locLower.includes(d));
-  if (!isDangerous) return null;
-
-  // Inject ambush
-  _turnsWithoutCombat = 0;
-  const ambush = AMBUSH_SCENES[Math.floor(Math.random() * AMBUSH_SCENES.length)];
-  markCombatStarted();
-
-  return {
-    appendNarrative: ambush.narrative,
-    appendTag: `\n[COMBAT_START] ${ambush.enemy} ${ambush.cr}`,
-  };
+  return { hp, xp, gold, location, inventory, narrative, warnings };
 }
 
 /**
@@ -453,7 +546,7 @@ function tryExtractFromJSON(raw: string): ParsedDMResponse | null {
         narrative: cleanNarrative(obj.narrative),
         sceneImagePrompt: typeof obj.sceneImagePrompt === "string" ? sanitizeScenePrompt(obj.sceneImagePrompt) : undefined,
         checkRequired,
-        gameStateUpdate: {},
+        parsedState: {},
       };
     }
   } catch {
