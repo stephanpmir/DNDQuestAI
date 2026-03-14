@@ -26,7 +26,7 @@ import { resolveCombatTurn } from "@/lib/combat-engine";
 import type { CombatState } from "@/lib/combat-engine";
 import { getMonsterByName } from "@/lib/monsters";
 import type { Character } from "@/types/character";
-import { getNextEscalation, type DangerContext } from "@/lib/progression-engine";
+import { getNextEscalation, detectCampaignType, type DangerContext } from "@/lib/progression-engine";
 
 interface CheckRequired {
   stat: string;
@@ -231,6 +231,9 @@ function trackFrozenField(field: string, currentValue: unknown): void {
 let _turnsSinceCombat = 0;
 let _turnsSinceCheck = 0;
 let _recentFailedChecks = 0;
+let _turnsSinceLastEscalation = 0;
+/** Rolling buffer of the last 3 DM responses (most recent first) */
+const _recentDMResponses: string[] = [];
 
 // ── enforceGameState: single function for all 4 fixes ────────────
 
@@ -251,6 +254,8 @@ export interface EnforcedResult {
   inventory: string[];
   narrative: string;
   warnings: string[];
+  /** Campaign type detected from narrative context this turn */
+  detectedCampaignType?: string;
 }
 
 /**
@@ -375,6 +380,12 @@ export function enforceGameState(
     _turnsSinceCheck++;
   }
 
+  // Update recent DM response buffer (most recent first, max 3)
+  _recentDMResponses.unshift(rawResponse);
+  if (_recentDMResponses.length > 3) _recentDMResponses.pop();
+
+  _turnsSinceLastEscalation++;
+
   // Run progression engine for smart escalation
   if (!parsed.parsedState.combatStart && !_combatActive) {
     const playerLevel = combatContext?.character?.level ?? 1;
@@ -385,10 +396,12 @@ export function enforceGameState(
       campaignTheme,
       turnsSinceCombat: _turnsSinceCombat,
       turnsSinceCheck: _turnsSinceCheck,
+      turnsSinceLastEscalation: _turnsSinceLastEscalation,
       recentFailedChecks: _recentFailedChecks,
       playerHpPercent,
       playerLevel,
       narrativeHints: [rawResponse.slice(-500)],
+      recentDMResponses: [..._recentDMResponses],
     };
 
     const escalation = getNextEscalation(dangerCtx);
@@ -396,13 +409,23 @@ export function enforceGameState(
     if (escalation.type === "combat" && escalation.combatStartTag) {
       _turnsSinceCombat = 0;
       _recentFailedChecks = 0;
+      _turnsSinceLastEscalation = 0;
       narrative = narrative + "\n\n" + escalation.narrativeInjection
         + "\n[COMBAT_START] " + escalation.combatStartTag;
       markCombatStarted();
+    } else if (escalation.type === "revelation") {
+      _turnsSinceLastEscalation = 0;
+      narrative = narrative + "\n\n" + escalation.narrativeInjection;
     } else if (escalation.type === "tension" || escalation.type === "environment") {
+      _turnsSinceLastEscalation = 0;
       narrative = narrative + "\n\n" + escalation.narrativeInjection;
     }
   }
+
+  // Campaign type persistence — re-detect from narrative + location each turn
+  const detectedCampaignType = detectCampaignType(
+    campaignTheme ?? (narrative + " " + location)
+  );
 
   // Detect combat end
   if (/\b(?:defeated|slain|killed|fled|escaped|retreated)\b/i.test(narrative) && !parsed.parsedState.combatStart) {
@@ -499,7 +522,7 @@ export function enforceGameState(
     }
   }
 
-  return { hp, xp, gold, location, inventory, narrative, warnings };
+  return { hp, xp, gold, location, inventory, narrative, warnings, detectedCampaignType };
 }
 
 /**

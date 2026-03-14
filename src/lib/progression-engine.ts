@@ -92,10 +92,13 @@ export interface DangerContext {
   campaignTheme?: string;
   turnsSinceCombat: number;
   turnsSinceCheck: number;
+  turnsSinceLastEscalation: number;
   recentFailedChecks: number;
   playerHpPercent: number; // 0–1
   playerLevel: number;
   narrativeHints: string[]; // recent narrative snippets for context
+  /** Last 3 DM responses (most recent first) for weighted narrative analysis */
+  recentDMResponses?: string[];
 }
 
 /**
@@ -143,14 +146,29 @@ export function assessDangerLevel(ctx: DangerContext): number {
   if (ctx.playerHpPercent < 0.3) danger -= 3;
   else if (ctx.playerHpPercent < 0.5) danger -= 1;
 
-  // Narrative hints — stealth failure in dangerous area spikes danger
-  const mentionsStealth = ctx.narrativeHints.some(h =>
-    /stealth|sneak|creep|skulk/i.test(h)
-  );
-  const mentionsFailure = ctx.narrativeHints.some(h =>
-    /fail|stumble|trip|noise|alert|spotted|noticed/i.test(h)
-  );
-  if (mentionsStealth && mentionsFailure && danger >= 4) danger += 2;
+  // Narrative analysis — weighted across recent DM responses
+  // Weights: most recent 50%, second 30%, oldest 20%
+  const DANGER_KEYWORDS = /stealth|sneak|creep|skulk|shadow|dark|threat|danger|lurk|hunt|stalk|prowl/i;
+  const FAILURE_KEYWORDS = /fail|stumble|trip|noise|alert|spotted|noticed|caught|exposed|detected/i;
+  const TENSION_KEYWORDS = /scream|blood|claw|fang|growl|snarl|hiss|rumble|quake|crack|shatter/i;
+  const WEIGHTS = [0.5, 0.3, 0.2];
+
+  const responses = ctx.recentDMResponses ?? ctx.narrativeHints;
+  let narrativeDanger = 0;
+
+  for (let i = 0; i < Math.min(responses.length, 3); i++) {
+    const text = responses[i];
+    const weight = WEIGHTS[i] ?? 0.1;
+    let score = 0;
+    if (DANGER_KEYWORDS.test(text)) score += 1;
+    if (FAILURE_KEYWORDS.test(text)) score += 1;
+    if (TENSION_KEYWORDS.test(text)) score += 1;
+    narrativeDanger += score * weight;
+  }
+
+  // narrativeDanger ranges 0–4.5 in theory; scale to 0–3 contribution
+  if (narrativeDanger >= 2.0 && danger >= 4) danger += 2;
+  else if (narrativeDanger >= 1.0 && danger >= 3) danger += 1;
 
   return Math.max(0, Math.min(10, danger));
 }
@@ -162,6 +180,7 @@ export type EscalationType =
   | "combat"       // inject a [COMBAT_START] encounter
   | "tension"      // narrative tension — ominous signs, no combat
   | "environment"  // environmental hazard (trap, weather, terrain)
+  | "revelation"   // major story revelation for urban/mystery campaigns
   ;
 
 export interface EscalationResult {
@@ -194,6 +213,18 @@ const ENVIRONMENT_NARRATIVES = [
   "A sudden tremor shakes dust from the ceiling. Cracks spider-web across the stone above.",
 ];
 
+const REVELATION_NARRATIVES = [
+  "ESCALATION:REVELATION — A trusted ally's mask slips. Reveal a major betrayal, hidden identity, or shocking secret that reframes everything the player thought they knew.",
+  "ESCALATION:REVELATION — A critical clue surfaces that connects seemingly unrelated events. The conspiracy runs deeper than anyone suspected.",
+  "ESCALATION:REVELATION — Someone the player trusted is not who they claimed to be. Reveal their true allegiance in a dramatic confrontation.",
+  "ESCALATION:REVELATION — A document, letter, or overheard conversation exposes a truth that changes everything about the current quest.",
+];
+
+/** Campaign themes that qualify for revelation escalation */
+const REVELATION_THEMES: CampaignTheme[] = [
+  "urban_intrigue", "mystery", "political", "heist", "gothic",
+];
+
 function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
@@ -212,6 +243,15 @@ function pickRandom<T>(arr: T[]): T {
  */
 export function getNextEscalation(ctx: DangerContext): EscalationResult {
   const danger = assessDangerLevel(ctx);
+
+  // Revelation escalation for urban/mystery campaigns after 5+ quiet turns
+  const theme = ctx.campaignTheme as CampaignTheme | undefined;
+  if (theme && REVELATION_THEMES.includes(theme) && ctx.turnsSinceLastEscalation >= 5) {
+    return {
+      type: "revelation",
+      narrativeInjection: pickRandom(REVELATION_NARRATIVES),
+    };
+  }
 
   // No escalation in safe areas
   if (danger <= 3) {
