@@ -135,6 +135,178 @@ export function parseDMResponse(raw: string): ParsedDMResponse {
   return { narrative, sceneImagePrompt, checkRequired, gameStateUpdate: {} };
 }
 
+// ── Fix 1: Hard HP guard — combat state tracking ─────────────────
+let _combatActive = false;
+
+/** Mark combat as started (called when COMBAT_START tag is detected). */
+export function markCombatStarted(): void {
+  _combatActive = true;
+}
+
+/** Mark combat as ended (call when enemy is defeated or player flees). */
+export function markCombatEnded(): void {
+  _combatActive = false;
+}
+
+/** Returns true if combat is currently active. */
+export function isCombatActive(): boolean {
+  return _combatActive;
+}
+
+/**
+ * HP guard: block HP decrease when no combat is active.
+ * Returns the safe HP value and logs if it was blocked.
+ */
+export function guardHpChange(
+  previousHp: number,
+  newHp: number,
+  rawResponse: string,
+): number {
+  if (newHp >= previousHp) return newHp; // HP stayed or increased — always allowed
+  const hasCombatTag = /\[COMBAT_START\]/i.test(rawResponse);
+  const hasDamageTag = /\[DAMAGE\]/i.test(rawResponse);
+  if (_combatActive || hasCombatTag || hasDamageTag) {
+    if (hasCombatTag) markCombatStarted();
+    return newHp; // combat active — HP decrease allowed
+  }
+  console.warn("[parse-response] HP change blocked — no combat active");
+  return previousHp;
+}
+
+// ── Fix 2: Location extraction with movement detection ───────────
+const MOVEMENT_PATTERNS = [
+  /\bentered\b/i, /\barrived\b/i, /\breached\b/i, /\bemerged\b/i,
+  /\bstepped\s+into\b/i, /\bmade\s+your\s+way\s+to\b/i,
+  /\bfound\s+yourself\s+in\b/i, /\bwalked\s+to\b/i, /\bheaded\s+toward\b/i,
+];
+
+/**
+ * If the narrative describes the player moving to a new place but the
+ * location tag did not change, extract the new location from the last
+ * 1-2 sentences and return it as an override.  Returns null if no
+ * movement detected or location already changed.
+ */
+export function detectMovementLocation(
+  narrative: string,
+  previousLocation: string,
+  currentLocationTag: string | undefined,
+): string | null {
+  // If location tag already changed, no override needed
+  if (currentLocationTag && currentLocationTag.toLowerCase() !== previousLocation.toLowerCase()) {
+    return null;
+  }
+  const mentionsMovement = MOVEMENT_PATTERNS.some(p => p.test(narrative));
+  if (!mentionsMovement) return null;
+
+  // Extract from last 1-2 sentences
+  const sentences = narrative.replace(/\n/g, " ").split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 0);
+  const lastSentences = sentences.slice(-2).join(" ");
+
+  // Try to extract a location name after movement verbs
+  const locationExtractors = [
+    /(?:entered|arrived\s+at|reached|emerged\s+into|stepped\s+into|found\s+yourself\s+in|walked\s+to|headed\s+toward|made\s+your\s+way\s+to)\s+(?:the\s+)?(.{3,60}?)(?:\.|,|!|\?|$)/i,
+  ];
+
+  for (const regex of locationExtractors) {
+    const match = lastSentences.match(regex);
+    if (match?.[1]) {
+      // Capitalize and clean
+      const loc = match[1].trim().replace(/\s+/g, " ");
+      // Title case
+      const titled = loc.replace(/\b\w/g, c => c.toUpperCase());
+      return titled;
+    }
+  }
+
+  return null;
+}
+
+// ── Fix 3: Force loot after successful checks DC >= 12 ───────────
+const LOOT_TABLE_ITEMS = [
+  "Potion of Healing",
+  "Set of Lockpicks",
+  "Silver Ring",
+  "Torch",
+  "Antitoxin",
+];
+
+/**
+ * After a successful skill check at DC 12+, enforce loot rewards.
+ * Returns { goldBonus, itemDrop } — call site must apply them.
+ */
+export function enforceLootReward(
+  checkDc: number,
+  checkSucceeded: boolean,
+  goldChangedThisTurn: boolean,
+): { goldBonus: number; itemDrop: string | null } {
+  if (!checkSucceeded || checkDc < 12) {
+    return { goldBonus: 0, itemDrop: null };
+  }
+
+  const goldBonus = goldChangedThisTurn ? 0 : Math.floor(Math.random() * 11) + 5; // 5-15
+
+  // 40% chance to drop an item
+  const itemDrop = Math.random() < 0.4
+    ? LOOT_TABLE_ITEMS[Math.floor(Math.random() * LOOT_TABLE_ITEMS.length)]
+    : null;
+
+  return { goldBonus, itemDrop };
+}
+
+// ── Fix 5: Server-side combat injection after 5 safe turns ───────
+let _turnsWithoutCombat = 0;
+
+const SAFE_LOCATIONS = ["tavern", "inn", "shop", "market square", "town hall"];
+const DANGEROUS_LOCATIONS = ["forest", "alley", "docks", "warehouse", "dungeon", "ruins"];
+
+const AMBUSH_SCENES: { narrative: string; enemy: string; cr: string }[] = [
+  { narrative: "\n\nA shadow detaches from the darkness — too late, you hear the scrape of steel. An ambush!", enemy: "Bandit Thug", cr: "CR1/2" },
+  { narrative: "\n\nThe ground trembles as something large crashes through the underbrush. Red eyes fix on you from the gloom.", enemy: "Dire Wolf", cr: "CR1" },
+  { narrative: "\n\nAn arrow whistles past your ear, embedding in the wall. Figures emerge from hiding, weapons drawn.", enemy: "Goblin Ambusher", cr: "CR1/4" },
+  { narrative: "\n\nA low hiss echoes from the shadows. Scales rasp against stone as a creature slithers into view, fangs bared.", enemy: "Giant Poisonous Snake", cr: "CR1/4" },
+];
+
+/**
+ * Check whether a combat injection is needed. If 5+ consecutive turns
+ * have passed without a COMBAT_START and the current location is dangerous
+ * (not in the safe list), returns an ambush scene + COMBAT_START tag to
+ * append to the DM response. Otherwise returns null.
+ */
+export function checkCombatInjection(
+  rawResponse: string,
+  currentLocation: string,
+): { appendNarrative: string; appendTag: string } | null {
+  const hasCombat = /\[COMBAT_START\]/i.test(rawResponse);
+  if (hasCombat) {
+    _turnsWithoutCombat = 0;
+    markCombatStarted();
+    return null;
+  }
+
+  _turnsWithoutCombat++;
+
+  if (_turnsWithoutCombat < 5) return null;
+
+  const locLower = currentLocation.toLowerCase();
+
+  // Don't inject in safe areas
+  if (SAFE_LOCATIONS.some(safe => locLower.includes(safe))) return null;
+
+  // Only inject in dangerous areas
+  const isDangerous = DANGEROUS_LOCATIONS.some(d => locLower.includes(d));
+  if (!isDangerous) return null;
+
+  // Inject ambush
+  _turnsWithoutCombat = 0;
+  const ambush = AMBUSH_SCENES[Math.floor(Math.random() * AMBUSH_SCENES.length)];
+  markCombatStarted();
+
+  return {
+    appendNarrative: ambush.narrative,
+    appendTag: `\n[COMBAT_START] ${ambush.enemy} ${ambush.cr}`,
+  };
+}
+
 /**
  * Track consecutive turns with the same location and log a warning
  * when it exceeds 3 turns — indicates the LLM is ignoring LOCATION updates.

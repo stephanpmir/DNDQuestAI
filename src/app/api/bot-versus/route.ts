@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { buildSystemPrompt, buildEngineContextMessage } from "@/lib/ai/dm-prompt";
-import { parseDMResponse, checkLocationStagnation, checkItemAcquisition } from "@/lib/ai/parse-response";
+import {
+  parseDMResponse, checkLocationStagnation, checkItemAcquisition,
+  guardHpChange, detectMovementLocation, enforceLootReward,
+  checkCombatInjection, markCombatEnded,
+} from "@/lib/ai/parse-response";
 import { preGenerate, postGenerate } from "@/lib/engine/pipeline";
 import type { PipelineInput } from "@/lib/engine/pipeline";
 import { getRandomThemeForLevel, getRandomCampaign } from "@/lib/campaigns";
@@ -240,7 +244,14 @@ async function runDMTurn(
 
   const eo = preResult.engineOutcome;
   const backpackBefore = [...gs.character.inventory];
-  if (eo.hpChange) gs.character.hp = Math.max(0, Math.min(gs.character.maxHp, gs.character.hp + eo.hpChange));
+  const previousHp = gs.character.hp;
+
+  // Apply HP change with hard guard (Fix 1)
+  if (eo.hpChange) {
+    const candidateHp = Math.max(0, Math.min(gs.character.maxHp, gs.character.hp + eo.hpChange));
+    gs.character.hp = guardHpChange(previousHp, candidateHp, rawText);
+  }
+
   if (eo.itemsGained.length > 0) gs.character.inventory.push(...eo.itemsGained);
   if (eo.itemsLost.length > 0) {
     for (const item of eo.itemsLost) {
@@ -254,15 +265,41 @@ async function runDMTurn(
   if (eo.newQuest && !gs.questLog.includes(eo.newQuest)) gs.questLog.push(eo.newQuest);
   if (eo.completeQuest) gs.questLog = gs.questLog.filter(q => q !== eo.completeQuest);
 
-  gs.history.push({ role: "assistant", content: narrative });
+  // Fix 2: Detect movement in narrative and override location if stale
+  const locationOverride = detectMovementLocation(narrative, gs.location, eo.locationChange);
+  if (locationOverride) {
+    gs.location = locationOverride;
+  }
+
+  // Fix 3: Force loot after successful DC 12+ checks
+  if (eo.roll?.success && eo.roll.dc && eo.roll.dc >= 12) {
+    const loot = enforceLootReward(eo.roll.dc, true, eo.goldChange !== 0);
+    if (loot.goldBonus > 0) gs.character.gold += loot.goldBonus;
+    if (loot.itemDrop) gs.character.inventory.push(loot.itemDrop);
+  }
+
+  // Fix 5: Combat injection after 5 safe turns in dangerous areas
+  const combatInjection = checkCombatInjection(rawText, gs.location);
+  let finalNarrative = narrative;
+  if (combatInjection) {
+    finalNarrative = narrative + combatInjection.appendNarrative;
+    tagsFound.push("COMBAT_START");
+  }
+
+  // Detect combat end (enemy defeated / player fled) to reset combat state
+  if (/\b(?:defeated|slain|killed|fled|escaped|retreated)\b/i.test(narrative) && tagsFound.includes("COMBAT_START") === false) {
+    markCombatEnded();
+  }
+
+  gs.history.push({ role: "assistant", content: finalNarrative });
 
   // Track location stagnation
   checkLocationStagnation(gs.location);
 
   // Warn if narrative mentions item acquisition but inventory didn't change
-  checkItemAcquisition(narrative, backpackBefore, gs.character.inventory);
+  checkItemAcquisition(finalNarrative, backpackBefore, gs.character.inventory);
 
-  return { narrative, checkRoll: parsed.checkRequired ? { stat: parsed.checkRequired.stat, skill: parsed.checkRequired.skill, dc: parsed.checkRequired.dc, description: parsed.checkRequired.description } : null, imagePrompt: parsed.sceneImagePrompt ?? null, provider, tagsFound, rawResponse: rawText };
+  return { narrative: finalNarrative, checkRoll: parsed.checkRequired ? { stat: parsed.checkRequired.stat, skill: parsed.checkRequired.skill, dc: parsed.checkRequired.dc, description: parsed.checkRequired.description } : null, imagePrompt: parsed.sceneImagePrompt ?? null, provider, tagsFound, rawResponse: rawText };
 }
 
 // ── Grok player turn ─────────────────────────────────────────────
