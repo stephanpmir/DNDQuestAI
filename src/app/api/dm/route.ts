@@ -285,7 +285,34 @@ export async function POST(request: Request) {
 
     // ── Force scene image on game start ─────────────────────────────
     if (isFirstTurn && !sceneImagePrompt) {
-      sceneImagePrompt = `${gameState.location} dark fantasy establishing shot warm atmospheric lighting`;
+      // Extract environment descriptors from the first 2 sentences of the narrative
+      const narrativeText = postResult.narrative;
+      const firstSentences = narrativeText
+        .split(/[.!?]/)
+        .slice(0, 2)
+        .join(" ")
+        .toLowerCase();
+      const envWords = [
+        "market", "cobblestone", "vendors", "dawn", "dusk", "sunset", "sunrise",
+        "mountain", "forest", "tavern", "inn", "castle", "dungeon", "cave",
+        "river", "bridge", "tower", "village", "city", "temple", "ruins",
+        "swamp", "desert", "snow", "rain", "fog", "mist", "moonlight",
+        "torch", "lantern", "candlelight", "firelight", "shadow", "dark",
+        "ancient", "crumbling", "mossy", "stone", "wooden", "iron",
+        "narrow", "winding", "cobbled", "muddy", "dusty", "crowded",
+        "quiet", "bustling", "abandoned", "haunted", "sacred", "cursed",
+        "port", "harbor", "dock", "alley", "street", "road", "path",
+        "gate", "wall", "fountain", "plaza", "square", "graveyard",
+        "crypt", "cathedral", "chapel", "shrine", "library", "vault",
+        "throne", "hall", "chamber", "corridor", "stairway", "cellar",
+        "garden", "courtyard", "rampart", "battlement", "watchtower",
+        "campfire", "clearing", "grove", "cliff", "canyon", "ravine",
+        "ocean", "sea", "lake", "waterfall", "stream", "marsh",
+        "stormy", "overcast", "starlit", "twilight", "golden", "crimson",
+      ];
+      const matched = envWords.filter(w => firstSentences.includes(w));
+      const descriptors = matched.length > 0 ? matched.slice(0, 6).join(" ") : "";
+      sceneImagePrompt = `${gameState.location} ${descriptors} warm atmospheric lighting`.trim();
     }
 
     // ── PIPELINE STEP 8: Deliver ──────────────────────────────────

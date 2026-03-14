@@ -29,6 +29,19 @@ const QUESTION_PATTERNS: RegExp[] = [
 /** Direct mechanic name mentions ending in a question mark */
 const MECHANIC_QUESTION_PATTERN = /^[^.!]{3,60}\?$/;
 
+/** Known mechanic keywords for short-query detection */
+const MECHANIC_KEYWORDS: string[] = [
+  "sneak attack", "sneak", "attack", "dodge", "disengage", "dash",
+  "grapple", "shove", "opportunity", "initiative", "surprise",
+  "advantage", "disadvantage", "concentration", "spell slot", "cantrip",
+  "bonus action", "reaction", "prone", "restrained", "grappled",
+  "paralyzed", "stunned", "charmed", "frightened", "blinded",
+  "unconscious", "death save", "rage", "ki", "bardic", "smite", "hex",
+  "wild shape", "channel divinity", "second wind", "action surge",
+  "extra attack", "lay on hands", "arcane recovery", "metamagic",
+  "sorcery point",
+];
+
 /** Keywords that indicate an in-game action even if phrased as a question */
 const ACTION_OVERRIDE_PATTERNS: RegExp[] = [
   /\bi\s+(?:attack|strike|hit|swing|stab|slash|cast|throw|shoot|grab|pick up|drop|buy|sell|use|drink|eat|equip|wear|rest|sleep|sneak|hide|climb|swim|jump|run|walk|go|move|head|travel|enter|explore|search|investigate|talk|speak|ask|say|greet)\b/i,
@@ -75,6 +88,20 @@ export function detectRulesQuestion(playerInput: string): boolean {
     return RULES_DATABASE.some(entry =>
       entry.keywords.some(kw => trimmed.toLowerCase().includes(kw.toLowerCase()))
     );
+  }
+
+  const lower = trimmed.toLowerCase();
+  const hasMechanicKw = MECHANIC_KEYWORDS.some(kw => lower.includes(kw));
+
+  // Short informal queries (6 words or fewer) with a mechanic keyword
+  if (hasMechanicKw) {
+    const wordCount = trimmed.split(/\s+/).length;
+    if (wordCount <= 6) return true;
+  }
+
+  // Any input ending with "?" that contains a mechanic keyword
+  if (trimmed.endsWith("?") && hasMechanicKw) {
+    return true;
   }
 
   return false;
