@@ -757,9 +757,21 @@ async function runVersus(): Promise<NextResponse> {
 }
 
 export async function POST(): Promise<NextResponse> {
-  return runVersus();
+  try {
+    return await runVersus();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[bot-versus] Fatal error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
 
 export async function GET(): Promise<NextResponse> {
-  return runVersus();
+  try {
+    return await runVersus();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[bot-versus] Fatal error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
