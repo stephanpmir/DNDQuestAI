@@ -320,6 +320,19 @@ export function enforceGameState(
   if (engineOutcome.locationChange) location = engineOutcome.locationChange;
   if (parsed.parsedState.location) location = parsed.parsedState.location;
 
+  // DEBUG: movement word detection for location extraction
+  const MOVEMENT_WORDS = /\b(?:entered|arrived|reached|emerged|stepped\s+into|made\s+your\s+way\s+to|found\s+yourself\s+in|walked\s+to|headed\s+toward)\b/i;
+  const movementFound = MOVEMENT_WORDS.test(narrative);
+  let extractedLocation: string | null = null;
+  if (movementFound && location === current.location) {
+    // Try extracting from last 1-2 sentences
+    const sentences = narrative.replace(/\n/g, " ").split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 0);
+    const lastSentences = sentences.slice(-2).join(" ");
+    const locMatch = lastSentences.match(/(?:entered|arrived\s+at|reached|emerged\s+into|stepped\s+into|found\s+yourself\s+in|walked\s+to|headed\s+toward|made\s+your\s+way\s+to)\s+(?:the\s+)?(.{3,60}?)(?:\.|,|!|\?|$)/i);
+    extractedLocation = locMatch?.[1]?.trim() ?? null;
+  }
+  console.log(`Location check: movement word found=${movementFound} current=${location} extracted=${extractedLocation ?? "none"}`);
+
   // Inventory
   const inventory = [...current.inventory];
   if (engineOutcome.itemsGained.length > 0) inventory.push(...engineOutcome.itemsGained);
@@ -360,19 +373,19 @@ export function enforceGameState(
     markCombatStarted();
   } else {
     _turnsWithoutCombat++;
+  }
 
-    if (_turnsWithoutCombat >= 5) {
-      const locLower = location.toLowerCase();
-      const isDangerous = DANGEROUS_INJECTION_LOCATIONS.some(d => locLower.includes(d));
+  // DEBUG: log combat check every turn
+  const locLower = location.toLowerCase();
+  const isDangerous = DANGEROUS_INJECTION_LOCATIONS.some(d => locLower.includes(d));
+  console.log(`Combat check: turns=${_turnsWithoutCombat} location=${location} dangerous=${isDangerous}`);
 
-      if (isDangerous) {
-        _turnsWithoutCombat = 0;
-        const enemy = CR_QUARTER_ENEMIES[Math.floor(Math.random() * CR_QUARTER_ENEMIES.length)];
-        const ambushText = AMBUSH_NARRATIVES[Math.floor(Math.random() * AMBUSH_NARRATIVES.length)];
-        narrative = narrative + `\n\n${ambushText}\n[COMBAT_START] ${enemy} CR1/4`;
-        markCombatStarted();
-      }
-    }
+  if (!parsed.parsedState.combatStart && _turnsWithoutCombat >= 5 && isDangerous) {
+    _turnsWithoutCombat = 0;
+    const enemy = CR_QUARTER_ENEMIES[Math.floor(Math.random() * CR_QUARTER_ENEMIES.length)];
+    const ambushText = AMBUSH_NARRATIVES[Math.floor(Math.random() * AMBUSH_NARRATIVES.length)];
+    narrative = narrative + `\n\n${ambushText}\n[COMBAT_START] ${enemy} CR1/4`;
+    markCombatStarted();
   }
 
   // Detect combat end
