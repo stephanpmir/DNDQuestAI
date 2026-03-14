@@ -148,14 +148,35 @@ export async function POST(request: Request) {
         languagePreference
       );
 
+      // Clean the CHECK_ROLL raw tag into natural language for the LLM
+      let userMessage = message;
+      const checkRollTag = message.match(/\[CHECK_ROLL:([^|]+)\|([^|]+)\|(\d+)\]/);
+      if (checkRollTag) {
+        userMessage = `I rolled a ${checkRollTag[1]} check (${checkRollTag[2]}).`;
+      }
+
+      // Filter history to only valid LLM roles and cap token size
+      const validHistory = (history ?? [])
+        .filter((h) => h.role === "user" || h.role === "assistant")
+        .slice(-10);
+
+      // Token guard: estimate total tokens and trim if needed
+      const estimateTokens = (s: string) => Math.ceil(s.length / 4);
+      const MAX_HISTORY_TOKENS = 6000;
+      let historyTokens = validHistory.reduce((sum, h) => sum + estimateTokens(h.content), 0);
+      while (historyTokens > MAX_HISTORY_TOKENS && validHistory.length > 2) {
+        const removed = validHistory.shift();
+        if (removed) historyTokens -= estimateTokens(removed.content);
+      }
+
       const messages: OpenAI.ChatCompletionMessageParam[] = [
         { role: "system", content: systemPrompt },
-        ...history.slice(-10).map((h) => ({
+        ...validHistory.map((h) => ({
           role: h.role as "user" | "assistant",
           content: h.content,
         })),
         { role: "system", content: engineContext },
-        { role: "user", content: message },
+        { role: "user", content: userMessage },
       ];
 
       // Inject combat round narrative so the LLM can use it

@@ -104,10 +104,14 @@ export function GameView() {
       incrementTurn();
 
       try {
-        const history = messages.slice(-10).map((m) => ({
-          role: m.role,
-          content: m.narrative,
-        }));
+        // Build history, filtering out roll_result cards (invalid LLM role)
+        const history = messages
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .slice(-10)
+          .map((m) => ({
+            role: m.role,
+            content: m.narrative,
+          }));
 
         const requestBody = JSON.stringify({
           message,
