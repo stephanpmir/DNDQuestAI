@@ -150,6 +150,19 @@ export function GameView() {
 
         const data: DMResponsePayload = await res.json();
 
+        // ── Rules answer shortcut — no game state changes ───────────
+        if (data.rulesAnswer) {
+          addMessage({
+            id: generateId(),
+            role: "assistant",
+            narrative: data.narrative,
+            timestamp: Date.now(),
+            rulesAnswer: true,
+          });
+          setLoading(false);
+          return;
+        }
+
         // Apply engine-decided game state updates
         const u = data.gameStateUpdate;
         if (u) {

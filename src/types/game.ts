@@ -31,11 +31,15 @@ export interface ChatMessage {
     dc: number;
     description: string;
   };
+  /** Whether this is a rules reference answer (not narrative) */
+  rulesAnswer?: boolean;
 }
 
 /** The structured JSON the API returns. */
 export interface DMResponsePayload {
   narrative: string;
+  /** Whether this is a rules reference answer (no game state changes) */
+  rulesAnswer?: boolean;
   sceneImagePrompt?: string;
   /** Skill check the DM wants the player to perform */
   checkRequired?: {

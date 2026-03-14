@@ -49,6 +49,60 @@ export function ChatMessage({ message, avatarUrl, onSendMessage, onCheckRoll, di
     );
   }
 
+  // ── Rules Reference answer — distinct visual style ──────────────
+  if (message.rulesAnswer) {
+    return (
+      <div className="space-y-0">
+        <div className="flex gap-3 justify-start">
+          <div
+            style={{
+              width: 48, height: 48, minWidth: 48, borderRadius: "50%",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              backgroundColor: "#1a1a2e", fontSize: 22,
+              border: "2px solid rgba(201,162,39,0.3)",
+            }}
+          >
+            <span style={{ lineHeight: 1 }}>📖</span>
+          </div>
+          <div
+            style={{
+              backgroundColor: "rgba(20, 20, 40, 0.6)",
+              border: "1px solid rgba(201,162,39,0.2)",
+              borderRadius: 8,
+              padding: "12px 16px",
+              maxWidth: "85%",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "#c9a227",
+                textTransform: "uppercase" as const,
+                letterSpacing: "0.05em",
+                marginBottom: 8,
+              }}
+            >
+              Rules Reference
+            </div>
+            <div
+              style={{
+                color: "#d4d4d8",
+                fontSize: 14,
+                lineHeight: 1.6,
+                fontFamily: "system-ui, -apple-system, sans-serif",
+                fontStyle: "normal",
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {message.narrative}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const hasKarmaChange = message.karmaChange !== undefined && message.karmaChange !== 0;
   const hasFameChange = message.fameChange !== undefined && message.fameChange !== 0;
 

@@ -16,6 +16,7 @@ import type { Crime } from "@/lib/crimes";
 import { callWithCascade } from "@/lib/ai/providers";
 import { initCombat, resolveCombatTurn } from "@/lib/combat-engine";
 import type { CombatState, CombatRoundResult } from "@/lib/combat-engine";
+import { detectRulesQuestion, getRulesAnswer } from "@/lib/rules-detector";
 
 interface RequestBody {
   message: string;
@@ -56,6 +57,18 @@ export async function POST(request: Request) {
         { error: "Missing required fields: message, character, and gameState are all required." },
         { status: 400 }
       );
+    }
+
+    // ── Rules question interception ────────────────────────────────
+    // If the player is asking about game mechanics, return an immediate
+    // plain English answer without running the pipeline or calling the LLM.
+    if (detectRulesQuestion(message)) {
+      const rulesAnswer = getRulesAnswer(message, character);
+      return NextResponse.json({
+        narrative: rulesAnswer,
+        rulesAnswer: true,
+        gameStateUpdate: {},
+      });
     }
 
     // ── Set starting location on first turn ────────────────────────
