@@ -86,6 +86,7 @@ Every 4 to 6 turns, or whenever the player is in a dangerous area such as a fore
 
 ## LOOT AND REWARDS
 When the player succeeds on a skill check of DC 12 or higher, they MUST receive a reward: gold (5–15 pieces) and optionally a useful item. The engine enforces this — always mention found treasure or loot in your narrative when a difficult check succeeds.
+When the combat engine reports a victory, narrate the enemy's defeat and describe the loot the player finds on the body in immersive flavor text.
 
 ## IMAGES
 Generate a SCENE_IMAGE_PROMPT at least once every 4 turns. Do not wait for location changes — generate one on any visually interesting moment.

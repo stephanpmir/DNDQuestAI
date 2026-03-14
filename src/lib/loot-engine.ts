@@ -13,7 +13,7 @@ import type { Monster } from "@/lib/monsters";
 // ── Item tables by rarity ────────────────────────────────────────
 
 const COMMON_ITEMS = [
-  "Potion of Healing",
+  "Healing Potion",
   "Thieves' Tools",
   "Torch",
   "Rations (3 days)",
@@ -21,16 +21,16 @@ const COMMON_ITEMS = [
 ];
 
 const UNCOMMON_ITEMS = [
-  "+1 Dagger",
   "Potion of Invisibility",
-  "Set of Lockpicks",
   "Antitoxin",
+  "Arrows x20",
+  "Set of Lockpicks",
 ];
 
 const RARE_ITEMS = [
-  "+2 Shortsword",
   "Ring of Protection",
   "Cloak of Elvenkind",
+  "Potion of Greater Healing",
 ];
 
 // ── Loot result interface ────────────────────────────────────────
