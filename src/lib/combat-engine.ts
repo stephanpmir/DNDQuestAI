@@ -12,6 +12,7 @@ import type { RollResult } from "@/types/world";
 import { getMonsterByName, getMonstersByCR, MONSTER_DB } from "@/lib/monsters";
 import type { Monster, MonsterAttack } from "@/lib/monsters";
 import { getWeaponDamage, getItemInfo } from "@/lib/items";
+import { generateLoot } from "@/lib/loot-engine";
 import { attackRoll, damageRoll, modifier, d20, roll } from "@/lib/engine/dice";
 
 // ── Combat state ─────────────────────────────────────────────────
@@ -55,6 +56,8 @@ export interface CombatRoundResult {
   goldDropped: number;
   /** Items dropped if combat ended via kill */
   itemsDropped: string[];
+  /** Flavor narrative describing the loot drop */
+  lootNarrative: string;
   /** Whether combat has ended */
   combatOver: boolean;
   /** How combat ended */
@@ -299,31 +302,6 @@ function rollDamageDice(dice: string): RollResult {
   return damageRoll(count, sides, bonus);
 }
 
-// ── Loot generation ──────────────────────────────────────────────
-
-const LOOT_TABLE: { minCR: number; maxCR: number; items: string[] }[] = [
-  { minCR: 0, maxCR: 1, items: ["Torch", "Rations (1 day)", "Dagger", "Rope (50 ft.)"] },
-  { minCR: 2, maxCR: 4, items: ["Potion of Healing", "Set of Lockpicks", "Silver Ring", "Antitoxin", "Shortbow"] },
-  { minCR: 5, maxCR: 10, items: ["Potion of Greater Healing", "Potion of Fire Resistance", "Scroll of Fireball", "Longsword"] },
-  { minCR: 11, maxCR: 30, items: ["Potion of Superior Healing", "Scroll of Lightning Bolt", "Amulet of Proof Against Detection"] },
-];
-
-function generateLoot(monster: Monster): { gold: number; items: string[] } {
-  const cr = monster.cr;
-  // Gold: roughly 5 * CR, with some randomness
-  const baseGold = Math.max(1, Math.round(cr * 5));
-  const gold = baseGold + Math.floor(Math.random() * (baseGold + 1));
-
-  // 40% chance to drop an item
-  const items: string[] = [];
-  if (Math.random() < 0.4) {
-    const tier = LOOT_TABLE.find(t => cr >= t.minCR && cr <= t.maxCR) ?? LOOT_TABLE[0];
-    items.push(tier.items[Math.floor(Math.random() * tier.items.length)]);
-  }
-
-  return { gold, items };
-}
-
 // ── Core combat round resolution ─────────────────────────────────
 
 /**
@@ -409,6 +387,7 @@ export function resolvePlayerAttack(
   let xpAwarded = 0;
   let goldDropped = 0;
   let itemsDropped: string[] = [];
+  let lootNarrative = "";
 
   if (enemyKilled) {
     combatEndReason = "enemy_killed";
@@ -416,6 +395,7 @@ export function resolvePlayerAttack(
     const loot = generateLoot(monster);
     goldDropped = loot.gold;
     itemsDropped = loot.items;
+    lootNarrative = loot.narrative;
   } else if (playerDown) {
     combatEndReason = "player_down";
   }
@@ -434,7 +414,7 @@ export function resolvePlayerAttack(
     enemyHpRemaining: newEnemyHp, enemyKilled, playerDown,
     isCrit: playerAtk.rolled === 20 && playerAtk.success,
     damageType,
-    xpAwarded, goldDropped, itemsDropped,
+    xpAwarded, goldDropped, itemsDropped, lootNarrative,
   });
 
   return {
@@ -450,6 +430,7 @@ export function resolvePlayerAttack(
     xpAwarded,
     goldDropped,
     itemsDropped,
+    lootNarrative,
     combatOver: combatEndReason !== "ongoing",
     combatEndReason,
   };
@@ -538,6 +519,7 @@ export function resolvePlayerFlee(
     xpAwarded: 0,
     goldDropped: 0,
     itemsDropped: [],
+    lootNarrative: "",
     combatOver: fleeSuccess || playerDown,
     combatEndReason: playerDown ? "player_down" : combatEndReason,
   };
@@ -600,6 +582,7 @@ interface NarrativeParams {
   xpAwarded: number;
   goldDropped: number;
   itemsDropped: string[];
+  lootNarrative: string;
 }
 
 function buildCombatNarrative(p: NarrativeParams): string {
@@ -633,8 +616,7 @@ function buildCombatNarrative(p: NarrativeParams): string {
   if (p.enemyKilled) {
     parts.push(`The ${monsterName} collapses, defeated!`);
     if (p.xpAwarded > 0) parts.push(`You earn ${p.xpAwarded} XP.`);
-    if (p.goldDropped > 0) parts.push(`You find ${p.goldDropped} gold on the body.`);
-    if (p.itemsDropped.length > 0) parts.push(`Among the spoils: ${p.itemsDropped.join(", ")}.`);
+    if (p.lootNarrative) parts.push(p.lootNarrative);
     return parts.join(" ");
   }
 

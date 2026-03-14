@@ -265,6 +265,7 @@ export function enforceGameState(
     roll?: { success: boolean; dc?: number };
   },
   rawResponse: string,
+  combatLoot?: { gold: number; items: string[]; xp: number; narrative: string },
 ): EnforcedResult {
   const warnings: string[] = [];
   let narrative = parsed.narrative;
@@ -407,6 +408,16 @@ export function enforceGameState(
     // 40% chance for 5-15 gold
     if (Math.random() < 0.4) {
       gold += Math.floor(Math.random() * 11) + 5;
+    }
+  }
+
+  // ── Apply combat loot directly to gameState ─────────────────────
+  if (combatLoot) {
+    gold += combatLoot.gold;
+    xp += combatLoot.xp;
+    if (combatLoot.items.length > 0) inventory.push(...combatLoot.items);
+    if (combatLoot.narrative) {
+      narrative = narrative + "\n\n" + combatLoot.narrative;
     }
   }
 
