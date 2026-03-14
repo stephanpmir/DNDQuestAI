@@ -82,52 +82,52 @@ function computeAC(cls: string, dexScore: number, conScore: number, wisScore: nu
 
 const STARTING_EQUIPMENT: Record<string, { worn: string[]; backpack: string[] }> = {
   Barbarian: {
-    worn: ["Greataxe"],
-    backpack: ["Handaxe", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Explorer's Pack"],
+    worn: ["Greataxe", "Handaxe", "Handaxe"],
+    backpack: ["Backpack", "Waterskin", "Rations x4", "Torch x4", "Explorer's Pack"],
   },
   Bard: {
-    worn: ["Rapier", "Leather Armor"],
-    backpack: ["Lute", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Diplomat's Pack"],
+    worn: ["Rapier", "Leather Armor", "Lute"],
+    backpack: ["Dagger", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Diplomat's Pack"],
   },
   Cleric: {
-    worn: ["Mace", "Scale Mail", "Shield"],
-    backpack: ["Holy Symbol", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Priest's Pack"],
+    worn: ["Mace", "Scale Mail", "Shield", "Holy Symbol"],
+    backpack: ["Backpack", "Waterskin", "Rations x4", "Torch x4", "Priest's Pack"],
   },
   Druid: {
-    worn: ["Scimitar", "Leather Armor", "Wooden Shield"],
-    backpack: ["Druidic Focus", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Explorer's Pack"],
+    worn: ["Scimitar", "Leather Armor", "Wooden Shield", "Druidic Focus"],
+    backpack: ["Backpack", "Waterskin", "Rations x4", "Torch x4", "Explorer's Pack"],
   },
   Fighter: {
     worn: ["Longsword", "Chain Mail", "Shield"],
-    backpack: ["Backpack", "Waterskin", "Rations x4", "Torch x4", "Dungeoneer's Pack"],
+    backpack: ["Light Crossbow", "Bolt x20", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Dungeoneer's Pack"],
   },
   Monk: {
     worn: ["Shortsword"],
     backpack: ["Dart x10", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Dungeoneer's Pack"],
   },
   Paladin: {
-    worn: ["Longsword", "Chain Mail", "Shield"],
-    backpack: ["Holy Symbol", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Priest's Pack"],
+    worn: ["Longsword", "Chain Mail", "Shield", "Holy Symbol"],
+    backpack: ["Javelin x5", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Priest's Pack"],
   },
   Ranger: {
-    worn: ["Shortbow", "Leather Armor"],
-    backpack: ["Shortsword", "Quiver with 20 Arrows", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Explorer's Pack"],
+    worn: ["Longbow", "Leather Armor", "Shortsword", "Shortsword"],
+    backpack: ["Quiver with 20 Arrows", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Explorer's Pack"],
   },
   Rogue: {
-    worn: ["Shortsword", "Leather Armor"],
-    backpack: ["Shortbow", "Quiver with 20 Arrows", "Thieves' Tools", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Burglar's Pack"],
+    worn: ["Shortsword", "Leather Armor", "Shortbow", "Thieves' Tools"],
+    backpack: ["Dagger", "Dagger", "Quiver with 20 Arrows", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Burglar's Pack"],
   },
   Sorcerer: {
-    worn: ["Dagger"],
-    backpack: ["Arcane Focus", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Dungeoneer's Pack"],
+    worn: ["Dagger", "Arcane Focus"],
+    backpack: ["Light Crossbow", "Bolt x20", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Dungeoneer's Pack"],
   },
   Warlock: {
-    worn: ["Dagger", "Leather Armor"],
-    backpack: ["Arcane Focus", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Scholar's Pack"],
+    worn: ["Dagger", "Leather Armor", "Arcane Focus"],
+    backpack: ["Light Crossbow", "Bolt x20", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Scholar's Pack"],
   },
   Wizard: {
-    worn: ["Quarterstaff"],
-    backpack: ["Arcane Focus", "Spellbook", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Scholar's Pack"],
+    worn: ["Quarterstaff", "Arcane Focus"],
+    backpack: ["Spellbook", "Backpack", "Waterskin", "Rations x4", "Torch x4", "Scholar's Pack"],
   },
 };
 
