@@ -26,6 +26,7 @@ import { resolveCombatTurn } from "@/lib/combat-engine";
 import type { CombatState } from "@/lib/combat-engine";
 import { getMonsterByName } from "@/lib/monsters";
 import type { Character } from "@/types/character";
+import { getNextEscalation, type DangerContext } from "@/lib/progression-engine";
 
 interface CheckRequired {
   stat: string;
@@ -226,13 +227,10 @@ function trackFrozenField(field: string, currentValue: unknown): void {
   }
 }
 
-// ── Combat injection (Fix 3) ─────────────────────────────────────
-let _turnsWithoutCombat = 0;
-
-const DANGEROUS_INJECTION_LOCATIONS = [
-  "forest", "woods", "mist", "alley", "bazaar", "dungeon", "tavern",
-  "dock", "docks", "palace", "warehouse", "ruins", "outskirts",
-];
+// ── Progression engine state tracking ────────────────────────────
+let _turnsSinceCombat = 0;
+let _turnsSinceCheck = 0;
+let _recentFailedChecks = 0;
 
 // ── enforceGameState: single function for all 4 fixes ────────────
 
@@ -277,6 +275,7 @@ export function enforceGameState(
   rawResponse: string,
   combatLoot?: { gold: number; items: string[]; xp: number; narrative: string },
   combatContext?: { combatState: CombatState | null; character: Character },
+  campaignTheme?: string,
 ): EnforcedResult {
   const warnings: string[] = [];
   let narrative = parsed.narrative;
@@ -358,29 +357,51 @@ export function enforceGameState(
   trackFrozenField("gold", gold);
   trackFrozenField("location", location);
 
-  // ── Fix 3: Combat injection after 6 safe turns ─────────────────
+  // ── Progression engine: context-aware escalation ────────────────
   if (parsed.parsedState.combatStart || _combatActive) {
-    _turnsWithoutCombat = 0;
+    _turnsSinceCombat = 0;
+    _recentFailedChecks = 0;
     if (parsed.parsedState.combatStart) markCombatStarted();
   } else {
-    _turnsWithoutCombat++;
+    _turnsSinceCombat++;
   }
 
-  const locLower = location.toLowerCase();
-  const isDangerous = DANGEROUS_INJECTION_LOCATIONS.some(d => locLower.includes(d));
-  const failedStealth = engineOutcome.roll?.success === false
-    && /stealth/i.test(rawResponse);
+  // Track check pacing
+  if (engineOutcome.roll) {
+    _turnsSinceCheck = 0;
+    if (!engineOutcome.roll.success) _recentFailedChecks++;
+    else _recentFailedChecks = Math.max(0, _recentFailedChecks - 1);
+  } else {
+    _turnsSinceCheck++;
+  }
 
-  // Force combat: 6+ safe turns OR dangerous location with failed Stealth
-  const shouldForceCombat = !parsed.parsedState.combatStart && !_combatActive
-    && (_turnsWithoutCombat >= 6 || (isDangerous && failedStealth));
+  // Run progression engine for smart escalation
+  if (!parsed.parsedState.combatStart && !_combatActive) {
+    const playerLevel = combatContext?.character?.level ?? 1;
+    const playerHpPercent = current.maxHp > 0 ? current.hp / current.maxHp : 1;
 
-  if (shouldForceCombat) {
-    _turnsWithoutCombat = 0;
-    narrative = narrative
-      + "\n\nA shape peels from the shadows, blade glinting. The ambush is sprung before you can draw breath."
-      + "\n[COMBAT_START] Shadow Lurker HP:16 AC:13";
-    markCombatStarted();
+    const dangerCtx: DangerContext = {
+      location,
+      campaignTheme,
+      turnsSinceCombat: _turnsSinceCombat,
+      turnsSinceCheck: _turnsSinceCheck,
+      recentFailedChecks: _recentFailedChecks,
+      playerHpPercent,
+      playerLevel,
+      narrativeHints: [rawResponse.slice(-500)],
+    };
+
+    const escalation = getNextEscalation(dangerCtx);
+
+    if (escalation.type === "combat" && escalation.combatStartTag) {
+      _turnsSinceCombat = 0;
+      _recentFailedChecks = 0;
+      narrative = narrative + "\n\n" + escalation.narrativeInjection
+        + "\n[COMBAT_START] " + escalation.combatStartTag;
+      markCombatStarted();
+    } else if (escalation.type === "tension" || escalation.type === "environment") {
+      narrative = narrative + "\n\n" + escalation.narrativeInjection;
+    }
   }
 
   // Detect combat end

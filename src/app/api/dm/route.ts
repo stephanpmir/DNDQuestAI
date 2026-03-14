@@ -214,6 +214,7 @@ export async function POST(request: Request) {
           narrative: combatResult.lootNarrative,
         } : undefined,
         { combatState: activeCombatState, character },
+        campaignThemeStr,
       );
 
       // Use enforced values — overwrite engine outcome so the response reflects them

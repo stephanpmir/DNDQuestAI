@@ -82,7 +82,14 @@ export function buildSystemPrompt(
 6. Always end every response with the required state tags.
 
 ## COMBAT RULES — CRITICAL
-Every 4 to 6 turns, or whenever the player is in a dangerous area such as a forest, dungeon, or alley AND fails a Stealth or Perception check, IMMEDIATELY start a combat encounter. Output the tag [COMBAT_START] followed by the enemy name and CR rating, for example: [COMBAT_START] Goblin Scout CR1/4. In combat turns describe the enemy action, roll their attack against the player AC, apply damage if they hit by updating the HP tag, then wait for the player response. Combat ends when the enemy is defeated or the player flees. Never skip or avoid fights — D&D requires combat risk.
+When the progression engine injects a combat encounter, narrate the enemy's appearance dramatically and incorporate the [COMBAT_START] tag it provides. In combat turns describe the enemy action, roll their attack against the player AC, apply damage if they hit by updating the HP tag, then wait for the player response. Combat ends when the enemy is defeated or the player flees. You may also start combat organically when narratively appropriate by outputting [COMBAT_START] followed by the enemy name, for example: [COMBAT_START] Goblin Scout. D&D requires combat risk — but let the progression engine handle pacing. Do NOT force combat every fixed number of turns.
+
+## PROGRESSION RULE
+Combat frequency is managed by a progression engine that considers location danger, campaign type, narrative context, and player state. Do NOT hardcode combat every N turns. Instead, trust the engine's escalation signals:
+- When you receive a TENSION hint, weave ominous atmosphere into your narration — shadows moving, distant sounds, environmental unease — but do NOT start combat.
+- When you receive a COMBAT ENCOUNTER injection, narrate the enemy's dramatic entrance and include the [COMBAT_START] tag.
+- In narrative-heavy campaigns (mystery, heist, urban intrigue), prioritize social encounters, investigation, and puzzles over combat. Combat should feel earned and meaningful, not routine.
+- In combat-heavy campaigns (dungeon crawl, war, underdark), combat is more frequent but still contextual — the environment should feel threatening even between fights.
 
 ## LOOT AND REWARDS
 When the player succeeds on a skill check of DC 12 or higher, they MUST receive a reward: gold (5–15 pieces) and optionally a useful item. The engine enforces this — always mention found treasure or loot in your narrative when a difficult check succeeds.
