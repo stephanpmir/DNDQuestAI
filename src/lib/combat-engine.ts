@@ -31,9 +31,25 @@ export interface CombatState {
   monster: Monster;
 }
 
+/** Full dice breakdown for transparency in combat log */
+export interface DiceBreakdown {
+  /** Player attack: d20 roll + modifier = total vs AC */
+  playerAttackRoll?: { d20: number; modifier: number; total: number; targetAC: number; hit: boolean; crit: boolean };
+  /** Player damage: dice rolled + bonus = total (before resistances) */
+  playerDamageRoll?: { dice: number[]; bonus: number; rawTotal: number; sneakAttackDice?: number[]; damageType: string; resisted: boolean; immune: boolean; finalDamage: number };
+  /** Enemy attack: d20 roll + modifier = total vs AC */
+  enemyAttackRoll?: { d20: number; modifier: number; total: number; targetAC: number; hit: boolean; crit: boolean; attackName: string };
+  /** Enemy damage: dice rolled + bonus = total */
+  enemyDamageRoll?: { dice: number[]; bonus: number; total: number; damageType: string };
+  /** Initiative rolls (round 1 only) */
+  initiative?: { playerRoll: number; playerMod: number; playerTotal: number; enemyRoll: number; enemyMod: number; enemyTotal: number };
+}
+
 export interface CombatRoundResult {
   /** Narrative description of what happened this round */
   narrative: string;
+  /** Full dice breakdown for every roll this round */
+  diceBreakdown: DiceBreakdown;
   /** Player's attack roll result */
   playerAttack: RollResult | null;
   /** Damage dealt by the player (after resistances/immunities) */
@@ -302,6 +318,34 @@ function rollDamageDice(dice: string): RollResult {
   return damageRoll(count, sides, bonus);
 }
 
+// ── Sneak Attack eligibility ─────────────────────────────────────
+
+/** Rogues get Sneak Attack when using a finesse or ranged weapon */
+function isSneakAttackEligible(character: Character): boolean {
+  const equipped = character.equipped ?? [];
+  const hasFinesseOrRanged = equipped.some(w => {
+    const lower = w.toLowerCase();
+    return FINESSE_WEAPONS.some(f => lower.includes(f))
+      || RANGED_WEAPONS.some(r => lower.includes(r));
+  });
+  // Unarmed rogues with no finesse weapon don't qualify
+  return hasFinesseOrRanged;
+}
+
+// ── Detailed damage dice roll (returns individual dice) ──────────
+
+function rollDamageDiceDetailed(diceStr: string): { dice: number[]; bonus: number; total: number } {
+  const match = diceStr.match(/^(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?$/);
+  if (!match) return { dice: [4], bonus: 0, total: 4 }; // fallback 1d4
+  const count = parseInt(match[1], 10);
+  const sides = parseInt(match[2], 10);
+  const sign = match[3] === "-" ? -1 : 1;
+  const bonus = match[4] ? parseInt(match[4], 10) * sign : 0;
+  const dice = roll(count, sides);
+  const total = Math.max(1, dice.reduce((a, b) => a + b, 0) + bonus);
+  return { dice, bonus, total };
+}
+
 // ── Core combat round resolution ─────────────────────────────────
 
 /**
@@ -323,24 +367,56 @@ export function resolvePlayerAttack(
   const dmgBonus = atkMod; // ability modifier added to damage
   const damageType = getPlayerDamageType(character);
   const isHalfling = character.race === "Halfling";
+  const breakdown: DiceBreakdown = {};
 
   // ── Player attacks ─────────────────────────────────────────────
   const playerAtk = attackRoll(atkScore, monster.ac, prof, isHalfling);
   let playerDamage = 0;
   let playerDamageResisted = false;
   let playerDamageImmune = false;
+  let sneakAttackDice: number[] | undefined;
+
+  breakdown.playerAttackRoll = {
+    d20: playerAtk.rolled,
+    modifier: playerAtk.modifier,
+    total: playerAtk.total,
+    targetAC: monster.ac,
+    hit: playerAtk.success,
+    crit: playerAtk.rolled === 20,
+  };
 
   if (playerAtk.success) {
     const isCrit = playerAtk.rolled === 20;
     const diceCount = isCrit ? weaponDmg.dice * 2 : weaponDmg.dice;
-    const rawDmgRoll = damageRoll(diceCount, weaponDmg.sides, dmgBonus);
-    const rawDamage = rawDmgRoll.total;
+    const weaponDice = roll(diceCount, weaponDmg.sides);
+    let rawDamage = weaponDice.reduce((a, b) => a + b, 0) + dmgBonus;
+
+    // ── Sneak Attack: Rogues deal extra 1d6 damage ──────────────
+    // Conditions: Rogue class, using finesse or ranged weapon, hit landed
+    if (character.class === "Rogue" && isSneakAttackEligible(character)) {
+      const sneakDiceCount = isCrit ? 2 : 1; // double on crit
+      sneakAttackDice = roll(sneakDiceCount, 6);
+      rawDamage += sneakAttackDice.reduce((a, b) => a + b, 0);
+    }
+
+    rawDamage = Math.max(1, rawDamage); // minimum 1 damage
 
     // Apply monster resistances/immunities
     const defense = applyMonsterDefenses(rawDamage, damageType, monster);
     playerDamage = defense.finalDamage;
     playerDamageResisted = defense.resisted;
     playerDamageImmune = defense.immune;
+
+    breakdown.playerDamageRoll = {
+      dice: weaponDice,
+      bonus: dmgBonus,
+      rawTotal: rawDamage,
+      sneakAttackDice,
+      damageType,
+      resisted: defense.resisted,
+      immune: defense.immune,
+      finalDamage: defense.finalDamage,
+    };
   }
 
   // Apply damage to enemy
@@ -367,15 +443,36 @@ export function resolvePlayerAttack(
         reason: `${monster.name} ${attack.name}`,
       };
 
+      breakdown.enemyAttackRoll = {
+        d20: enemyRolled,
+        modifier: attack.attackBonus,
+        total: enemyTotal,
+        targetAC: character.ac,
+        hit: enemyAtk.success,
+        crit: enemyRolled === 20,
+        attackName: attack.name,
+      };
+
       if (enemyAtk.success) {
         const isCrit = enemyRolled === 20;
-        const dmgRoll = rollDamageDice(attack.damageDice);
-        enemyDamage = isCrit ? dmgRoll.total * 2 : dmgRoll.total;
+        const enemyDmgDice = rollDamageDiceDetailed(attack.damageDice);
+        enemyDamage = isCrit
+          ? (enemyDmgDice.dice.reduce((a, b) => a + b, 0) * 2 + enemyDmgDice.bonus)
+          : enemyDmgDice.total;
+        enemyDamage = Math.max(1, enemyDamage);
+
         // Barbarian rage: halve physical damage
         if (character.raging && PHYSICAL_DAMAGE_TYPES.includes(attack.damageType.toLowerCase())) {
           enemyDamage = Math.floor(enemyDamage / 2);
         }
         playerHpChange = -enemyDamage;
+
+        breakdown.enemyDamageRoll = {
+          dice: enemyDmgDice.dice,
+          bonus: enemyDmgDice.bonus,
+          total: enemyDamage,
+          damageType: attack.damageType,
+        };
       }
     }
   }
@@ -400,25 +497,24 @@ export function resolvePlayerAttack(
     combatEndReason = "player_down";
   }
 
-  const updatedCombatState: CombatState = {
-    ...combatState,
-    enemyHp: newEnemyHp,
-    roundNumber: combatState.roundNumber + 1,
-    active: combatEndReason === "ongoing",
-  };
+  // Clear combatState completely on victory or player down
+  const updatedCombatState: CombatState = combatEndReason === "ongoing"
+    ? { ...combatState, enemyHp: newEnemyHp, roundNumber: combatState.roundNumber + 1, active: true }
+    : { ...combatState, enemyHp: newEnemyHp, roundNumber: combatState.roundNumber + 1, active: false };
 
   // ── Build narrative ────────────────────────────────────────────
+  const isCrit = playerAtk.rolled === 20 && playerAtk.success;
   const narrative = buildCombatNarrative({
     playerAtk, playerDamage, playerDamageResisted, playerDamageImmune,
     enemyAtk, enemyDamage, monster, character,
     enemyHpRemaining: newEnemyHp, enemyKilled, playerDown,
-    isCrit: playerAtk.rolled === 20 && playerAtk.success,
-    damageType,
+    isCrit, damageType, sneakAttackDice,
     xpAwarded, goldDropped, itemsDropped, lootNarrative,
   });
 
   return {
     narrative,
+    diceBreakdown: breakdown,
     playerAttack: playerAtk,
     playerDamage,
     playerDamageResisted,
@@ -520,6 +616,7 @@ export function resolvePlayerFlee(
     goldDropped: 0,
     itemsDropped: [],
     lootNarrative: "",
+    diceBreakdown: {},
     combatOver: fleeSuccess || playerDown,
     combatEndReason: playerDown ? "player_down" : combatEndReason,
   };
@@ -579,6 +676,7 @@ interface NarrativeParams {
   playerDown: boolean;
   isCrit: boolean;
   damageType: string;
+  sneakAttackDice?: number[];
   xpAwarded: number;
   goldDropped: number;
   itemsDropped: string[];
@@ -595,6 +693,12 @@ function buildCombatNarrative(p: NarrativeParams): string {
       parts.push(`A devastating critical hit! Your weapon finds a vital weak point on the ${monsterName}.`);
     } else {
       parts.push(`Your attack strikes the ${monsterName} (${p.playerAtk.total} vs AC ${p.monster.ac}).`);
+    }
+
+    // Sneak Attack narration
+    if (p.sneakAttackDice && p.sneakAttackDice.length > 0) {
+      const sneakTotal = p.sneakAttackDice.reduce((a, b) => a + b, 0);
+      parts.push(`You exploit an opening — Sneak Attack adds ${sneakTotal} damage!`);
     }
 
     if (p.playerDamageImmune) {
