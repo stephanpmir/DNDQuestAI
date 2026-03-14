@@ -63,20 +63,20 @@ function getStartingEquipment(cls: CharacterClass): { worn: string[]; backpack: 
   const baseBackpack = ["Backpack", "Waterskin", "Rations x4", "Torch x4"];
   const classGear: Record<string, { worn: string[]; backpack: string[] }> = {
     Barbarian: {
-      worn: ["Greataxe", "Handaxe"],
-      backpack: ["Explorer's Pack"],
+      worn: ["Greataxe"],
+      backpack: ["Handaxe", "Explorer's Pack"],
     },
     Bard: {
       worn: ["Rapier", "Leather Armor"],
       backpack: ["Lute", "Diplomat's Pack"],
     },
     Cleric: {
-      worn: ["Mace", "Scale Mail", "Shield", "Holy Symbol"],
-      backpack: ["Priest's Pack"],
+      worn: ["Mace", "Scale Mail", "Shield"],
+      backpack: ["Holy Symbol", "Priest's Pack"],
     },
     Druid: {
-      worn: ["Scimitar", "Leather Armor", "Wooden Shield", "Druidic Focus"],
-      backpack: ["Explorer's Pack"],
+      worn: ["Scimitar", "Leather Armor", "Wooden Shield"],
+      backpack: ["Druidic Focus", "Explorer's Pack"],
     },
     Fighter: {
       worn: ["Longsword", "Chain Mail", "Shield"],
@@ -87,28 +87,28 @@ function getStartingEquipment(cls: CharacterClass): { worn: string[]; backpack: 
       backpack: ["Dart x10", "Dungeoneer's Pack"],
     },
     Paladin: {
-      worn: ["Longsword", "Chain Mail", "Shield", "Holy Symbol"],
-      backpack: ["Priest's Pack"],
+      worn: ["Longsword", "Chain Mail", "Shield"],
+      backpack: ["Holy Symbol", "Priest's Pack"],
     },
     Ranger: {
-      worn: ["Shortsword", "Shortbow", "Leather Armor"],
-      backpack: ["Quiver with 20 Arrows", "Explorer's Pack"],
+      worn: ["Shortbow", "Leather Armor"],
+      backpack: ["Shortsword", "Quiver with 20 Arrows", "Explorer's Pack"],
     },
     Rogue: {
-      worn: ["Shortsword", "Shortbow", "Leather Armor", "Thieves' Tools"],
-      backpack: ["Quiver with 20 Arrows", "Burglar's Pack"],
+      worn: ["Shortsword", "Leather Armor"],
+      backpack: ["Shortbow", "Quiver with 20 Arrows", "Thieves' Tools", "Burglar's Pack"],
     },
     Sorcerer: {
-      worn: ["Dagger", "Arcane Focus"],
-      backpack: ["Dungeoneer's Pack"],
+      worn: ["Dagger"],
+      backpack: ["Arcane Focus", "Dungeoneer's Pack"],
     },
     Warlock: {
-      worn: ["Dagger", "Arcane Focus", "Leather Armor"],
-      backpack: ["Scholar's Pack"],
+      worn: ["Dagger", "Leather Armor"],
+      backpack: ["Arcane Focus", "Scholar's Pack"],
     },
     Wizard: {
-      worn: ["Quarterstaff", "Arcane Focus"],
-      backpack: ["Spellbook", "Scholar's Pack"],
+      worn: ["Quarterstaff"],
+      backpack: ["Arcane Focus", "Spellbook", "Scholar's Pack"],
     },
   };
   const gear = classGear[cls] ?? classGear.Fighter;
