@@ -9,6 +9,7 @@ import { useCrimeStore } from "@/stores/crime-store";
 import { useLanguageStore } from "@/stores/language-store";
 import type { ChatMessage as ChatMessageType, DMResponsePayload } from "@/types/game";
 import type { WorldEvent } from "@/types/world";
+import type { CombatState } from "@/lib/combat-engine";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
 import { CharacterSidebar } from "./character-sidebar";
@@ -78,6 +79,7 @@ export function GameView() {
   const languagePreference = useLanguageStore((s) => s.language);
   const t = useLanguageStore((s) => s.t);
 
+  const [combatState, setCombatState] = useState<CombatState | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoStartFired = useRef(false);
 
@@ -121,6 +123,7 @@ export function GameView() {
           },
           languagePreference: languagePreference !== "English" ? languagePreference : undefined,
           groundItems: groundItems.length > 0 ? groundItems : undefined,
+          combatState: combatState?.active ? combatState : undefined,
         });
 
         // Retry logic for transient errors (502, 503, 504)
@@ -253,6 +256,11 @@ export function GameView() {
           }
         }
 
+        // Update combat state from server response
+        if (data.combatState !== undefined) {
+          setCombatState(data.combatState?.active ? data.combatState : null);
+        }
+
         // Apply fact ledger updates
         if (data.factUpdates) {
           if (data.factUpdates.newFacts.length > 0) {
@@ -382,6 +390,7 @@ export function GameView() {
       groundItems,
       addGroundItems,
       removeGroundItem,
+      combatState,
     ]
   );
 

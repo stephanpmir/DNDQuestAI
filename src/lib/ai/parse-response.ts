@@ -162,7 +162,12 @@ export function parseDMResponse(raw: string): ParsedDMResponse {
   }
 
   const locationRaw = fields.get("LOCATION");
-  if (locationRaw) parsedState.location = locationRaw.trim();
+  if (locationRaw) {
+    // Strip everything from first '[' onwards — the LLM sometimes appends
+    // metadata like "[NEIGHBORHOOD] Market Square [DAY] Morning"
+    const cleanLocation = locationRaw.replace(/\[.*$/, "").trim();
+    if (cleanLocation) parsedState.location = cleanLocation;
+  }
 
   const backpackRaw = fields.get("BACKPACK");
   if (backpackRaw) {

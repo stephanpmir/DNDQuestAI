@@ -14,6 +14,8 @@ import { computeNpcDisposition } from "@/lib/karma";
 import { runGuardInvestigations, shouldGuardsConfront } from "@/lib/crimes";
 import type { Crime } from "@/lib/crimes";
 import { callWithCascade } from "@/lib/ai/providers";
+import { initCombat, resolveCombatTurn } from "@/lib/combat-engine";
+import type { CombatState, CombatRoundResult } from "@/lib/combat-engine";
 
 interface RequestBody {
   message: string;
@@ -32,6 +34,8 @@ interface RequestBody {
   languagePreference?: string;
   /** Items currently on the ground at the player's location */
   groundItems?: string[];
+  /** Active combat state from previous round */
+  combatState?: CombatState | null;
   /** Karma system data */
   karmaData?: {
     karma: number;
@@ -78,6 +82,32 @@ export async function POST(request: Request) {
 
     const preResult = preGenerate(pipelineInput);
 
+    // ── COMBAT ROUND RESOLUTION ───────────────────────────────────
+    // If combat is active, resolve the round BEFORE calling the LLM
+    // so the engine outcome reflects combat results for narration.
+    let combatResult: CombatRoundResult | null = null;
+    let activeCombatState: CombatState | null = body.combatState ?? null;
+
+    if (activeCombatState?.active) {
+      combatResult = resolveCombatTurn(message, character, activeCombatState);
+      activeCombatState = combatResult.combatState;
+
+      // Inject combat results into engine outcome
+      const eo = preResult.engineOutcome;
+      eo.hpChange = (eo.hpChange || 0) + combatResult.playerHpChange;
+      eo.damageDealt = combatResult.playerDamage;
+      eo.isCriticalHit = combatResult.diceBreakdown.playerAttackRoll?.crit ?? false;
+      eo.damageTaken = combatResult.enemyDamage > 0 ? combatResult.enemyDamage : undefined;
+
+      if (combatResult.combatEndReason === "enemy_killed") {
+        eo.xpGained = (eo.xpGained || 0) + combatResult.xpAwarded;
+        eo.goldChange = (eo.goldChange || 0) + combatResult.goldDropped;
+        if (combatResult.itemsDropped.length > 0) {
+          eo.itemsGained.push(...combatResult.itemsDropped);
+        }
+      }
+    }
+
     // ── PIPELINE STEP 5: LLM Generation ───────────────────────────
     const systemPrompt = buildSystemPrompt(
       character,
@@ -113,11 +143,27 @@ export async function POST(request: Request) {
         { role: "user", content: message },
       ];
 
+      // Inject combat round narrative so the LLM can use it
+      if (combatResult) {
+        messages.push({
+          role: "system",
+          content: `## Combat Round Result\n${combatResult.narrative}${combatResult.combatOver ? `\nCOMBAT ENDED: ${combatResult.combatEndReason}.${combatResult.lootNarrative ? ` ${combatResult.lootNarrative}` : ""}` : `\nEnemy HP: ${combatResult.combatState.enemyHp}/${combatResult.combatState.enemyMaxHp}`}\nNarrate this combat round. Use the dice results above exactly.`,
+        });
+      }
+
       const { text: rawText } = await callWithCascade(messages);
       const parsed = parseDMResponse(rawText);
       narrative = parsed.narrative;
       sceneImagePrompt = parsed.sceneImagePrompt;
       checkRequired = parsed.checkRequired;
+
+      // ── Handle COMBAT_START from LLM ──────────────────────────────
+      if (parsed.parsedState.combatStart && !activeCombatState?.active) {
+        const newCombat = initCombat(parsed.parsedState.combatStart, character);
+        if (newCombat) {
+          activeCombatState = newCombat;
+        }
+      }
 
       // ── PIPELINE STEPS 6-7: Validate + Update ───────────────────
       postResult = postGenerate(narrative, pipelineInput, preResult);
@@ -220,6 +266,14 @@ export async function POST(request: Request) {
       dropResult: eo.dropResult,
       addToGround: eo.addToGround?.length ? eo.addToGround : undefined,
       removeFromGround: eo.removeFromGround?.length ? eo.removeFromGround : undefined,
+      // Combat state — sent to client to persist across turns
+      combatState: activeCombatState,
+      combatResult: combatResult ? {
+        diceBreakdown: combatResult.diceBreakdown,
+        combatOver: combatResult.combatOver,
+        combatEndReason: combatResult.combatEndReason,
+        lootNarrative: combatResult.lootNarrative || undefined,
+      } : undefined,
     });
   } catch (error: unknown) {
     const errMsg =

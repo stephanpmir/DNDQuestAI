@@ -1,6 +1,7 @@
 import type { Character } from "./character";
 import type { RollResult } from "./world";
 import type { Fact } from "@/lib/engine/fact-ledger";
+import type { CombatState, DiceBreakdown } from "@/lib/combat-engine";
 
 export interface GameState {
   character: Character;
@@ -145,4 +146,13 @@ export interface DMResponsePayload {
   addToGround?: string[];
   /** Items to remove from the ground (picked up) */
   removeFromGround?: string[];
+  /** Updated combat state (active combat, or null if combat ended) */
+  combatState?: CombatState | null;
+  /** Combat round result with dice breakdown */
+  combatResult?: {
+    diceBreakdown: DiceBreakdown;
+    combatOver: boolean;
+    combatEndReason: "ongoing" | "enemy_killed" | "player_fled" | "player_down";
+    lootNarrative?: string;
+  };
 }
