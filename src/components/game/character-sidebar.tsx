@@ -164,12 +164,14 @@ export function CharacterSidebar() {
           const talents = allResources.filter(
             (r) => r.key !== "hit_dice" && !r.key.startsWith("spell_slot_") && r.key !== "pact_slots" && r.max > 0 && r.max !== Infinity
           );
-          // Spell slot resources
-          const spellSlots = allResources.filter(
+          // Spell slot resources — only for classes that actually have spellcasting
+          const NON_CASTERS = ["Barbarian", "Fighter", "Rogue", "Monk"];
+          const isCaster = !NON_CASTERS.includes(character.class);
+          const spellSlots = isCaster ? allResources.filter(
             (r) => r.key.startsWith("spell_slot_") || r.key === "pact_slots"
-          ).filter((r) => r.max > 0);
-          const cantrips = character.cantrips ?? [];
-          const spells = character.spells ?? [];
+          ).filter((r) => r.max > 0) : [];
+          const cantrips = isCaster ? (character.cantrips ?? []) : [];
+          const spells = isCaster ? (character.spells ?? []) : [];
           const hasTalents = talents.length > 0;
           const hasSpells = cantrips.length > 0 || spells.length > 0 || spellSlots.length > 0;
           if (!hasTalents && !hasSpells) return null;

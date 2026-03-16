@@ -166,12 +166,8 @@ export function CharacterWizard() {
     const skills = pickRandomN(cData.skillChoices, cData.skillChoiceCount + heBonus);
     setSkillProficiencies(skills);
 
-    if (cData.cantripsKnown > 0) {
-      setCantrips(pickRandomN(cData.cantrips, cData.cantripsKnown));
-    }
-    if (cData.spellsKnown > 0) {
-      setSpells(pickRandomN(cData.spells, cData.spellsKnown));
-    }
+    setCantrips(cData.cantripsKnown > 0 ? pickRandomN(cData.cantrips, cData.cantripsKnown) : []);
+    setSpells(cData.spellsKnown > 0 ? pickRandomN(cData.spells, cData.spellsKnown) : []);
 
     const styles = FIGHTING_STYLES[profile.class] ?? [];
     if (styles.length > 0) {
@@ -332,8 +328,8 @@ export function CharacterWizard() {
   /** Save skill selections and advance to appearance step */
   function handleReviewSubmit() {
     setSkillProficiencies(selectedSkills);
-    if (selectedCantrips.length > 0) setCantrips(selectedCantrips);
-    if (selectedSpells.length > 0) setSpells(selectedSpells);
+    setCantrips(selectedCantrips);
+    setSpells(selectedSpells);
     if (selectedFightingStyle) setFightingStyle(selectedFightingStyle);
     if (character.race === "Half-Elf" && halfElfBonus1 && halfElfBonus2) {
       setHalfElfBonuses([halfElfBonus1, halfElfBonus2]);
@@ -421,12 +417,8 @@ export function CharacterWizard() {
     setSkillProficiencies(skills);
 
     // Random cantrips/spells
-    if (cData.cantripsKnown > 0) {
-      setCantrips(pickRandomN(cData.cantrips, cData.cantripsKnown));
-    }
-    if (cData.spellsKnown > 0) {
-      setSpells(pickRandomN(cData.spells, cData.spellsKnown));
-    }
+    setCantrips(cData.cantripsKnown > 0 ? pickRandomN(cData.cantrips, cData.cantripsKnown) : []);
+    setSpells(cData.spellsKnown > 0 ? pickRandomN(cData.spells, cData.spellsKnown) : []);
 
     // Random fighting style
     const styles = FIGHTING_STYLES[cls] ?? [];

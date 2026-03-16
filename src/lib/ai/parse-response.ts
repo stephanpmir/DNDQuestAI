@@ -799,6 +799,15 @@ function cleanNarrative(text: string): string {
   // Remove bracket state tag lines that leaked (e.g. [HP: 10/10], [LOCATION: Market])
   cleaned = cleaned.replace(/^\s*\[(?:HP|XP|GOLD|LOCATION|AC|KARMA|FAME|WORN|BACKPACK|RESOURCES)\s*:.*$/gim, "");
 
+  // Remove state summary lines the LLM echoes from system prompt context
+  cleaned = cleaned.replace(/^\s*Karma\s*(?:Score)?\s*:\s*-?\d+.*$/gim, "");
+  cleaned = cleaned.replace(/^\s*Location\s*:\s*.+$/gim, "");
+  cleaned = cleaned.replace(/^\s*Turn\s*:\s*\d+.*$/gim, "");
+  cleaned = cleaned.replace(/^\s*Active\s*Quests?\s*:\s*.+$/gim, "");
+  cleaned = cleaned.replace(/^\s*HP\s*:\s*\d+\s*\/\s*\d+.*$/gim, "");
+  // Character name followed by (ClassName) — e.g. "Morlis (Barbarian)"
+  cleaned = cleaned.replace(/^\s*\w+\s*\((?:Barbarian|Bard|Cleric|Druid|Fighter|Monk|Paladin|Ranger|Rogue|Sorcerer|Warlock|Wizard)\).*$/gim, "");
+
   // Remove stray JSON keys
   cleaned = cleaned.replace(/"(?:narrative|sceneImagePrompt|checkRequired|gameStateUpdate|suggestedActions|mentionedNpcs|locationDescription)"\s*:/gi, "");
 
