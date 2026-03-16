@@ -88,28 +88,115 @@ const DAMAGE_TYPE_TOOLTIPS: Record<string, string> = {
 };
 
 const TRAIT_TOOLTIPS: Record<string, string> = {
+  // ── Racial Traits ──────────────────────────────────────────────
   "Darkvision (60 ft)": "See in dim light as bright light, and darkness as dim light, within 60 feet.",
   Darkvision: "See in dim light as bright light, and darkness as dim light, within 60 feet.",
-  "Sneak Attack": "Once per turn, deal extra damage when hitting with a finesse or ranged weapon and you have advantage or an ally is adjacent to the target.",
-  "Hellish Resistance": "Resistance to fire damage — all fire damage you take is halved.",
-  "Infernal Legacy": "You know the Thaumaturgy cantrip. At level 3 gain Hellish Rebuke. At level 5 gain Darkness.",
   "Fey Ancestry": "Advantage on saving throws against being charmed. Magic can't put you to sleep.",
   Trance: "Elves don't sleep. You meditate for 4 hours instead of sleeping 8, and remain semiconscious.",
+  "Elf Weapon Training": "Proficiency with longswords, shortswords, shortbows, and longbows.",
+  "Fleet of Foot": "Your base walking speed is 35 feet instead of 30.",
+  "Mask of the Wild": "You can attempt to hide even when only lightly obscured by foliage, rain, snow, mist, or other natural phenomena.",
   "Dwarven Resilience": "Advantage on saving throws against poison, and resistance to poison damage.",
+  "Dwarven Combat Training": "Proficiency with battleaxes, handaxes, light hammers, and warhammers.",
+  "Dwarven Toughness": "Your hit point maximum increases by 1 per level.",
   Stonecunning: "When making Intelligence (History) checks related to stonework, add double your proficiency bonus.",
-  Lucky: "When you roll a 1 on a d20, you can reroll and must use the new roll.",
+  Lucky: "When you roll a 1 on a d20 for an attack, ability check, or saving throw, you can reroll and must use the new roll.",
   Brave: "Advantage on saving throws against being frightened.",
   "Halfling Nimbleness": "You can move through the space of any creature that is one size larger than you.",
   "Gnome Cunning": "Advantage on INT, WIS, and CHA saving throws against magic.",
+  "Artificer's Lore": "When making Intelligence (History) checks related to magic items, alchemical objects, or technological devices, add double your proficiency bonus.",
+  "Speak with Small Beasts": "You can communicate simple ideas with Small or smaller beasts through sounds and gestures.",
+  "Natural Illusionist": "You know the Minor Illusion cantrip. Intelligence is your spellcasting ability for it.",
   "Skill Versatility": "You gain proficiency in two skills of your choice.",
-  "Relentless Endurance": "When reduced to 0 HP but not killed outright, drop to 1 HP instead. Once per long rest.",
-  "Savage Attacks": "On a critical hit with a melee weapon, roll one extra damage die and add it to the total.",
-  "Breath Weapon": "Use an action to exhale destructive energy. Damage type and shape depend on your draconic ancestry.",
-  "Damage Resistance": "You have resistance to the damage type associated with your draconic ancestry.",
+  Skilled: "You gain proficiency in two skills of your choice.",
+  Versatile: "Humans gain one extra skill proficiency and one extra language of their choice.",
   "Extra Language": "Humans learn one additional language of their choice.",
-  "Unarmored Defense": "AC equals 10 plus DEX modifier plus CON modifier when wearing no armor (Barbarian) or 10 plus DEX modifier plus WIS modifier (Monk).",
-  "Martial Arts": "Your unarmed strikes deal 1d4 damage and you can make one unarmed strike as a bonus action after an unarmed attack or monk weapon attack.",
-  Rage: "Bonus action. Advantage on STR checks and saves, plus damage on STR melee attacks, resistance to physical damage. Ends if you haven't attacked or taken damage for a turn.",
+  "Relentless Endurance": "When reduced to 0 HP but not killed outright, drop to 1 HP instead. Once per long rest.",
+  Menacing: "You gain proficiency in the Intimidation skill.",
+  "Savage Attacks": "On a critical hit with a melee weapon, roll one extra damage die and add it to the total.",
+  "Dragon Ancestor": "You have draconic ancestry that grants you a breath weapon and damage resistance. Choose a dragon type at creation.",
+  "Breath Weapon": "Use an action to exhale destructive energy in a line or cone. Damage type and area depend on your draconic ancestry. DC 8 + CON mod + proficiency. Recharges on short or long rest.",
+  "Damage Resistance": "You have resistance to the damage type associated with your draconic ancestry.",
+  "Infernal Legacy": "You know the Thaumaturgy cantrip. At level 3 gain Hellish Rebuke (1/day). At level 5 gain Darkness (1/day).",
+  "Hellish Resistance": "Resistance to fire damage — all fire damage you take is halved.",
+  // ── Class Features ─────────────────────────────────────────────
+  // Barbarian
+  Rage: "Bonus action. Advantage on STR checks and saves, bonus rage damage on STR melee attacks, resistance to bludgeoning/piercing/slashing. Lasts 1 minute; ends early if you haven't attacked or taken damage since your last turn.",
+  "Unarmored Defense": "Without armor, your AC equals 10 + DEX modifier + CON modifier (Barbarian) or 10 + DEX modifier + WIS modifier (Monk). You can use a shield and still gain this benefit.",
+  "Reckless Attack": "On your first attack each turn, you can choose to attack recklessly. You gain advantage on all STR melee attacks this turn, but attacks against you have advantage until your next turn.",
+  "Danger Sense": "You have advantage on DEX saving throws against effects you can see, such as traps and spells, as long as you aren't blinded, deafened, or incapacitated.",
+  // Bard
+  "Bardic Inspiration": "Bonus action. Give one creature within 60 ft a d6 inspiration die (scales with level). They can add it to one ability check, attack roll, or saving throw within 10 minutes. Uses equal to CHA modifier per short/long rest.",
+  "Jack of All Trades": "Add half your proficiency bonus (rounded down) to any ability check that doesn't already include your proficiency bonus.",
+  "Song of Rest": "During a short rest, you and allies who hear your performance regain extra HP when spending Hit Dice: an extra 1d6 (scales at higher levels).",
+  Expertise: "Choose two skill proficiencies (or one skill and thieves' tools). Your proficiency bonus is doubled for any check you make with them. You gain two more at level 6.",
+  "Countercharm": "As an action, you perform for 1 round. Allies within 30 ft have advantage on saves against being frightened or charmed until the end of your next turn.",
+  // Cleric
+  "Channel Divinity": "You can channel divine energy to fuel magical effects. You gain one use per short or long rest (two at level 6, three at level 18). Turn Undead is always available.",
+  "Turn Undead": "As an action, each undead within 30 ft that can see or hear you must make a WIS save. On failure, it is turned for 1 minute — it must flee and can't take reactions.",
+  "Destroy Undead": "When an undead fails its save against Turn Undead, it is instantly destroyed if its CR is below a threshold based on your level.",
+  "Divine Intervention": "As an action, you call on your deity for aid. Roll d100 — if you roll equal to or under your cleric level, the deity intervenes. At level 20, it automatically succeeds.",
+  "Divine Health": "You are immune to disease.",
+  // Druid
+  "Wild Shape": "As an action, you magically assume the shape of a beast you have seen. You can use this twice per short or long rest. Your level determines the max CR and movement types available.",
+  "Natural Recovery": "During a short rest, you recover expended spell slots with a combined level equal to or less than half your druid level (rounded up). Once per long rest.",
+  "Timeless Body": "Your age slows. For every 10 years that pass, your body ages only 1 year.",
+  "Beast Spells": "You can cast spells in Wild Shape form. You can perform somatic and verbal components while transformed, but can't use material components.",
+  // Fighter
+  "Fighting Style": "You adopt a particular fighting style as your specialty. Options include Archery (+2 ranged attack), Defense (+1 AC in armor), Dueling (+2 damage one-handed), Great Weapon Fighting (reroll 1s and 2s on damage), Protection (impose disadvantage on attacks against allies), or Two-Weapon Fighting (add ability mod to off-hand damage).",
+  "Second Wind": "On your turn, you can use a bonus action to regain 1d10 + fighter level HP. Once per short or long rest.",
+  "Action Surge": "On your turn, you take one additional action. Once per short or long rest (twice at level 17).",
+  "Extra Attack": "When you take the Attack action, you can attack twice instead of once (three times at Fighter 11, four at Fighter 20).",
+  "Indomitable": "You can reroll a failed saving throw. You must use the new roll. Once per long rest (twice at level 13, three at level 17).",
+  // Monk
+  "Martial Arts": "While unarmed or using monk weapons (and not wearing armor/shield): use DEX for attack/damage, unarmed strikes deal 1d4 (scales), and you can make one unarmed strike as a bonus action after attacking.",
+  Ki: "You have a pool of ki points equal to your monk level. Spend them to fuel Flurry of Blows, Patient Defense, and Step of the Wind. All ki points recharge on a short or long rest.",
+  "Flurry of Blows": "After taking the Attack action, spend 1 ki point to make two unarmed strikes as a bonus action.",
+  "Patient Defense": "Spend 1 ki point to take the Dodge action as a bonus action on your turn.",
+  "Step of the Wind": "Spend 1 ki point to take the Disengage or Dash action as a bonus action. Your jump distance is doubled for the turn.",
+  "Stunning Strike": "When you hit with a melee weapon attack, spend 1 ki point. The target must make a CON save or be stunned until the end of your next turn.",
+  "Deflect Missiles": "Use your reaction to reduce ranged weapon damage by 1d10 + DEX mod + monk level. If reduced to 0, spend 1 ki to throw it back (monk weapon attack, 20/60 ft).",
+  "Slow Fall": "Use your reaction to reduce falling damage by 5 times your monk level.",
+  "Unarmored Movement": "Your speed increases by 10 ft while not wearing armor or a shield (scales with level).",
+  "Evasion": "When you make a DEX save for half damage, you take no damage on a success and half on a failure.",
+  "Stillness of Mind": "As an action, you end one charmed or frightened effect on yourself.",
+  // Paladin
+  "Divine Sense": "As an action, you detect celestials, fiends, and undead within 60 ft, and consecrated/desecrated ground. Uses equal to 1 + CHA modifier per long rest.",
+  "Lay on Hands": "You have a healing pool equal to 5 times your paladin level. As an action, touch a creature and restore any number of HP from the pool. Spend 5 points to cure one disease or poison.",
+  "Divine Smite": "When you hit with a melee weapon attack, spend a spell slot to deal extra radiant damage: 2d8 for a 1st-level slot, plus 1d8 per slot level above 1st (max 5d8). +1d8 vs undead/fiends.",
+  "Sacred Oath": "At level 3, you swear an oath that grants you Channel Divinity options and oath spells. Your oath shapes your paladin abilities.",
+  "Aura of Protection": "You and friendly creatures within 10 ft gain a bonus to saving throws equal to your CHA modifier (minimum +1). Requires you to be conscious.",
+  "Aura of Courage": "You and friendly creatures within 10 ft can't be frightened while you are conscious.",
+  // Ranger
+  "Favored Enemy": "You have advantage on Survival checks to track your chosen enemy type and on INT checks to recall information about them.",
+  "Natural Explorer": "In your favored terrain: difficult terrain doesn't slow your group, you can't become lost except by magic, you remain alert to danger while foraging/navigating, you move stealthily at normal pace, find twice as much food, and learn exact details of tracked creatures.",
+  "Primeval Awareness": "Spend a spell slot to sense aberrations, celestials, dragons, elementals, fey, fiends, and undead within 1 mile (6 miles in favored terrain) for 1 minute per slot level.",
+  "Land's Stride": "Moving through nonmagical difficult terrain costs no extra movement. You can pass through nonmagical plants without being slowed or taking damage.",
+  "Hide in Plain Sight": "Spend 1 minute creating camouflage. While stationary against a solid surface, you gain +10 to Stealth checks.",
+  "Vanish": "You can use the Hide action as a bonus action. You also can't be tracked by nonmagical means unless you choose to leave a trail.",
+  // Rogue
+  "Sneak Attack": "Once per turn, deal extra damage (1d6, scales with level) when hitting with a finesse or ranged weapon and you have advantage, or an enemy of the target is within 5 ft of it.",
+  "Thieves' Cant": "A secret mix of dialect, jargon, and code that lets you hide messages in normal conversation. You can also understand secret signs and symbols used by thieves.",
+  "Cunning Action": "You can use a bonus action to Dash, Disengage, or Hide on each of your turns.",
+  "Uncanny Dodge": "When an attacker you can see hits you, use your reaction to halve the attack's damage.",
+  "Reliable Talent": "Whenever you make an ability check that uses a proficiency you have, treat any d20 roll of 9 or lower as a 10.",
+  // Sorcerer
+  "Sorcery Points": "You have sorcery points equal to your sorcerer level. Spend them to create spell slots or fuel Metamagic options. Recharge on long rest.",
+  "Metamagic": "You learn ways to twist your spells. Options include Careful Spell, Distant Spell, Empowered Spell, Extended Spell, Heightened Spell, Quickened Spell, Subtle Spell, and Twinned Spell.",
+  "Font of Magic": "You can convert sorcery points into spell slots and vice versa. Creating a slot costs points equal to the slot level. Converting a slot gives points equal to the slot level.",
+  // Warlock
+  "Eldritch Invocations": "You gain eldritch invocations that grant you special abilities. Some enhance Eldritch Blast, others give at-will spells or unique features. You learn more as you level.",
+  "Pact Boon": "At level 3, your patron grants you a boon: Pact of the Chain (improved familiar), Pact of the Blade (create a weapon), or Pact of the Tome (Book of Shadows with cantrips).",
+  "Mystic Arcanum": "At levels 11-17, your patron teaches you a magical secret (spell of 6th-9th level). You can cast each once per long rest without spending a spell slot.",
+  "Pact Magic": "You cast spells using Charisma. Your spell slots are always cast at your highest slot level and recharge on a short rest, unlike other casters.",
+  // Wizard
+  "Arcane Recovery": "Once per day after a short rest, you recover expended spell slots with a combined level equal to or less than half your wizard level (rounded up).",
+  "Spell Mastery": "At level 18, choose a 1st-level and a 2nd-level spell. You can cast them at their lowest level without expending a spell slot, as long as they are prepared.",
+  "Signature Spells": "At level 20, choose two 3rd-level spells. You always have them prepared, they don't count against prepared spells, and you can cast each once at 3rd level without a slot per short rest.",
+  "Arcane Tradition": "At level 2, you choose a school of magic that grants you special features. Your chosen school's spells cost half the gold and time to copy into your spellbook.",
+  // General class features
+  Spellcasting: "You can cast spells using spell slots. Your class determines your spellcasting ability, spell list, and how you prepare/learn spells. Slots recharge on a long rest (short rest for Warlocks).",
+  "Spellcasting Focus": "You can use a specific item (holy symbol, arcane focus, druidic focus, component pouch) as a spellcasting focus, replacing material components that don't have a gold cost.",
 };
 
 const SPELL_TOOLTIPS: Record<string, string> = {
@@ -281,6 +368,71 @@ function DndTooltip({ text, children }: { text: string; children: React.ReactNod
         </div>
       )}
     </>
+  );
+}
+
+// ── Session-level tooltip cache for API fallback ────────────────
+const tooltipCache = new Map<string, string>();
+const tooltipPending = new Set<string>();
+
+/** Tooltip wrapper that falls back to API for unknown features. */
+function FeatureTooltip({
+  featureName,
+  characterClass,
+  characterLevel,
+  children,
+}: {
+  featureName: string;
+  characterClass: string;
+  characterLevel: number;
+  children: React.ReactNode;
+}) {
+  // Check static lookups first
+  const staticTip = TRAIT_TOOLTIPS[featureName] ?? SPELL_TOOLTIPS[featureName];
+  const [apiTip, setApiTip] = useState<string | null>(() => tooltipCache.get(featureName) ?? null);
+  const [loading, setLoading] = useState(false);
+  const fetchedRef = useRef(false);
+
+  const tip = staticTip ?? apiTip;
+
+  const handleHover = useCallback(() => {
+    if (tip || fetchedRef.current || tooltipPending.has(featureName)) return;
+    fetchedRef.current = true;
+    tooltipPending.add(featureName);
+    setLoading(true);
+    fetch("/api/tooltip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ featureName, characterClass, characterLevel }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.description) {
+          tooltipCache.set(featureName, data.description);
+          setApiTip(data.description);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        tooltipPending.delete(featureName);
+        setLoading(false);
+      });
+  }, [featureName, characterClass, characterLevel, tip]);
+
+  if (tip) {
+    return <DndTooltip text={tip}>{children}</DndTooltip>;
+  }
+
+  // No static tip — render with hover-trigger API fetch
+  return (
+    <span onMouseEnter={handleHover} onTouchStart={handleHover} style={{ cursor: "help" }}>
+      {children}
+      {loading && (
+        <span style={{ marginLeft: 4, fontSize: 9, color: C.gold, opacity: 0.6 }} className="animate-pulse">
+          ...
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -904,18 +1056,13 @@ export function CharacterSheet({ onClose }: Props) {
               <div style={sectionHeaderStyle}>Features &amp; Traits</div>
               <div style={{ fontSize: 10, color: C.gold, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.1em", marginBottom: 4 }}>{character.race} Traits</div>
               <ul style={{ listStyle: "none", margin: "0 0 12px 0", padding: 0 }} className="space-y-0.5">
-                {(character.racialTraits?.length > 0 ? character.racialTraits : racialTraits).map((trait) => {
-                  const tip = TRAIT_TOOLTIPS[trait];
-                  return tip ? (
-                    <li key={trait}>
-                      <DndTooltip text={tip}>
-                        <span style={{ fontSize: 11, color: C.parchment }}>{trait}</span>
-                      </DndTooltip>
-                    </li>
-                  ) : (
-                    <li key={trait} style={{ fontSize: 11, color: C.parchment }}>{trait}</li>
-                  );
-                })}
+                {(character.racialTraits?.length > 0 ? character.racialTraits : racialTraits).map((trait) => (
+                  <li key={trait}>
+                    <FeatureTooltip featureName={trait} characterClass={character.class} characterLevel={character.level}>
+                      <span style={{ fontSize: 11, color: C.parchment }}>{trait}</span>
+                    </FeatureTooltip>
+                  </li>
+                ))}
               </ul>
               <div style={{ fontSize: 10, color: C.gold, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.1em", marginBottom: 4 }}>{character.class} Features</div>
               <ul style={{ listStyle: "none", margin: 0, padding: 0 }} className="space-y-0.5">
@@ -926,7 +1073,11 @@ export function CharacterSheet({ onClose }: Props) {
                 </li>
                 <li style={{ fontSize: 11, color: C.parchment }}>Save Prof: {classSaves.join(", ")}</li>
                 {character.fightingStyle && (
-                  <li style={{ fontSize: 11, color: C.parchment }}>Fighting Style: {character.fightingStyle}</li>
+                  <li>
+                    <DndTooltip text={TRAIT_TOOLTIPS["Fighting Style"] ?? `Fighting Style: ${character.fightingStyle}`}>
+                      <span style={{ fontSize: 11, color: C.parchment }}>Fighting Style: {character.fightingStyle}</span>
+                    </DndTooltip>
+                  </li>
                 )}
               </ul>
             </div>
@@ -939,18 +1090,13 @@ export function CharacterSheet({ onClose }: Props) {
                   <>
                     <div style={{ fontSize: 10, color: C.purple, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.08em", marginBottom: 4 }}>Cantrips</div>
                     <ul style={{ listStyle: "none", margin: "0 0 8px 0", padding: 0 }} className="space-y-0.5">
-                      {character.cantrips.map((c) => {
-                        const tip = SPELL_TOOLTIPS[c];
-                        return tip ? (
-                          <li key={c}>
-                            <DndTooltip text={tip}>
-                              <span style={{ fontSize: 11, color: C.parchment }}>{c}</span>
-                            </DndTooltip>
-                          </li>
-                        ) : (
-                          <li key={c} style={{ fontSize: 11, color: C.parchment }}>{c}</li>
-                        );
-                      })}
+                      {character.cantrips.map((c) => (
+                        <li key={c}>
+                          <FeatureTooltip featureName={c} characterClass={character.class} characterLevel={character.level}>
+                            <span style={{ fontSize: 11, color: C.parchment }}>{c}</span>
+                          </FeatureTooltip>
+                        </li>
+                      ))}
                     </ul>
                   </>
                 )}
@@ -958,18 +1104,13 @@ export function CharacterSheet({ onClose }: Props) {
                   <>
                     <div style={{ fontSize: 10, color: "#60a5fa", fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.08em", marginBottom: 4 }}>1st Level</div>
                     <ul style={{ listStyle: "none", margin: 0, padding: 0 }} className="space-y-0.5">
-                      {character.spells.map((s) => {
-                        const tip = SPELL_TOOLTIPS[s];
-                        return tip ? (
-                          <li key={s}>
-                            <DndTooltip text={tip}>
-                              <span style={{ fontSize: 11, color: C.parchment }}>{s}</span>
-                            </DndTooltip>
-                          </li>
-                        ) : (
-                          <li key={s} style={{ fontSize: 11, color: C.parchment }}>{s}</li>
-                        );
-                      })}
+                      {character.spells.map((s) => (
+                        <li key={s}>
+                          <FeatureTooltip featureName={s} characterClass={character.class} characterLevel={character.level}>
+                            <span style={{ fontSize: 11, color: C.parchment }}>{s}</span>
+                          </FeatureTooltip>
+                        </li>
+                      ))}
                     </ul>
                   </>
                 )}
