@@ -16,6 +16,7 @@ export function CharacterSidebar() {
   const { location, questLog, groundItems } = useGameStore();
   const { companions } = useKarmaStore();
 
+  const [abilitiesOpen, setAbilitiesOpen] = useState(false);
   const [equippedOpen, setEquippedOpen] = useState(false);
   const [backpackOpen, setBackpackOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -112,37 +113,6 @@ export function CharacterSidebar() {
             </div>
           </div>
 
-          {/* Karma & Fame row */}
-          <div className="flex gap-2">
-            <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{t("sidebar.karma")}</div>
-              <div className={cn(
-                "text-sm font-bold leading-tight",
-                character.karma > 25 ? "text-emerald-400" :
-                character.karma < -25 ? "text-red-400" :
-                "text-gray-400"
-              )}>
-                {alignmentLabel}
-              </div>
-            </div>
-            <div className="flex-1 text-center bg-muted/40 rounded-lg py-1.5 border border-border/30">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{t("sidebar.fame")}</div>
-              <div className={cn(
-                "text-sm font-bold leading-tight",
-                character.fame >= 75 ? "text-amber-400" :
-                character.fame >= 40 ? "text-sky-400" :
-                character.fame >= 15 ? "text-slate-300" :
-                "text-gray-500"
-              )}>
-                {character.fame >= 75 ? t("fame.legendary") :
-                 character.fame >= 50 ? t("fame.renowned") :
-                 character.fame >= 30 ? t("fame.wellKnown") :
-                 character.fame >= 15 ? t("fame.recognized") :
-                 t("fame.unknown")}
-              </div>
-            </div>
-          </div>
-
           {/* Unconscious/Death warning */}
           {character.isUnconscious && (
             <div className="text-center py-1 bg-red-950/60 border border-red-700/50 rounded text-red-300 text-xs font-bold animate-pulse">
@@ -184,6 +154,71 @@ export function CharacterSidebar() {
         </div>
 
         <Separator className="my-2" />
+
+        {/* Abilities section — collapsible, limited-use class features & spells */}
+        {(() => {
+          const abilities = (character.resources ?? []).filter(
+            (r) => r.key !== "hit_dice" && r.max > 0 && r.max !== Infinity
+          );
+          if (abilities.length === 0) return null;
+          return (
+            <>
+              <div className="px-4">
+                <button
+                  type="button"
+                  onClick={() => setAbilitiesOpen(!abilitiesOpen)}
+                  className="flex items-center justify-between w-full text-[10px] text-muted-foreground uppercase tracking-wider mb-1 hover:text-foreground transition-colors"
+                >
+                  <span>Abilities ({abilities.length})</span>
+                  <span className="text-xs">{abilitiesOpen ? "\u25B2" : "\u25BC"}</span>
+                </button>
+                {abilitiesOpen && (
+                  <ul className="space-y-0.5">
+                    {abilities.map((r) => {
+                      const depleted = r.current === 0;
+                      const partial = r.current > 0 && r.current < r.max;
+                      const isShortRest = r.rechargesOn === "short";
+                      return (
+                        <li
+                          key={r.key}
+                          className="text-xs px-2 py-0.5 bg-muted/30 rounded flex items-center justify-between gap-1 border border-border/20"
+                        >
+                          <span className="flex items-center gap-1.5 truncate">
+                            <span
+                              className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                              style={{ backgroundColor: isShortRest ? "#60a5fa" : "#c9a227" }}
+                              title={isShortRest ? "Short rest" : "Long rest"}
+                            />
+                            <span
+                              className={cn(
+                                "truncate",
+                                depleted && "line-through text-red-400",
+                                !depleted && !partial && "text-amber-300/90",
+                              )}
+                            >
+                              {r.label}
+                            </span>
+                          </span>
+                          <span
+                            className={cn(
+                              "font-mono text-[11px] shrink-0",
+                              depleted ? "text-red-400" :
+                              partial ? "text-amber-500" :
+                              "text-amber-300/90"
+                            )}
+                          >
+                            {r.current}/{r.max}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+              <Separator className="my-2" />
+            </>
+          );
+        })()}
 
         {/* Equipment section — collapsible */}
         <div className="px-4">
