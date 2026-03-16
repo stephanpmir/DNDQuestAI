@@ -469,5 +469,8 @@ export function buildEngineContextMessage(
     parts.push(contradictionHint);
   }
 
-  return parts.join("\n\n");
+  const result = parts.join("\n\n");
+  const estimatedTokens = Math.ceil(result.length / 4);
+  console.log(`[dm-prompt] engineContext tokens≈${estimatedTokens} (${result.length} chars, ${outcomeParts.length} outcome parts)`);
+  return result;
 }

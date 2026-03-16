@@ -305,12 +305,29 @@ async function runDMTurn(
   const systemPrompt = buildSystemPrompt(gs.character, gameState, undefined, undefined, campaignTheme);
   const engineContext = buildEngineContextMessage(message, preResult.engineOutcome, preResult.formattedContext);
 
+  // Token-aware history trimming — use tighter window when fixed context is large
+  const estimateTokens = (s: string) => Math.ceil(s.length / 4);
+  const fixedTokens = estimateTokens(systemPrompt) + estimateTokens(engineContext) + estimateTokens(message);
+  const historyTurnLimit = fixedTokens > 5000 ? 6 : 10;
+  const trimmedHistory = gs.history.slice(-historyTurnLimit);
+
+  // Additional token-budget trim
+  const MAX_HISTORY_TOKENS = 6000;
+  let historyTokens = trimmedHistory.reduce((sum, h) => sum + estimateTokens(h.content), 0);
+  while (historyTokens > MAX_HISTORY_TOKENS && trimmedHistory.length > 2) {
+    const removed = trimmedHistory.shift();
+    if (removed) historyTokens -= estimateTokens(removed.content);
+  }
+
   const messages: OpenAI.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
-    ...gs.history.slice(-10).map((h) => ({ role: h.role as "user" | "assistant", content: h.content })),
+    ...trimmedHistory.map((h) => ({ role: h.role as "user" | "assistant", content: h.content })),
     { role: "system", content: engineContext },
     { role: "user", content: message },
   ];
+
+  const totalTokens = messages.reduce((sum, m) => sum + estimateTokens(typeof m.content === "string" ? m.content : ""), 0);
+  console.log(`[bot-versus] LLM payload: ${totalTokens} tokens≈ (fixed=${fixedTokens}, history=${historyTokens}/${trimmedHistory.length} turns, limit=${historyTurnLimit})`);
 
   // Inject combat round context so the LLM can narrate around the mechanical outcome
   if (preCombatResult) {

@@ -156,12 +156,23 @@ export async function POST(request: Request) {
       }
 
       // Filter history to only valid LLM roles and cap token size
+      const estimateTokens = (s: string) => Math.ceil(s.length / 4);
+
+      // Estimate non-history token budget (system prompt + engine context + user message + combat)
+      const fixedTokens = estimateTokens(systemPrompt) + estimateTokens(engineContext) + estimateTokens(userMessage);
+
+      // Use tighter history window when fixed context is large (complex actions with
+      // crime detection, karma, divine effects, resource updates, guard confrontation)
+      const AGGRESSIVE_HISTORY_TURNS = 6;
+      const NORMAL_HISTORY_TURNS = 10;
+      const FIXED_TOKEN_THRESHOLD = 5000;
+      const historyTurnLimit = fixedTokens > FIXED_TOKEN_THRESHOLD ? AGGRESSIVE_HISTORY_TURNS : NORMAL_HISTORY_TURNS;
+
       const validHistory = (history ?? [])
         .filter((h) => h.role === "user" || h.role === "assistant")
-        .slice(-10);
+        .slice(-historyTurnLimit);
 
-      // Token guard: estimate total tokens and trim if needed
-      const estimateTokens = (s: string) => Math.ceil(s.length / 4);
+      // Token guard: trim history to stay under budget
       const MAX_HISTORY_TOKENS = 6000;
       let historyTokens = validHistory.reduce((sum, h) => sum + estimateTokens(h.content), 0);
       while (historyTokens > MAX_HISTORY_TOKENS && validHistory.length > 2) {
@@ -178,6 +189,10 @@ export async function POST(request: Request) {
         { role: "system", content: engineContext },
         { role: "user", content: userMessage },
       ];
+
+      // Log total token estimate for diagnosing timeouts
+      const totalTokens = messages.reduce((sum, m) => sum + estimateTokens(typeof m.content === "string" ? m.content : ""), 0);
+      console.log(`[dm-route] LLM payload: ${totalTokens} tokens≈ (fixed=${fixedTokens}, history=${historyTokens}/${validHistory.length} turns, limit=${historyTurnLimit})`);
 
       // Inject combat round narrative so the LLM can use it
       if (combatResult) {
