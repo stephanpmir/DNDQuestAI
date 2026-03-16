@@ -17,6 +17,8 @@ export function CharacterSidebar() {
   const { companions } = useKarmaStore();
 
   const [abilitiesOpen, setAbilitiesOpen] = useState(false);
+  const [talentsOpen, setTalentsOpen] = useState(false);
+  const [spellsOpen, setSpellsOpen] = useState(false);
   const [equippedOpen, setEquippedOpen] = useState(false);
   const [backpackOpen, setBackpackOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -155,12 +157,23 @@ export function CharacterSidebar() {
 
         <Separator className="my-2" />
 
-        {/* Abilities section — collapsible, limited-use class features & spells */}
+        {/* Abilities section — Talents + Spells subcategories */}
         {(() => {
-          const abilities = (character.resources ?? []).filter(
-            (r) => r.key !== "hit_dice" && r.max > 0 && r.max !== Infinity
+          const allResources = character.resources ?? [];
+          // Talents: limited-use class features that are NOT spell slots or pact slots
+          const talents = allResources.filter(
+            (r) => r.key !== "hit_dice" && !r.key.startsWith("spell_slot_") && r.key !== "pact_slots" && r.max > 0 && r.max !== Infinity
           );
-          if (abilities.length === 0) return null;
+          // Spell slot resources
+          const spellSlots = allResources.filter(
+            (r) => r.key.startsWith("spell_slot_") || r.key === "pact_slots"
+          ).filter((r) => r.max > 0);
+          const cantrips = character.cantrips ?? [];
+          const spells = character.spells ?? [];
+          const hasTalents = talents.length > 0;
+          const hasSpells = cantrips.length > 0 || spells.length > 0 || spellSlots.length > 0;
+          if (!hasTalents && !hasSpells) return null;
+          const subsectionCount = (hasTalents ? 1 : 0) + (hasSpells ? 1 : 0);
           return (
             <>
               <div className="px-4">
@@ -169,50 +182,151 @@ export function CharacterSidebar() {
                   onClick={() => setAbilitiesOpen(!abilitiesOpen)}
                   className="flex items-center justify-between w-full text-[10px] text-muted-foreground uppercase tracking-wider mb-1 hover:text-foreground transition-colors"
                 >
-                  <span>Abilities ({abilities.length})</span>
+                  <span>Abilities ({subsectionCount})</span>
                   <span className="text-xs">{abilitiesOpen ? "\u25B2" : "\u25BC"}</span>
                 </button>
                 {abilitiesOpen && (
-                  <ul className="space-y-0.5">
-                    {abilities.map((r) => {
-                      const depleted = r.current === 0;
-                      const partial = r.current > 0 && r.current < r.max;
-                      const isShortRest = r.rechargesOn === "short";
-                      return (
-                        <li
-                          key={r.key}
-                          className="text-xs px-2 py-0.5 bg-muted/30 rounded flex items-center justify-between gap-1 border border-border/20"
+                  <div className="space-y-2">
+                    {/* Talents subsection */}
+                    {hasTalents && (
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => setTalentsOpen(!talentsOpen)}
+                          className="flex items-center justify-between w-full text-[10px] text-amber-400/80 uppercase tracking-wider mb-0.5 hover:text-amber-300 transition-colors"
                         >
-                          <span className="flex items-center gap-1.5 truncate">
-                            <span
-                              className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
-                              style={{ backgroundColor: isShortRest ? "#60a5fa" : "#c9a227" }}
-                              title={isShortRest ? "Short rest" : "Long rest"}
-                            />
-                            <span
-                              className={cn(
-                                "truncate",
-                                depleted && "line-through text-red-400",
-                                !depleted && !partial && "text-amber-300/90",
-                              )}
-                            >
-                              {r.label}
-                            </span>
-                          </span>
-                          <span
-                            className={cn(
-                              "font-mono text-[11px] shrink-0",
-                              depleted ? "text-red-400" :
-                              partial ? "text-amber-500" :
-                              "text-amber-300/90"
+                          <span>Talents ({talents.length})</span>
+                          <span className="text-xs">{talentsOpen ? "\u25B2" : "\u25BC"}</span>
+                        </button>
+                        {talentsOpen && (
+                          <ul className="space-y-0.5">
+                            {talents.map((r) => {
+                              const depleted = r.current === 0;
+                              const partial = r.current > 0 && r.current < r.max;
+                              const isShortRest = r.rechargesOn === "short";
+                              return (
+                                <li
+                                  key={r.key}
+                                  className="text-xs px-2 py-0.5 bg-muted/30 rounded flex items-center justify-between gap-1 border border-border/20"
+                                >
+                                  <span className="flex items-center gap-1.5 truncate">
+                                    <span
+                                      className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                                      style={{ backgroundColor: isShortRest ? "#60a5fa" : "#c9a227" }}
+                                      title={isShortRest ? "Short rest" : "Long rest"}
+                                    />
+                                    <span
+                                      className={cn(
+                                        "truncate",
+                                        depleted && "line-through text-red-400",
+                                        !depleted && !partial && "text-amber-300/90",
+                                      )}
+                                    >
+                                      {r.label}
+                                    </span>
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      "font-mono text-[11px] shrink-0",
+                                      depleted ? "text-red-400" :
+                                      partial ? "text-amber-500" :
+                                      "text-amber-300/90"
+                                    )}
+                                  >
+                                    {r.current}/{r.max}
+                                  </span>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                    {/* Spells subsection */}
+                    {hasSpells && (
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => setSpellsOpen(!spellsOpen)}
+                          className="flex items-center justify-between w-full text-[10px] text-amber-400/80 uppercase tracking-wider mb-0.5 hover:text-amber-300 transition-colors"
+                        >
+                          <span>Spells ({cantrips.length + spells.length})</span>
+                          <span className="text-xs">{spellsOpen ? "\u25B2" : "\u25BC"}</span>
+                        </button>
+                        {spellsOpen && (
+                          <div className="space-y-1">
+                            {/* Cantrips */}
+                            {cantrips.length > 0 && (
+                              <div>
+                                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Cantrips</div>
+                                <ul className="space-y-0.5">
+                                  {cantrips.map((c) => (
+                                    <li
+                                      key={c}
+                                      className="text-xs px-2 py-0.5 bg-muted/30 rounded flex items-center justify-between gap-1 border border-border/20 text-amber-300/90"
+                                    >
+                                      <span className="truncate">{c}</span>
+                                      <span className="font-mono text-[11px] shrink-0 text-amber-300/90">&infin;</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
                             )}
-                          >
-                            {r.current}/{r.max}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                            {/* Spell slot headers */}
+                            {spellSlots.map((slot) => {
+                              const depleted = slot.current === 0;
+                              const partial = slot.current > 0 && slot.current < slot.max;
+                              return (
+                                <div
+                                  key={slot.key}
+                                  className={cn(
+                                    "text-xs px-2 py-0.5 bg-muted/30 rounded flex items-center justify-between gap-1 border border-border/20",
+                                    depleted ? "text-red-400" :
+                                    partial ? "text-amber-500" :
+                                    "text-amber-300/90"
+                                  )}
+                                >
+                                  <span className={cn("truncate", depleted && "line-through")}>{slot.label}</span>
+                                  <span
+                                    className={cn(
+                                      "font-mono text-[11px] shrink-0",
+                                      depleted ? "text-red-400" :
+                                      partial ? "text-amber-500" :
+                                      "text-amber-300/90"
+                                    )}
+                                  >
+                                    {slot.current}/{slot.max}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                            {/* Known spell names listed under slot headers */}
+                            {spells.length > 0 && (
+                              <div>
+                                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1 mb-0.5">Known Spells</div>
+                                <ul className="space-y-0.5">
+                                  {spells.map((s) => {
+                                    const allDepleted = spellSlots.length > 0 && spellSlots.every((sl) => sl.current === 0);
+                                    return (
+                                      <li
+                                        key={s}
+                                        className={cn(
+                                          "text-xs px-2 py-0.5 bg-muted/30 rounded truncate border border-border/20",
+                                          allDepleted ? "text-red-400 line-through" : "text-amber-300/90"
+                                        )}
+                                      >
+                                        {s}
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
               <Separator className="my-2" />
