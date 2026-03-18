@@ -799,6 +799,13 @@ function cleanNarrative(text: string): string {
   // Remove bracket state tag lines that leaked (e.g. [HP: 10/10], [LOCATION: Market])
   cleaned = cleaned.replace(/^\s*\[(?:HP|XP|GOLD|LOCATION|AC|KARMA|FAME|WORN|BACKPACK|RESOURCES)\s*:.*$/gim, "");
 
+  // Remove ENGINE TAGS and STATE TAGS lines
+  cleaned = cleaned.replace(/^.*ENGINE\s*TAGS.*$/gim, "");
+  cleaned = cleaned.replace(/^.*STATE\s*TAGS.*$/gim, "");
+  cleaned = cleaned.replace(/^\s*Dice\s*Roll\s*:.*$/gim, "");
+  cleaned = cleaned.replace(/^\s*Roll\s*Result\s*.*$/gim, "");
+  cleaned = cleaned.replace(/^\s*Roll\s*:.*$/gim, "");
+
   // Remove state summary lines the LLM echoes from system prompt context
   cleaned = cleaned.replace(/^\s*Karma\s*(?:Score)?\s*:\s*-?\d+.*$/gim, "");
   cleaned = cleaned.replace(/^\s*Location\s*:\s*.+$/gim, "");

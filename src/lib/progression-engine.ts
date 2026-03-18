@@ -105,6 +105,8 @@ export interface DangerContext {
   turnsSinceLoot?: number;
   /** Count of successful skill checks since last loot */
   successfulChecksSinceLoot?: number;
+  /** Cooldown turns remaining after combat — blocks new combat escalation */
+  combatCooldown?: number;
 }
 
 /**
@@ -386,6 +388,11 @@ export function getNextEscalation(ctx: DangerContext): EscalationResult {
       type: "combat",
       narrativeInjection: "[COMBAT_ROUND]",
     };
+  }
+
+  // Combat cooldown — after any combat, block new combat for 4 turns
+  if ((ctx.combatCooldown ?? 0) > 0) {
+    return { type: "none", narrativeInjection: "" };
   }
 
   // Hard guard: no combat or tension on opening turns (turns 1-2).

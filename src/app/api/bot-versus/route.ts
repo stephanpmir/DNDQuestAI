@@ -240,6 +240,7 @@ interface InternalGameState {
   successfulChecksSinceLoot: number;
   combatActive: boolean;
   combatState: CombatState | null;
+  combatCooldown: number;
 }
 
 interface DMTurnResult {
@@ -273,7 +274,12 @@ async function runDMTurn(
   if (gs.combatState?.active) {
     preCombatResult = resolveCombatTurn(message, gs.character, gs.combatState);
     gs.combatState = preCombatResult.combatState;
-    gs.character.hp = Math.max(0, gs.character.hp + preCombatResult.playerHpChange);
+    console.log(`[bot-versus] HP writeback pre-LLM: before=${gs.character.hp} change=${preCombatResult.playerHpChange}`);
+    gs.character.hp = Math.max(0, Math.min(gs.character.maxHp, gs.character.hp + preCombatResult.playerHpChange));
+    console.log(`[bot-versus] HP writeback pre-LLM: after=${gs.character.hp}`);
+    if (gs.character.hp === 0) {
+      gs.character.isUnconscious = true;
+    }
 
     // Inject combat results into engine outcome so LLM can narrate them
     const eo = preResult.engineOutcome;
@@ -435,6 +441,9 @@ async function runDMTurn(
     return { narrative: finalNarrative, checkRoll: parsed.checkRequired ? { stat: parsed.checkRequired.stat, skill: parsed.checkRequired.skill, dc: parsed.checkRequired.dc, description: parsed.checkRequired.description } : null, imagePrompt: parsed.sceneImagePrompt ?? null, provider, tagsFound, rawResponse: rawText };
   }
 
+  // Decrement combat cooldown each turn
+  if (gs.combatCooldown > 0) gs.combatCooldown--;
+
   const dangerCtx: DangerContext = {
     location: gs.location,
     campaignTheme,
@@ -449,6 +458,7 @@ async function runDMTurn(
     combatActive: gs.combatActive,
     turnsSinceLoot: gs.turnsSinceLoot,
     successfulChecksSinceLoot: gs.successfulChecksSinceLoot,
+    combatCooldown: gs.combatCooldown,
   };
 
   const escalation = getNextEscalation(dangerCtx);
@@ -461,6 +471,7 @@ async function runDMTurn(
     gs.turnsSinceLastEscalation = 0;
     gs.recentFailedChecks = 0;
     gs.combatActive = true;
+    gs.combatCooldown = 4;
     tagsFound.push("COMBAT_START");
   } else if (escalation.type === "loot") {
     finalNarrative = finalNarrative + "\n\n" + escalation.narrativeInjection;
@@ -503,7 +514,12 @@ async function runDMTurn(
   if (gs.combatState?.active && !preCombatResult) {
     const combatResult: CombatRoundResult = resolveCombatTurn(message, gs.character, gs.combatState);
     gs.combatState = combatResult.combatState;
-    gs.character.hp = Math.max(0, gs.character.hp + combatResult.playerHpChange);
+    console.log(`[bot-versus] HP writeback post-LLM: before=${gs.character.hp} change=${combatResult.playerHpChange}`);
+    gs.character.hp = Math.max(0, Math.min(gs.character.maxHp, gs.character.hp + combatResult.playerHpChange));
+    console.log(`[bot-versus] HP writeback post-LLM: after=${gs.character.hp}`);
+    if (gs.character.hp === 0) {
+      gs.character.isUnconscious = true;
+    }
 
     // Append combat round narrative
     finalNarrative = finalNarrative + "\n\n" + combatResult.narrative;
@@ -531,6 +547,15 @@ async function runDMTurn(
     if (preCombatResult.lootNarrative) {
       finalNarrative += "\n" + preCombatResult.lootNarrative;
     }
+  }
+
+  // ── Unconscious check after all combat resolution ──────────────
+  if (gs.character.hp === 0 && !gs.character.isUnconscious) {
+    gs.character.isUnconscious = true;
+  }
+  if (gs.character.isUnconscious && gs.character.hp === 0) {
+    finalNarrative += "\n\nYou have fallen unconscious. Make a Death Saving Throw.";
+    console.log(`[bot-versus] Player fell unconscious at 0 HP`);
   }
 
   // ── Update recent DM response buffer (keep last 3) ─────────────
@@ -715,7 +740,7 @@ async function runVersus(): Promise<NextResponse> {
   const gs: InternalGameState = {
     character, location: campaign.startLocation, questLog: [], turnCount: 0, history: [],
     turnsSinceCombat: 0, turnsSinceLastEscalation: 0, recentFailedChecks: 0, recentDMResponses: [],
-    turnsSinceLoot: 0, successfulChecksSinceLoot: 0, combatActive: false, combatState: null,
+    turnsSinceLoot: 0, successfulChecksSinceLoot: 0, combatActive: false, combatState: null, combatCooldown: 0,
   };
 
   // Init Grok
@@ -753,6 +778,69 @@ async function runVersus(): Promise<NextResponse> {
 
   for (let i = 1; i <= TOTAL_TURNS; i++) {
     gs.turnCount += 1;
+
+    // ── Fix 2 & 3: Death saving throw when unconscious ──────────
+    if (gs.character.isUnconscious && gs.character.hp === 0 && !gs.character.isDead) {
+      const deathRoll = Math.floor(Math.random() * 20) + 1;
+      let deathNarrative = "";
+
+      if (deathRoll === 20) {
+        // Natural 20: regain consciousness with 1 HP
+        gs.character.hp = 1;
+        gs.character.isUnconscious = false;
+        gs.character.deathSaves = { successes: 0, failures: 0 };
+        deathNarrative = `[DEATH SAVE] Rolled natural 20! You miraculously regain consciousness with 1 HP. Your eyes flutter open as life surges back into your body.`;
+        console.log(`[bot-versus] Turn ${i}: Death save NAT 20 — player regains consciousness`);
+      } else if (deathRoll === 1) {
+        // Natural 1: 2 failures
+        gs.character.deathSaves.failures += 2;
+        deathNarrative = `[DEATH SAVE] Rolled natural 1 — two failures! (${gs.character.deathSaves.successes} successes, ${gs.character.deathSaves.failures} failures)`;
+        console.log(`[bot-versus] Turn ${i}: Death save NAT 1 — 2 failures (total: ${gs.character.deathSaves.failures})`);
+      } else if (deathRoll >= 10) {
+        // 10+: 1 success
+        gs.character.deathSaves.successes += 1;
+        deathNarrative = `[DEATH SAVE] Rolled ${deathRoll} — success! (${gs.character.deathSaves.successes} successes, ${gs.character.deathSaves.failures} failures)`;
+        console.log(`[bot-versus] Turn ${i}: Death save ${deathRoll} — success (total: ${gs.character.deathSaves.successes})`);
+      } else {
+        // Below 10: 1 failure
+        gs.character.deathSaves.failures += 1;
+        deathNarrative = `[DEATH SAVE] Rolled ${deathRoll} — failure! (${gs.character.deathSaves.successes} successes, ${gs.character.deathSaves.failures} failures)`;
+        console.log(`[bot-versus] Turn ${i}: Death save ${deathRoll} — failure (total: ${gs.character.deathSaves.failures})`);
+      }
+
+      // Check for stabilization (3 successes)
+      if (gs.character.deathSaves.successes >= 3) {
+        deathNarrative += "\nYou have stabilized. You remain unconscious but are no longer dying.";
+        console.log(`[bot-versus] Turn ${i}: Player stabilized`);
+      }
+
+      // Check for death (3 failures)
+      if (gs.character.deathSaves.failures >= 3) {
+        gs.character.isDead = true;
+        deathNarrative += "\nThree failures. Your soul departs your body. You are dead.";
+        console.log(`[bot-versus] Turn ${i}: PLAYER DEATH`);
+      }
+
+      const unconsciousNarrative = `${deathNarrative}\n\nYou lie unconscious on the ground. Enemies continue their actions around you, but you cannot act.`;
+
+      turns.push({
+        turn: i,
+        grok: { action: "[Unconscious — no action]", reasoning: "Player is unconscious, making death saving throws", responseTimeMs: 0, bugReport: null, rawResponse: "" },
+        dm: { narrative: unconsciousNarrative, provider: "system", responseTimeMs: 0, checkRoll: null, imagePrompt: null, tagsFound: ["DEATH_SAVE"], rawResponse: unconsciousNarrative },
+        gameState: snapshotGameState(gs),
+        error: null,
+      });
+      lastNarrative = unconsciousNarrative;
+
+      // If player died, end the versus run immediately
+      if (gs.character.isDead) {
+        console.log(`[bot-versus] Ending versus run — PLAYER DEATH on turn ${i}`);
+        break;
+      }
+
+      // If still unconscious (stabilized or still rolling), skip normal turn
+      if (gs.character.isUnconscious) continue;
+    }
 
     // Grok's turn
     const grokStart = Date.now();
@@ -863,9 +951,7 @@ async function runVersus(): Promise<NextResponse> {
       narrativeConsistencyScore: `${narrativeConsistencyScore}%`,
       consistencyIssues,
       combatEncounters: turns.filter(t =>
-        t.dm.tagsFound.includes("COMBAT_START") ||
-        t.dm.tagsFound.includes("COMBAT_ROUND") ||
-        /\[COMBAT_START\]/i.test(t.dm.rawResponse)
+        t.dm.rawResponse.includes("COMBAT_START")
       ).length,
       checkRollAssessment: {
         totalCheckRolls: checkRolls.length,
@@ -877,11 +963,14 @@ async function runVersus(): Promise<NextResponse> {
         dmMs: avgDMTime,
       },
       errors,
-      overallAssessment: errors.length === 0 && consistencyIssues.length === 0
-        ? "PASS — All turns completed successfully with consistent DM responses."
-        : errors.length > 0
-          ? `ISSUES — ${errors.length} error(s) occurred during the match.`
-          : `PARTIAL — ${consistencyIssues.length} consistency issue(s) found.`,
+      playerDeath: gs.character.isDead,
+      overallAssessment: gs.character.isDead
+        ? "PLAYER DEATH — Character died during the match."
+        : errors.length === 0 && consistencyIssues.length === 0
+          ? "PASS — All turns completed successfully with consistent DM responses."
+          : errors.length > 0
+            ? `ISSUES — ${errors.length} error(s) occurred during the match.`
+            : `PARTIAL — ${consistencyIssues.length} consistency issue(s) found.`,
     },
     finalState: {
       hp: gs.character.hp, maxHp: gs.character.maxHp,
