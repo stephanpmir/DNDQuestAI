@@ -557,6 +557,55 @@ function getWeaponInfo(itemName: string): { damage: string; type: string } | nul
 
 const FINESSE_WEAPONS = ["rapier", "shortsword", "dagger", "scimitar", "whip"];
 const RANGED_WEAPONS = ["longbow", "shortbow", "crossbow"];
+const THROWN_WEAPONS = ["handaxe", "javelin", "dagger", "spear", "trident", "dart"];
+const REACH_WEAPONS = ["halberd", "pike", "glaive", "whip", "lance"];
+const HEAVY_WEAPONS = ["greataxe", "greatsword", "maul", "halberd", "pike", "glaive", "longbow"];
+const LIGHT_WEAPONS = ["shortsword", "handaxe", "dagger", "scimitar", "dart"];
+const LOADING_WEAPONS = ["crossbow"];
+const TWO_HANDED_WEAPONS = ["greataxe", "greatsword", "maul", "halberd", "pike", "glaive", "longbow", "shortbow", "crossbow"];
+const VERSATILE_WEAPONS = ["longsword", "battleaxe", "quarterstaff", "spear", "trident", "warhammer"];
+
+const WEAPON_RANGES: Record<string, string> = {
+  longbow: "150/600 ft",
+  shortbow: "80/320 ft",
+  crossbow: "80/320 ft",
+  dart: "20/60 ft",
+  handaxe: "20/60 ft",
+  javelin: "30/120 ft",
+  spear: "20/60 ft (thrown)",
+  dagger: "20/60 ft (thrown)",
+  trident: "20/60 ft (thrown)",
+};
+
+function getWeaponProperties(itemName: string): string[] {
+  const lower = itemName.toLowerCase();
+  const props: string[] = [];
+  if (FINESSE_WEAPONS.some((w) => lower.includes(w))) props.push("Finesse");
+  if (VERSATILE_WEAPONS.some((w) => lower.includes(w))) props.push("Versatile");
+  if (TWO_HANDED_WEAPONS.some((w) => lower.includes(w))) props.push("Two-Handed");
+  if (LIGHT_WEAPONS.some((w) => lower.includes(w))) props.push("Light");
+  if (HEAVY_WEAPONS.some((w) => lower.includes(w))) props.push("Heavy");
+  if (THROWN_WEAPONS.some((w) => lower.includes(w))) props.push("Thrown");
+  if (REACH_WEAPONS.some((w) => lower.includes(w))) props.push("Reach");
+  if (LOADING_WEAPONS.some((w) => lower.includes(w))) props.push("Loading");
+  return props;
+}
+
+function getWeaponRange(itemName: string): string {
+  const lower = itemName.toLowerCase();
+  for (const [weapon, range] of Object.entries(WEAPON_RANGES)) {
+    if (lower.includes(weapon)) return range;
+  }
+  if (REACH_WEAPONS.some((w) => lower.includes(w))) return "Melee 10 ft";
+  return "Melee 5 ft";
+}
+
+function getWeaponWeight(itemName: string): string {
+  const lower = itemName.toLowerCase();
+  if (HEAVY_WEAPONS.some((w) => lower.includes(w))) return "Heavy";
+  if (LIGHT_WEAPONS.some((w) => lower.includes(w))) return "Light";
+  return "Medium";
+}
 
 function useDexForAttack(itemName: string): boolean {
   const lower = itemName.toLowerCase();
@@ -649,6 +698,30 @@ export function CharacterSheet({ onClose }: Props) {
     .filter(Boolean) as { name: string; atkBonus: string; damage: string; type: string }[];
 
   const hpPercent = Math.round((character.hp / character.maxHp) * 100);
+
+  // Helper to render weapon stats panel for an item (returns null if not a weapon)
+  const renderWeaponStats = (itemName: string) => {
+    const wInfo = getWeaponInfo(itemName);
+    if (!wInfo) return null;
+    const usesDex = useDexForAttack(itemName);
+    const atkAbility = usesDex ? character.abilityScores.dexterity : character.abilityScores.strength;
+    const atkMod = abilityMod(atkAbility) + profBonus;
+    const dmgMod = abilityMod(atkAbility);
+    const props = getWeaponProperties(itemName);
+    const range = getWeaponRange(itemName);
+    const weight = getWeaponWeight(itemName);
+    const statLine = { fontSize: 10, color: C.parchmentMuted, lineHeight: 1.8 } as const;
+    const labelStyle = { color: C.goldMuted, fontWeight: 600 } as const;
+    return (
+      <>
+        <div style={statLine}><span style={labelStyle}>Attack Bonus: </span><span style={{ color: C.gold, fontFamily: "monospace" }}>{fmtMod(atkMod)}</span></div>
+        <div style={statLine}><span style={labelStyle}>Damage: </span><span style={{ fontFamily: "monospace" }}>{wInfo.damage}{dmgMod >= 0 ? "+" : ""}{dmgMod} {wInfo.type}</span></div>
+        <div style={statLine}><span style={labelStyle}>Range: </span>{range}</div>
+        {props.length > 0 && <div style={statLine}><span style={labelStyle}>Properties: </span>{props.join(", ")}</div>}
+        <div style={statLine}><span style={labelStyle}>Weight: </span>{weight}</div>
+      </>
+    );
+  };
 
   return (
     <div
@@ -810,8 +883,7 @@ export function CharacterSheet({ onClose }: Props) {
               <DndTooltip text="Feet you can move per turn. Can be split before and after your action.">
                 <div style={{ textAlign: "center", background: C.sectionBg, borderRadius: 8, padding: "12px 0", border: `1px solid ${C.goldBorder}` }}>
                   <div style={{ fontSize: 10, color: C.goldMuted, fontFamily: headerFont, fontVariant: "small-caps", letterSpacing: "0.1em" }}>Speed</div>
-                  <div style={{ fontSize: 30, fontWeight: 900, color: C.parchment, fontFamily: headerFont }}>{speed}</div>
-                  <div style={{ fontSize: 10, color: C.goldMuted }}>ft</div>
+                  <div style={{ fontSize: 30, fontWeight: 900, color: C.parchment, fontFamily: headerFont }}>{speed} <span style={{ fontSize: 12, color: C.goldMuted, fontWeight: 400 }}>ft</span></div>
                 </div>
               </DndTooltip>
             </div>
@@ -913,6 +985,7 @@ export function CharacterSheet({ onClose }: Props) {
                         {selectedItem === item && (
                           <div style={{ margin: "4px 4px 0", padding: 8, background: "rgba(201,162,39,0.05)", borderRadius: 4, fontSize: 10, color: C.parchmentMuted, border: `1px solid ${C.goldBorder}` }}>
                             <div>{info?.description ?? "A mysterious item."}</div>
+                            {renderWeaponStats(item)}
                             {isMagic && isIdentified && info?.magicalProperties && (
                               <div style={{ marginTop: 4, color: C.purple, fontWeight: 600 }}>{info.magicalProperties}</div>
                             )}
@@ -964,6 +1037,7 @@ export function CharacterSheet({ onClose }: Props) {
                         {selectedItem === item && (
                           <div style={{ margin: "4px 4px 0", padding: 8, background: "rgba(201,162,39,0.05)", borderRadius: 4, fontSize: 10, color: C.parchmentMuted, border: `1px solid ${C.goldBorder}` }}>
                             <div>{info?.description ?? "A mysterious item."}</div>
+                            {renderWeaponStats(item)}
                             {isMagic && isIdentified && info?.magicalProperties && (
                               <div style={{ marginTop: 4, color: C.purple, fontWeight: 600 }}>{info.magicalProperties}</div>
                             )}
