@@ -5,6 +5,7 @@ import type { ChatMessage as ChatMessageType } from "@/types/game";
 import type { DiceBreakdown } from "@/lib/combat-engine";
 import type { RollResult } from "@/types/world";
 import { useLanguageStore } from "@/stores/language-store";
+import { useCharacterStore } from "@/stores/character-store";
 
 const DM_AVATAR_URL = "/.netlify/functions/proxy-portrait?prompt=dragon%20eye%20close%20up%20perfectly%20centered%20slit%20pupil%20gold%20iris%20glowing%20arcane%20dark%20fantasy%20square%20portrait%20symmetrical&seed=666&width=128&height=128";
 
@@ -572,23 +573,36 @@ function getResultLabel(
   }
   // Skill check / save / attack from rollResult
   if (!roll) return { text: "", color: "#6b6b6b" };
-  const dcStr = roll.dc != null ? ` vs DC ${roll.dc}` : "";
-  if (roll.rolled === 20) return { text: `Roll: ${roll.total}${dcStr} — Critical Success`, color: "#fbbf24" };
-  if (roll.rolled === 1) return { text: `Roll: ${roll.total}${dcStr} — Critical Failure`, color: "#ef4444" };
-  if (roll.type === "attack") {
+  const isAttack = roll.type === "attack";
+  const targetLabel = isAttack ? "AC" : "DC";
+  const targetStr = roll.dc != null ? ` vs ${targetLabel} ${roll.dc}` : "";
+  if (roll.rolled === 20) return { text: `Roll: ${roll.total}${targetStr} — Critical Success`, color: "#fbbf24" };
+  if (roll.rolled === 1) return { text: `Roll: ${roll.total}${targetStr} — Critical Failure`, color: "#ef4444" };
+  if (isAttack) {
     return roll.success
-      ? { text: `Roll: ${roll.total}${dcStr} — Hit`, color: "#c9a227" }
-      : { text: `Roll: ${roll.total}${dcStr} — Miss`, color: "#6b6b6b" };
+      ? { text: `Roll: ${roll.total}${targetStr} — Hit`, color: "#c9a227" }
+      : { text: `Roll: ${roll.total}${targetStr} — Miss`, color: "#6b6b6b" };
   }
   return roll.success
-    ? { text: `Roll: ${roll.total}${dcStr} — Success`, color: "#c9a227" }
-    : { text: `Roll: ${roll.total}${dcStr} — Failure`, color: "#6b6b6b" };
+    ? { text: `Roll: ${roll.total}${targetStr} — Success`, color: "#c9a227" }
+    : { text: `Roll: ${roll.total}${targetStr} — Failure`, color: "#6b6b6b" };
 }
+
+// ── Blood drop damage indicator style ────────────────────────────
+
+const damageLineStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: "#cc2200",
+  fontFamily: "monospace",
+  padding: "2px 0",
+  lineHeight: 1.5,
+};
 
 /**
  * Three-step animated dice roll reveal:
  * Step 1 (0ms): "🎲 Rolling for X…" (italic, centered)
  * Step 2 (+400ms): "Roll: N vs DC/AC — result" (gold/gray/red, centered)
+ *    + blood drop damage lines for hits
  * Step 3 (+800ms): DM narrative + combat card (normal typewriter)
  */
 function SteppedRollReveal({
@@ -602,6 +616,7 @@ function SteppedRollReveal({
 }) {
   const [step, setStep] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const characterName = useCharacterStore((s) => s.character.name);
 
   useEffect(() => {
     // Step 0 → 1: show roll announcement immediately, then after 400ms show result
@@ -621,6 +636,21 @@ function SteppedRollReveal({
   const rollLabel = getRollLabel(rollResult, db);
   const result = getResultLabel(rollResult, db);
 
+  // Build damage indicator lines
+  const damageLines: { text: string }[] = [];
+  if (db) {
+    const enemyName = combatResult?.enemyName ?? "Enemy";
+    // Player hits enemy
+    if (db.playerAttackRoll?.hit && db.playerDamageRoll && db.playerDamageRoll.finalDamage > 0) {
+      damageLines.push({ text: `🩸 ${characterName} hits ${enemyName} for ${db.playerDamageRoll.finalDamage} HP` });
+    }
+    // Enemy hits player
+    if (db.enemyAttackRoll?.hit && db.enemyDamageRoll && db.enemyDamageRoll.total > 0) {
+      const atkName = db.enemyAttackRoll.attackName ? `${enemyName}` : enemyName;
+      damageLines.push({ text: `🩸 ${atkName} hits ${characterName} for ${db.enemyDamageRoll.total} HP` });
+    }
+  }
+
   return (
     <div>
       {/* Step 1: Rolling announcement */}
@@ -629,11 +659,16 @@ function SteppedRollReveal({
           <span role="img" aria-label="dice">🎲</span> {rollLabel}
         </div>
       )}
-      {/* Step 2: Roll result */}
+      {/* Step 2: Roll result + damage indicators */}
       {step >= 2 && (
-        <div style={{ ...rollLineBase, color: result.color, fontWeight: 700 }}>
-          {result.text}
-        </div>
+        <>
+          <div style={{ ...rollLineBase, color: result.color, fontWeight: 700 }}>
+            {result.text}
+          </div>
+          {damageLines.map((line, i) => (
+            <div key={i} style={damageLineStyle}>{line.text}</div>
+          ))}
+        </>
       )}
       {/* Step 3: DM narrative + combat card */}
       {step >= 3 && (
