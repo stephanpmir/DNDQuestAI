@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage as ChatMessageType } from "@/types/game";
 import type { DiceBreakdown } from "@/lib/combat-engine";
-import { DiceRollDisplay } from "./dice-roll-display";
+import type { RollResult } from "@/types/world";
 import { useLanguageStore } from "@/stores/language-store";
 
 const DM_AVATAR_URL = "/.netlify/functions/proxy-portrait?prompt=dragon%20eye%20close%20up%20perfectly%20centered%20slit%20pupil%20gold%20iris%20glowing%20arcane%20dark%20fantasy%20square%20portrait%20symmetrical&seed=666&width=128&height=128";
@@ -107,9 +107,13 @@ export function ChatMessage({ message, avatarUrl, onSendMessage, onCheckRoll, di
   const hasKarmaChange = message.karmaChange !== undefined && message.karmaChange !== 0;
   const hasFameChange = message.fameChange !== undefined && message.fameChange !== 0;
 
+  // Determine if we have a roll to animate
+  const hasRoll = !!message.rollResult;
+  const hasCombatRoll = !!message.combatResult?.diceBreakdown?.playerAttackRoll;
+  const hasSteppedRoll = hasRoll || hasCombatRoll;
+
   return (
     <div className="space-y-0">
-      {message.rollResult && <DiceRollDisplay roll={message.rollResult} />}
       <div className="flex gap-3 justify-start">
         {dmAvatarError ? (
           <div
@@ -142,8 +146,16 @@ export function ChatMessage({ message, avatarUrl, onSendMessage, onCheckRoll, di
           {message.sceneImagePrompt && (
             <SceneImage prompt={message.sceneImagePrompt} seed={message.timestamp % 1000000} />
           )}
-          <TypewriterText text={message.narrative} />
-          {message.combatResult && (
+          {hasSteppedRoll ? (
+            <SteppedRollReveal
+              rollResult={message.rollResult}
+              combatResult={message.combatResult}
+              narrative={message.narrative}
+            />
+          ) : (
+            <TypewriterText text={message.narrative} />
+          )}
+          {!hasCombatRoll && message.combatResult && (
             <CombatRoundCard combatResult={message.combatResult} />
           )}
           {message.checkRequired && onCheckRoll && (
@@ -518,6 +530,120 @@ function SkillCheckRoll({
       >
         {rolled ? "Rolled" : "Roll d20"}
       </button>
+    </div>
+  );
+}
+
+// ── Stepped roll line styles ────────────────────────────────────
+
+const rollLineBase: React.CSSProperties = {
+  textAlign: "center",
+  fontSize: 13,
+  fontFamily: "'Cinzel', monospace",
+  letterSpacing: "0.03em",
+  padding: "4px 0",
+  lineHeight: 1.6,
+};
+
+function getRollLabel(roll: RollResult | undefined, combatDb: DiceBreakdown | undefined): string {
+  if (combatDb?.playerAttackRoll) {
+    return "Rolling for attack\u2026";
+  }
+  if (!roll) return "Rolling\u2026";
+  if (roll.type === "attack") return "Rolling for attack\u2026";
+  if (roll.type === "damage") return "Rolling for damage\u2026";
+  if (roll.type === "save") return `Rolling for saving throw\u2026`;
+  if (roll.reason) return `Rolling for ${roll.reason}\u2026`;
+  if (roll.ability) return `Rolling for ${roll.ability}\u2026`;
+  return "Rolling\u2026";
+}
+
+function getResultLabel(
+  roll: RollResult | undefined,
+  combatDb: DiceBreakdown | undefined,
+): { text: string; color: string } {
+  // Combat attack roll
+  if (combatDb?.playerAttackRoll) {
+    const atk = combatDb.playerAttackRoll;
+    if (atk.d20 === 20) return { text: `Roll: ${atk.total} vs AC ${atk.targetAC} — Critical Success`, color: "#fbbf24" };
+    if (atk.d20 === 1) return { text: `Roll: ${atk.total} vs AC ${atk.targetAC} — Critical Failure`, color: "#ef4444" };
+    if (atk.hit) return { text: `Roll: ${atk.total} vs AC ${atk.targetAC} — Hit`, color: "#c9a227" };
+    return { text: `Roll: ${atk.total} vs AC ${atk.targetAC} — Miss`, color: "#6b6b6b" };
+  }
+  // Skill check / save / attack from rollResult
+  if (!roll) return { text: "", color: "#6b6b6b" };
+  const dcStr = roll.dc != null ? ` vs DC ${roll.dc}` : "";
+  if (roll.rolled === 20) return { text: `Roll: ${roll.total}${dcStr} — Critical Success`, color: "#fbbf24" };
+  if (roll.rolled === 1) return { text: `Roll: ${roll.total}${dcStr} — Critical Failure`, color: "#ef4444" };
+  if (roll.type === "attack") {
+    return roll.success
+      ? { text: `Roll: ${roll.total}${dcStr} — Hit`, color: "#c9a227" }
+      : { text: `Roll: ${roll.total}${dcStr} — Miss`, color: "#6b6b6b" };
+  }
+  return roll.success
+    ? { text: `Roll: ${roll.total}${dcStr} — Success`, color: "#c9a227" }
+    : { text: `Roll: ${roll.total}${dcStr} — Failure`, color: "#6b6b6b" };
+}
+
+/**
+ * Three-step animated dice roll reveal:
+ * Step 1 (0ms): "🎲 Rolling for X…" (italic, centered)
+ * Step 2 (+400ms): "Roll: N vs DC/AC — result" (gold/gray/red, centered)
+ * Step 3 (+800ms): DM narrative + combat card (normal typewriter)
+ */
+function SteppedRollReveal({
+  rollResult,
+  combatResult,
+  narrative,
+}: {
+  rollResult?: RollResult;
+  combatResult?: ChatMessageType["combatResult"];
+  narrative: string;
+}) {
+  const [step, setStep] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    // Step 0 → 1: show roll announcement immediately, then after 400ms show result
+    setStep(1);
+    timerRef.current = setTimeout(() => {
+      setStep(2);
+      timerRef.current = setTimeout(() => {
+        setStep(3);
+      }, 400);
+    }, 400);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const db = combatResult?.diceBreakdown;
+  const rollLabel = getRollLabel(rollResult, db);
+  const result = getResultLabel(rollResult, db);
+
+  return (
+    <div>
+      {/* Step 1: Rolling announcement */}
+      {step >= 1 && (
+        <div style={{ ...rollLineBase, color: "#8a8a8a", fontStyle: "italic", opacity: step === 1 ? 1 : 0.5 }}>
+          <span role="img" aria-label="dice">🎲</span> {rollLabel}
+        </div>
+      )}
+      {/* Step 2: Roll result */}
+      {step >= 2 && (
+        <div style={{ ...rollLineBase, color: result.color, fontWeight: 700 }}>
+          {result.text}
+        </div>
+      )}
+      {/* Step 3: DM narrative + combat card */}
+      {step >= 3 && (
+        <>
+          <TypewriterText text={narrative} />
+          {combatResult && (
+            <CombatRoundCard combatResult={combatResult} />
+          )}
+        </>
+      )}
     </div>
   );
 }
