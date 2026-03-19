@@ -14,7 +14,7 @@ import { computeNpcDisposition } from "@/lib/karma";
 import { runGuardInvestigations, shouldGuardsConfront } from "@/lib/crimes";
 import type { Crime } from "@/lib/crimes";
 import { callWithCascade } from "@/lib/ai/providers";
-import { initCombat, resolveCombatTurn } from "@/lib/combat-engine";
+import { initCombat, resolveCombatTurn, detectAttackTarget, findMonster } from "@/lib/combat-engine";
 import type { CombatState, CombatRoundResult } from "@/lib/combat-engine";
 import { detectRulesQuestion, getRulesAnswer } from "@/lib/rules-detector";
 
@@ -95,12 +95,29 @@ export async function POST(request: Request) {
 
     const preResult = preGenerate(pipelineInput);
 
-    // ── COMBAT ROUND RESOLUTION ───────────────────────────────────
-    // If combat is active, resolve the round BEFORE calling the LLM
-    // so the engine outcome reflects combat results for narration.
+    // ── PRE-LLM ATTACK DETECTION ──────────────────────────────────
+    // If the player's action contains an attack verb + target name and
+    // no combat is active, look up the target in the monster DB and
+    // auto-initiate combat so the engine resolves with real stats.
     let combatResult: CombatRoundResult | null = null;
     let activeCombatState: CombatState | null = body.combatState ?? null;
 
+    if (!activeCombatState?.active) {
+      const attackTarget = detectAttackTarget(message);
+      if (attackTarget) {
+        const monster = findMonster(attackTarget, character.level);
+        if (monster) {
+          console.log(`[dm-route] Pre-LLM attack detected: target="${attackTarget}" → monster="${monster.name}" AC=${monster.ac} HP=${monster.hp}`);
+          activeCombatState = initCombat(monster.name, character);
+        } else {
+          console.log(`[dm-route] Pre-LLM attack detected: target="${attackTarget}" → no monster found, deferring to LLM`);
+        }
+      }
+    }
+
+    // ── COMBAT ROUND RESOLUTION ───────────────────────────────────
+    // If combat is active, resolve the round BEFORE calling the LLM
+    // so the engine outcome reflects combat results for narration.
     if (activeCombatState?.active) {
       combatResult = resolveCombatTurn(message, character, activeCombatState);
       activeCombatState = combatResult.combatState;
@@ -119,6 +136,17 @@ export async function POST(request: Request) {
           eo.itemsGained.push(...combatResult.itemsDropped);
         }
       }
+
+      // Detailed combat engine log
+      const bd = combatResult.diceBreakdown;
+      console.log(
+        `COMBAT ENGINE: target=[${activeCombatState.enemyName}] AC=[${activeCombatState.enemyAc}] HP=[${activeCombatState.enemyHp}/${activeCombatState.enemyMaxHp}]` +
+        ` playerRoll=[${bd.playerAttackRoll?.d20 ?? "-"}+${bd.playerAttackRoll?.modifier ?? 0}=${bd.playerAttackRoll?.total ?? "-"}]` +
+        ` hit=[${bd.playerAttackRoll?.hit ?? false}] damage=[${combatResult.playerDamage}]` +
+        ` enemyRoll=[${bd.enemyAttackRoll?.d20 ?? "-"}+${bd.enemyAttackRoll?.modifier ?? 0}=${bd.enemyAttackRoll?.total ?? "-"}]` +
+        ` enemyHit=[${bd.enemyAttackRoll?.hit ?? false}] enemyDamage=[${combatResult.enemyDamage}]` +
+        ` round=[${activeCombatState.roundNumber}] result=[${combatResult.combatEndReason}]`
+      );
     }
 
     // ── PIPELINE STEP 5: LLM Generation ───────────────────────────

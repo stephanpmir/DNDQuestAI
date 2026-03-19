@@ -224,7 +224,7 @@ function parseEnemyName(combatStartValue: string): string {
  * 2. Partial match — find monsters whose name contains the search term
  * 3. Fall back to a CR-appropriate random monster
  */
-function findMonster(name: string, playerLevel: number): Monster | null {
+export function findMonster(name: string, playerLevel: number): Monster | null {
   // Exact match
   const exact = getMonsterByName(name);
   if (exact) return exact;
@@ -1351,6 +1351,50 @@ export function detectCombatAction(playerInput: string): CombatAction {
   if (fleeWords.some(w => lower.includes(w))) return "flee";
   if (attackWords.some(w => lower.includes(w))) return "attack";
   return "other";
+}
+
+/**
+ * Detect if the player is attacking a named target and extract the target name.
+ * Returns the target name or null if no attack target detected.
+ *
+ * Handles patterns like:
+ *   "I attack the goblin"
+ *   "strike the dire wolf"
+ *   "shoot an arrow at the bandit captain"
+ *   "cast fireball at the troll"
+ *   "slash the skeleton with my sword"
+ */
+export function detectAttackTarget(playerInput: string): string | null {
+  const lower = playerInput.toLowerCase().trim();
+
+  // Attack verb patterns — verb followed by target
+  const patterns = [
+    // "attack/strike/hit/stab/slash/shoot/bash/smite/cleave the <target>"
+    /\b(?:attack|strike|hit|stab|slash|shoot|bash|smite|cleave|punch|kick)\s+(?:the\s+|a\s+|an\s+)?(.+?)(?:\s+with\b|\s+using\b|[.!?,]|$)/i,
+    // "cast <spell> at the <target>"  or  "cast at the <target>"
+    /\bcast\b.*?\bat\s+(?:the\s+|a\s+|an\s+)?(.+?)(?:\s+with\b|\s+using\b|[.!?,]|$)/i,
+    // "fire at the <target>"  or  "throw <weapon> at the <target>"
+    /\b(?:fire|throw|hurl|launch)\b.*?\bat\s+(?:the\s+|a\s+|an\s+)?(.+?)(?:\s+with\b|\s+using\b|[.!?,]|$)/i,
+    // "swing at the <target>"
+    /\bswing\b.*?\bat\s+(?:the\s+|a\s+|an\s+)?(.+?)(?:\s+with\b|\s+using\b|[.!?,]|$)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = lower.match(pattern);
+    if (match && match[1]) {
+      // Clean up the target name
+      let target = match[1].trim();
+      // Remove trailing prepositions and common suffixes
+      target = target.replace(/\s+(?:with|using|and|then|before|after|while|in|on|from|to).*$/i, "").trim();
+      // Remove trailing punctuation
+      target = target.replace(/[.!?,;:]+$/, "").trim();
+      if (target.length >= 2 && target.length <= 50) {
+        return target;
+      }
+    }
+  }
+
+  return null;
 }
 
 /**
