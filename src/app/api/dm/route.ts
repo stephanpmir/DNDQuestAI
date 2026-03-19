@@ -14,7 +14,7 @@ import { computeNpcDisposition } from "@/lib/karma";
 import { runGuardInvestigations, shouldGuardsConfront } from "@/lib/crimes";
 import type { Crime } from "@/lib/crimes";
 import { callWithCascade } from "@/lib/ai/providers";
-import { initCombat, resolveCombatTurn, detectAttackTarget, findMonster } from "@/lib/combat-engine";
+import { initCombat, resolveCombatTurn, detectAttackTarget, findMonster, resolveDeathSave } from "@/lib/combat-engine";
 import type { CombatState, CombatRoundResult } from "@/lib/combat-engine";
 import { detectRulesQuestion, getRulesAnswer } from "@/lib/rules-detector";
 
@@ -68,6 +68,43 @@ export async function POST(request: Request) {
         narrative: rulesAnswer,
         rulesAnswer: true,
         gameStateUpdate: {},
+      });
+    }
+
+    // ── Unconscious gate — death saves only ────────────────────────
+    // When the player is unconscious at 0 HP, skip the entire pipeline.
+    // Run only a death saving throw and return immediately.
+    if (character.isUnconscious && character.hp <= 0 && !character.isDead) {
+      const ds = resolveDeathSave(
+        character.deathSaves?.successes ?? 0,
+        character.deathSaves?.failures ?? 0,
+      );
+      console.log(`[dm-route] DEATH SAVE: roll=${ds.roll} type=${ds.type} successes=${ds.totalSuccesses} failures=${ds.totalFailures} stabilized=${ds.stabilized} revived=${ds.revived} died=${ds.died}`);
+
+      let narrative: string;
+      if (ds.revived) {
+        narrative = "You are unconscious. Death saving throw: Natural 20! Your eyes snap open as life floods back into your body.";
+      } else if (ds.died) {
+        narrative = "You are unconscious. Death saving throw: failure. The last flicker of life fades from your body.";
+      } else if (ds.stabilized) {
+        narrative = "You are unconscious. Death saving throw: success. Your breathing steadies — you have stabilized.";
+      } else if (ds.type === "nat1") {
+        narrative = `You are unconscious. Death saving throw: Natural 1 — two failures. (${ds.totalSuccesses}S/${ds.totalFailures}F)`;
+      } else if (ds.type === "success") {
+        narrative = `You are unconscious. Death saving throw: ${ds.roll} — success. (${ds.totalSuccesses}S/${ds.totalFailures}F)`;
+      } else {
+        narrative = `You are unconscious. Death saving throw: ${ds.roll} — failure. (${ds.totalSuccesses}S/${ds.totalFailures}F)`;
+      }
+
+      return NextResponse.json({
+        narrative,
+        gameStateUpdate: {
+          hpChange: ds.revived ? 1 : undefined,
+        },
+        engineOutcome: {
+          deathSaveResult: ds.type,
+        },
+        combatState: body.combatState ?? null,
       });
     }
 
@@ -136,6 +173,9 @@ export async function POST(request: Request) {
           eo.itemsGained.push(...combatResult.itemsDropped);
         }
       }
+
+      // HP writeback trace
+      console.log(`HP WRITE: before=[${character.hp}] delta=[${combatResult.playerHpChange}] after=[${Math.max(0, Math.min(character.maxHp, character.hp + combatResult.playerHpChange))}] (server-side combat result)`);
 
       // Detailed combat engine log
       const bd = combatResult.diceBreakdown;

@@ -591,9 +591,11 @@ function getResultLabel(
 // ── Blood drop damage indicator style ────────────────────────────
 
 const damageLineStyle: React.CSSProperties = {
-  fontSize: 12,
+  textAlign: "center",
+  fontSize: 13,
   color: "#cc2200",
   fontFamily: "monospace",
+  fontWeight: 600,
   padding: "2px 0",
   lineHeight: 1.5,
 };
@@ -641,14 +643,25 @@ function SteppedRollReveal({
   if (db) {
     const enemyName = combatResult?.enemyName ?? "Enemy";
     // Player hits enemy
-    if (db.playerAttackRoll?.hit && db.playerDamageRoll && db.playerDamageRoll.finalDamage > 0) {
-      damageLines.push({ text: `🩸 ${characterName} hits ${enemyName} for ${db.playerDamageRoll.finalDamage} HP` });
+    if (db.playerAttackRoll?.hit && db.playerDamageRoll) {
+      const finalDmg = db.playerDamageRoll.finalDamage;
+      console.log(`BLOOD DROP: ${characterName} hits ${enemyName} for ${finalDmg}`);
+      if (finalDmg > 0) {
+        damageLines.push({ text: `🩸 ${characterName} hits ${enemyName} for ${finalDmg} HP` });
+      }
     }
     // Enemy hits player
-    if (db.enemyAttackRoll?.hit && db.enemyDamageRoll && db.enemyDamageRoll.total > 0) {
-      const atkName = db.enemyAttackRoll.attackName ? `${enemyName}` : enemyName;
-      damageLines.push({ text: `🩸 ${atkName} hits ${characterName} for ${db.enemyDamageRoll.total} HP` });
+    if (db.enemyAttackRoll?.hit && db.enemyDamageRoll) {
+      const enemyDmg = db.enemyDamageRoll.total;
+      console.log(`BLOOD DROP: ${enemyName} hits ${characterName} for ${enemyDmg}`);
+      if (enemyDmg > 0) {
+        damageLines.push({ text: `🩸 ${enemyName} hits ${characterName} for ${enemyDmg} HP` });
+      }
     }
+  }
+  // Log for debugging — confirms whether damage lines exist at render time
+  if (damageLines.length > 0) {
+    console.log(`BLOOD DROP RENDER: ${damageLines.length} lines`, damageLines.map(l => l.text));
   }
 
   return (

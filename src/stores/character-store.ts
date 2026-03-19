@@ -399,7 +399,9 @@ export const useCharacterStore = create<CharacterStore>()(
 
           // HP changes
           if (updates.hpChange) {
+            console.log(`HP WRITE: before=[${c.hp}] delta=[${updates.hpChange}] max=[${c.maxHp}]`);
             c.hp = Math.max(0, Math.min(c.maxHp, c.hp + updates.hpChange));
+            console.log(`HP WRITE: after=[${c.hp}] unconscious=[${c.isUnconscious}]`);
 
             // D&D death rules: 0 HP = unconscious
             if (c.hp <= 0) {
@@ -407,9 +409,11 @@ export const useCharacterStore = create<CharacterStore>()(
               if (c.race === "Half-Orc" && !c.isUnconscious && !c.relentlessUsed) {
                 c.hp = 1;
                 c.relentlessUsed = true;
+                console.log(`HP WRITE: Half-Orc Relentless Endurance → hp=1`);
               } else {
                 c.hp = 0;
                 c.isUnconscious = true;
+                console.log(`HP WRITE: knocked unconscious at 0 HP`);
               }
             }
 
@@ -417,6 +421,7 @@ export const useCharacterStore = create<CharacterStore>()(
             if (c.isUnconscious && updates.hpChange > 0 && c.hp > 0) {
               c.isUnconscious = false;
               c.deathSaves = { successes: 0, failures: 0 };
+              console.log(`HP WRITE: healed from unconscious, hp=${c.hp}`);
             }
           }
 
@@ -483,14 +488,16 @@ export const useCharacterStore = create<CharacterStore>()(
 
           // Death save tracking
           if (updates.deathSaveResult) {
+            console.log(`DEATH SAVE: type=${updates.deathSaveResult} before=${c.deathSaves.successes}S/${c.deathSaves.failures}F`);
+
             if (updates.deathSaveResult === "nat20") {
               c.deathSaves = { successes: 0, failures: 0 };
+              c.isUnconscious = false;
               // HP is already handled above via hpChange
             } else if (updates.deathSaveResult === "nat1") {
               c.deathSaves = { ...c.deathSaves, failures: Math.min(3, c.deathSaves.failures + 2) };
             } else if (updates.deathSaveResult === "success") {
               c.deathSaves = { ...c.deathSaves, successes: Math.min(3, c.deathSaves.successes + 1) };
-              // 3 successes = stabilize at 0 HP (still unconscious but no longer dying)
             } else if (updates.deathSaveResult === "failure") {
               c.deathSaves = { ...c.deathSaves, failures: Math.min(3, c.deathSaves.failures + 1) };
             }
@@ -498,6 +505,7 @@ export const useCharacterStore = create<CharacterStore>()(
             // 3 failures = character is dead
             if (c.deathSaves.failures >= 3) {
               c.isDead = true;
+              console.log(`DEATH SAVE: CHARACTER DIED — 3 failures reached`);
             }
 
             // 3 successes = stabilized, regain 1 HP and wake up
@@ -505,7 +513,10 @@ export const useCharacterStore = create<CharacterStore>()(
               c.deathSaves = { successes: 0, failures: 0 };
               c.hp = 1;
               c.isUnconscious = false;
+              console.log(`DEATH SAVE: STABILIZED — 3 successes, waking up at 1 HP`);
             }
+
+            console.log(`DEATH SAVE: after=${c.deathSaves.successes}S/${c.deathSaves.failures}F unconscious=${c.isUnconscious} isDead=${c.isDead}`);
           }
 
           // XP and level-up
