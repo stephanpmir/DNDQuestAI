@@ -44,6 +44,7 @@ export function GameView() {
     groundItems,
     addGroundItems,
     removeGroundItem,
+    removeMessage,
   } = useGameStore();
 
   const {
@@ -92,6 +93,7 @@ export function GameView() {
     async (message: string, showUserMessage: boolean) => {
       setLoading(true);
 
+      let userMsgId: string | null = null;
       if (showUserMessage) {
         const userMsg: ChatMessageType = {
           id: generateId(),
@@ -99,6 +101,7 @@ export function GameView() {
           narrative: message,
           timestamp: Date.now(),
         };
+        userMsgId = userMsg.id;
         addMessage(userMsg);
       }
       incrementTurn();
@@ -364,12 +367,14 @@ export function GameView() {
         };
         addMessage(dmMsg);
       } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Unknown error";
+        // Remove the orphaned user bubble so it doesn't persist
+        if (userMsgId) {
+          useGameStore.getState().removeMessage(userMsgId);
+        }
         addMessage({
           id: generateId(),
           role: "assistant",
-          narrative: t("game.errorMessage"),
+          narrative: "The winds of fate pause for a moment\u2026 please try again.",
           timestamp: Date.now(),
         });
       } finally {

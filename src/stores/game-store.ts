@@ -17,6 +17,7 @@ interface GameStore {
   groundItems: string[];
 
   addMessage: (msg: ChatMessage) => void;
+  removeMessage: (id: string) => void;
   setLocation: (location: string) => void;
   addQuest: (quest: string) => void;
   completeQuest: (quest: string) => void;
@@ -45,6 +46,9 @@ export const useGameStore = create<GameStore>()(
 
       addMessage: (msg) =>
         set((s) => ({ messages: [...s.messages, msg] })),
+
+      removeMessage: (id) =>
+        set((s) => ({ messages: s.messages.filter((m) => m.id !== id) })),
 
       setLocation: (location) => set({ location }),
 
