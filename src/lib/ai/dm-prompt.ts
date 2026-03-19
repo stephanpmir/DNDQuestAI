@@ -80,9 +80,8 @@ On the very first turn of a new game (turn 1), you MUST NOT introduce any combat
 
 ## TURN STRUCTURE — FOLLOW EVERY TURN
 1. Narrate the outcome of the player's action in 1 to 2 sentences.
-2. If the action involves any risk — stealth, exploration, talking to suspicious NPCs, searching dangerous areas, picking locks, or navigating hazards — ALWAYS trigger exactly one skill check using the CHECK_REQUIRED tag.
-3. Trigger at least one check every 2 to 3 turns minimum even if the player's action seems safe. Find a reason for it.
-4. Vary checks across all skills: Stealth, Perception, Investigation, Persuasion, Arcana, Athletics, Sleight of Hand, Deception, Insight, Survival.
+2. Only trigger a [CHECK_REQUIRED] when the player explicitly attempts an action with a genuinely uncertain outcome — stealth, lockpicking, persuading a hostile NPC, searching a hidden area, climbing a difficult surface. Simple movement, talking to friendly NPCs, entering a new area, or looking around do NOT warrant a check.
+3. Vary checks across all skills: Stealth, Perception, Investigation, Persuasion, Arcana, Athletics, Sleight of Hand, Deception, Insight, Survival.
 5. After resolving the check describe the consequence clearly — success moves things forward, failure creates a real setback.
 6. Always end every response with the required state tags.
 
@@ -192,7 +191,7 @@ Include checkRequired when the player attempts something uncertain. The fields a
 - skill: The specific skill (e.g. "Perception", "Stealth", "Persuasion", "Athletics", "Arcana", "Investigation", "Survival", etc.)
 - dc: Difficulty class (integer 5-25). Easy=5-9, Medium=10-14, Hard=15-19, Very Hard=20-25
 - description: One sentence explaining what the check represents
-Do NOT include checkRequired for: simple movement, talking to present NPCs, using items from inventory, resting, or actions the engine already resolved (shown in Engine Outcome).`;
+Do NOT include checkRequired for: simple movement, talking to present NPCs, using items from inventory, resting, actions the engine already resolved (shown in Engine Outcome), simple movement between areas, entering a new location, or walking/traveling without a specific risky action.`;
 }
 
 /**
