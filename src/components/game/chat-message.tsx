@@ -394,7 +394,19 @@ function RollResultCard({
   );
 }
 
-/** Combat round card — displays attack rolls, damage, and enemy HP in a structured card. */
+/** Describe enemy condition using words instead of raw HP numbers. */
+function getEnemyConditionLabel(hp: number, maxHp: number): { text: string; color: string } {
+  if (hp <= 0) return { text: "Defeated", color: "#6b0000" };
+  const pct = hp / maxHp;
+  if (pct >= 1) return { text: "Uninjured", color: "#8a8a8a" };
+  if (pct >= 0.75) return { text: "Lightly wounded", color: "#c9a227" };
+  if (pct >= 0.5) return { text: "Wounded", color: "#d97706" };
+  if (pct >= 0.25) return { text: "Badly wounded", color: "#b91c1c" };
+  if (pct > 0) return { text: "On the verge of death", color: "#ef4444" };
+  return { text: "Defeated", color: "#6b0000" };
+}
+
+/** Combat round card — shows enemy condition and enemy attack roll. Player attack is already shown in the roll line above. */
 function CombatRoundCard({ combatResult }: { combatResult: NonNullable<ChatMessageType["combatResult"]> }) {
   const db = combatResult.diceBreakdown;
 
@@ -410,38 +422,17 @@ function CombatRoundCard({ combatResult }: { combatResult: NonNullable<ChatMessa
         {combatResult.enemyName ? `Combat — ${combatResult.enemyName}` : "Combat Round"}
       </div>
 
-      {/* Player attack */}
-      {db.playerAttackRoll && (
-        <div style={{ fontSize: 12, marginBottom: 4, color: db.playerAttackRoll.hit ? "#c9a227" : "#6b6b6b" }}>
-          <span style={{ fontWeight: 600 }}>Your Attack:</span>{" "}
-          d20({db.playerAttackRoll.d20}) + {db.playerAttackRoll.modifier} = {db.playerAttackRoll.total} vs AC {db.playerAttackRoll.targetAC}
-          {" — "}
-          <span style={{ fontWeight: 700, color: db.playerAttackRoll.crit ? "#c9a227" : db.playerAttackRoll.hit ? "#c9a227" : "#6b6b6b" }}>
-            {db.playerAttackRoll.crit ? "CRITICAL HIT!" : db.playerAttackRoll.hit ? "Hit" : "Miss"}
-          </span>
-        </div>
-      )}
-
-      {/* Player damage */}
-      {db.playerDamageRoll && db.playerAttackRoll?.hit && (
-        <div style={{ fontSize: 12, marginBottom: 4, color: "#c9a227" }}>
-          <span style={{ fontWeight: 600 }}>Damage Dealt:</span>{" "}
-          {db.playerDamageRoll.finalDamage} {db.playerDamageRoll.damageType}
-          {db.playerDamageRoll.resisted && <span style={{ color: "#8a8a8a" }}> (resisted)</span>}
-          {db.playerDamageRoll.immune && <span style={{ color: "#6b6b6b" }}> (immune!)</span>}
-        </div>
-      )}
-
-      {/* Enemy HP remaining */}
-      {combatResult.enemyHp !== undefined && combatResult.enemyMaxHp !== undefined && (
-        <div style={{ fontSize: 12, marginBottom: 4, color: "#e8d5b0" }}>
-          <span style={{ fontWeight: 600 }}>Enemy HP:</span>{" "}
-          <span style={{ color: combatResult.enemyHp <= 0 ? "#6b0000" : "#e8d5b0" }}>
-            {Math.max(0, combatResult.enemyHp)}/{combatResult.enemyMaxHp}
-          </span>
-          {combatResult.enemyHp <= 0 && <span style={{ color: "#c9a227", fontWeight: 700 }}> — DEFEATED</span>}
-        </div>
-      )}
+      {/* Enemy condition descriptor (no raw HP numbers) */}
+      {combatResult.enemyHp !== undefined && combatResult.enemyMaxHp !== undefined && (() => {
+        const condition = getEnemyConditionLabel(combatResult.enemyHp, combatResult.enemyMaxHp);
+        return (
+          <div style={{ fontSize: 12, marginBottom: 4, color: condition.color }}>
+            <span style={{ fontWeight: 600 }}>Condition:</span>{" "}
+            <span style={{ fontStyle: "italic" }}>{condition.text}</span>
+            {combatResult.enemyHp <= 0 && <span style={{ color: "#c9a227", fontWeight: 700 }}> — DEFEATED</span>}
+          </div>
+        );
+      })()}
 
       {/* Enemy attack */}
       {db.enemyAttackRoll && (
@@ -460,6 +451,15 @@ function CombatRoundCard({ combatResult }: { combatResult: NonNullable<ChatMessa
         <div style={{ fontSize: 12, marginBottom: 4, color: "#b91c1c" }}>
           <span style={{ fontWeight: 600 }}>Damage Taken:</span>{" "}
           {db.enemyDamageRoll.total} {db.enemyDamageRoll.damageType}
+        </div>
+      )}
+
+      {/* Initiative display (round 1 only) */}
+      {db.initiative && (
+        <div style={{ fontSize: 11, marginTop: 4, color: "#8a8a8a", fontStyle: "italic" }}>
+          Initiative: You {db.initiative.playerTotal} vs {combatResult.enemyName} {db.initiative.enemyTotal}
+          {" — "}
+          {db.initiative.playerTotal >= db.initiative.enemyTotal ? "You go first" : `${combatResult.enemyName} goes first`}
         </div>
       )}
 
@@ -666,6 +666,14 @@ function SteppedRollReveal({
 
   return (
     <div>
+      {/* Initiative display (round 1 only) */}
+      {db?.initiative && step >= 1 && (
+        <div style={{ ...rollLineBase, color: "#c9a227", fontWeight: 600, fontSize: 12, marginBottom: 4 }}>
+          Initiative: You rolled {db.initiative.playerTotal}, {combatResult?.enemyName ?? "Enemy"} rolled {db.initiative.enemyTotal}
+          {" — "}
+          {db.initiative.playerTotal >= db.initiative.enemyTotal ? "You go first!" : `${combatResult?.enemyName ?? "Enemy"} goes first!`}
+        </div>
+      )}
       {/* Step 1: Rolling announcement */}
       {step >= 1 && (
         <div style={{ ...rollLineBase, color: "#8a8a8a", fontStyle: "italic", opacity: step === 1 ? 1 : 0.5 }}>

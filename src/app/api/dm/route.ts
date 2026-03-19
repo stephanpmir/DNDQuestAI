@@ -14,7 +14,7 @@ import { computeNpcDisposition } from "@/lib/karma";
 import { runGuardInvestigations, shouldGuardsConfront } from "@/lib/crimes";
 import type { Crime } from "@/lib/crimes";
 import { callWithCascade } from "@/lib/ai/providers";
-import { initCombat, resolveCombatTurn, detectAttackTarget, findMonster, resolveDeathSave } from "@/lib/combat-engine";
+import { initCombat, resolveCombatTurn, detectAttackTarget, findMonster, createGenericNpc, resolveDeathSave } from "@/lib/combat-engine";
 import type { CombatState, CombatRoundResult } from "@/lib/combat-engine";
 import { detectRulesQuestion, getRulesAnswer } from "@/lib/rules-detector";
 
@@ -142,13 +142,9 @@ export async function POST(request: Request) {
     if (!activeCombatState?.active) {
       const attackTarget = detectAttackTarget(message);
       if (attackTarget) {
-        const monster = findMonster(attackTarget, character.level);
-        if (monster) {
-          console.log(`[dm-route] Pre-LLM attack detected: target="${attackTarget}" → monster="${monster.name}" AC=${monster.ac} HP=${monster.hp}`);
-          activeCombatState = initCombat(monster.name, character);
-        } else {
-          console.log(`[dm-route] Pre-LLM attack detected: target="${attackTarget}" → no monster found, deferring to LLM`);
-        }
+        console.log(`[dm-route] Pre-LLM attack detected: target="${attackTarget}"`);
+        // initCombat will use monster DB if found, otherwise create generic NPC
+        activeCombatState = initCombat(attackTarget, character);
       }
     }
 
@@ -221,6 +217,13 @@ export async function POST(request: Request) {
       const checkRollTag = message.match(/\[CHECK_ROLL:([^|]+)\|([^|]+)\|(\d+)\]/);
       if (checkRollTag) {
         userMessage = `I rolled a ${checkRollTag[1]} check (${checkRollTag[2]}).`;
+      }
+
+      // Truncate long player input to prevent cascade timeouts
+      const MAX_INPUT_LENGTH = 300;
+      if (userMessage.length > MAX_INPUT_LENGTH) {
+        console.log(`[dm-route] Truncating player input from ${userMessage.length} to ${MAX_INPUT_LENGTH} chars`);
+        userMessage = userMessage.slice(0, MAX_INPUT_LENGTH);
       }
 
       // Filter history to only valid LLM roles and cap token size

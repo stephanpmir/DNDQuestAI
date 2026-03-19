@@ -219,12 +219,12 @@ function parseEnemyName(combatStartValue: string): string {
 }
 
 /**
- * Try to find a monster by name, with fuzzy fallbacks.
+ * Try to find a monster by name. Only returns monsters that actually match.
+ * Never substitutes a random monster — if the name doesn't match, returns null.
  * 1. Exact match via getMonsterByName
  * 2. Partial match — find monsters whose name contains the search term
- * 3. Fall back to a CR-appropriate random monster
  */
-export function findMonster(name: string, playerLevel: number): Monster | null {
+export function findMonster(name: string, _playerLevel: number): Monster | null {
   // Exact match
   const exact = getMonsterByName(name);
   if (exact) return exact;
@@ -237,20 +237,33 @@ export function findMonster(name: string, playerLevel: number): Monster | null {
     }
   }
 
-  // CR-appropriate fallback
-  const targetCR = Math.max(0.25, Math.min(playerLevel, 5));
-  const crMonsters = getMonstersByCR(targetCR);
-  if (crMonsters.length > 0) {
-    return crMonsters[Math.floor(Math.random() * crMonsters.length)];
-  }
-
-  // Last resort: CR 1/4 monsters
-  const easyMonsters = getMonstersByCR(0.25);
-  if (easyMonsters.length > 0) {
-    return easyMonsters[Math.floor(Math.random() * easyMonsters.length)];
-  }
-
+  // No match found — do NOT substitute a random monster
   return null;
+}
+
+/**
+ * Create a generic Human NPC stat block for named NPCs not in the monster DB.
+ * AC 10, HP 8, Attack +2, Damage 1d4 bludgeoning.
+ */
+export function createGenericNpc(name: string): Monster {
+  return {
+    name,
+    cr: 0.125,
+    type: "humanoid",
+    size: "Medium",
+    alignment: "neutral",
+    hp: 8,
+    ac: 10,
+    speed: "30 ft.",
+    abilities: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 },
+    attacks: [{ name: "Unarmed Strike", attackBonus: 2, damageDice: "1d4", damageType: "bludgeoning", reach: "5 ft.", targets: "one target" }],
+    xpReward: 25,
+    damageResistances: [],
+    damageImmunities: [],
+    conditionImmunities: [],
+    senses: "passive Perception 10",
+    languages: "Common",
+  };
 }
 
 /**
@@ -262,18 +275,23 @@ export function initCombat(
   character: Character,
 ): CombatState | null {
   const enemyName = parseEnemyName(combatStartValue);
-  const monster = findMonster(enemyName, character.level);
+  let monster = findMonster(enemyName, character.level);
 
   if (!monster) {
-    console.warn(`[combat-engine] Could not find monster: "${enemyName}"`);
-    return null;
+    // No monster DB match — create a generic Human NPC stat block
+    console.log(`[combat-engine] No monster match for "${enemyName}", creating generic NPC`);
+    monster = createGenericNpc(enemyName);
   }
 
   // Roll initiative: d20 + DEX modifier
   const playerDexMod = modifier(character.abilityScores.dexterity);
   const enemyDexMod = modifier(monster.abilities.DEX);
-  const playerInit = d20() + playerDexMod;
-  const enemyInit = d20() + enemyDexMod;
+  const playerInitRoll = d20();
+  const enemyInitRoll = d20();
+  const playerInit = playerInitRoll + playerDexMod;
+  const enemyInit = enemyInitRoll + enemyDexMod;
+
+  console.log(`[combat-engine] Initiative: player d20(${playerInitRoll})+${playerDexMod}=${playerInit}, enemy d20(${enemyInitRoll})+${enemyDexMod}=${enemyInit} → ${playerInit >= enemyInit ? "player" : "enemy"} goes first`);
 
   const initiativeOrder: ("player" | "enemy")[] =
     playerInit >= enemyInit ? ["player", "enemy"] : ["enemy", "player"];
@@ -933,6 +951,21 @@ export function resolvePlayerAttack(
   const damageType = getPlayerDamageType(character);
   const isHalfling = character.race === "Halfling";
   const breakdown: DiceBreakdown = {};
+  const enemyGoesFirst = combatState.initiativeOrder[0] === "enemy";
+
+  // Populate initiative breakdown on round 1
+  if (combatState.roundNumber === 1) {
+    const playerDexMod = modifier(character.abilityScores.dexterity);
+    const enemyDexMod = modifier(monster.abilities.DEX);
+    breakdown.initiative = {
+      playerRoll: combatState.playerInitiative - playerDexMod,
+      playerMod: playerDexMod,
+      playerTotal: combatState.playerInitiative,
+      enemyRoll: combatState.enemyInitiative - enemyDexMod,
+      enemyMod: enemyDexMod,
+      enemyTotal: combatState.enemyInitiative,
+    };
+  }
 
   // Reset sneak attack tracking at start of round
   combatState.playerCombatant.sneakAttackUsedThisTurn = false;
@@ -1012,159 +1045,190 @@ export function resolvePlayerAttack(
     };
   }
 
-  // ── Player attack (check prone/condition modifiers) ─────────────
-  const playerAtk = attackRoll(atkScore, monster.ac, prof, isHalfling);
+  // ── Helper: resolve enemy attack phase ───────────────────────────
+  function resolveEnemyAttackPhase(currentEnemyHp: number): {
+    enemyAtk: RollResult | null; enemyDamage: number; playerHpChange: number; specialAbilityNarrative: string;
+  } {
+    let enemyAtk: RollResult | null = null;
+    let enemyDamage = 0;
+    let specialAbilityNarrative = "";
+
+    if (currentEnemyHp <= 0) return { enemyAtk, enemyDamage, playerHpChange: 0, specialAbilityNarrative };
+
+    const attack = pickEnemyAttack(monster);
+    if (!attack) return { enemyAtk, enemyDamage, playerHpChange: 0, specialAbilityNarrative };
+
+    const numAttacks = resolveMonsterMultiattack(monster.name);
+    for (let i = 0; i < numAttacks; i++) {
+      const enemyConditions = combatState.enemyCombatant.conditions;
+      let enemyRolled: number;
+      if (enemyConditions.has("prone") || enemyConditions.has("restrained") || enemyConditions.has("poisoned") || enemyConditions.has("frightened") || enemyConditions.has("blinded")) {
+        const r1 = d20(); const r2 = d20();
+        enemyRolled = Math.min(r1, r2);
+      } else {
+        enemyRolled = d20();
+      }
+      if (playerConditions.has("prone")) {
+        const advantageRoll = d20();
+        enemyRolled = Math.max(enemyRolled, advantageRoll);
+      }
+
+      const enemyTotal = enemyRolled + attack.attackBonus;
+      enemyAtk = {
+        type: "attack", dc: character.ac, rolled: enemyRolled,
+        modifier: attack.attackBonus, total: enemyTotal,
+        success: enemyRolled === 20 || (enemyRolled !== 1 && enemyTotal >= character.ac),
+        reason: `${monster.name} ${attack.name} (attack ${i + 1}/${numAttacks})`,
+      };
+
+      if (i === 0) {
+        breakdown.enemyAttackRoll = {
+          d20: enemyRolled, modifier: attack.attackBonus, total: enemyTotal,
+          targetAC: character.ac, hit: enemyAtk.success, crit: enemyRolled === 20,
+          attackName: `${attack.name}${numAttacks > 1 ? ` (×${numAttacks})` : ""}`,
+        };
+      }
+
+      if (enemyAtk.success) {
+        const isCrit = enemyRolled === 20;
+        const enemyDmgDice = rollDamageDiceDetailed(attack.damageDice);
+        let thisDmg = isCrit
+          ? (enemyDmgDice.dice.reduce((a, b) => a + b, 0) * 2 + enemyDmgDice.bonus)
+          : enemyDmgDice.total;
+        thisDmg = Math.max(1, thisDmg);
+        if (character.raging && PHYSICAL_DAMAGE_TYPES.includes(attack.damageType.toLowerCase())) {
+          thisDmg = Math.floor(thisDmg / 2);
+        }
+        enemyDamage += thisDmg;
+
+        const specialResult = resolveMonsterSpecialAbility(monster.name, character);
+        if (specialResult) {
+          specialAbilityNarrative += " " + specialResult.narrative;
+          if (specialResult.conditionApplied) {
+            combatState.playerCombatant.conditions.add(specialResult.conditionApplied);
+            combatState.playerCombatant.turnsUntilConditionExpires[specialResult.conditionApplied] = specialResult.duration;
+          }
+        }
+
+        if (i === 0) {
+          breakdown.enemyDamageRoll = {
+            dice: enemyDmgDice.dice, bonus: enemyDmgDice.bonus,
+            total: enemyDamage, damageType: attack.damageType,
+          };
+        }
+      }
+    }
+
+    const playerHpChange = -enemyDamage;
+    if (enemyDamage > 0 && combatState.playerCombatant.concentrationSpell) {
+      const concResult = resolveConcentrationSave(character, enemyDamage);
+      if (concResult.concentrationBroke) {
+        const spellName = combatState.playerCombatant.concentrationSpell.spellName;
+        combatState.playerCombatant.concentrationSpell = null;
+        specialAbilityNarrative += ` Your concentration on ${spellName} breaks!`;
+      }
+    }
+
+    return { enemyAtk, enemyDamage, playerHpChange, specialAbilityNarrative };
+  }
+
+  // ── Helper: resolve player attack phase ─────────────────────────
+  function resolvePlayerAttackPhase(): {
+    playerAtk: RollResult; playerDamage: number; playerDamageResisted: boolean;
+    playerDamageImmune: boolean; sneakAttackDice?: number[];
+  } {
+    const playerAtk = attackRoll(atkScore, monster.ac, prof, isHalfling);
+    let playerDamage = 0;
+    let playerDamageResisted = false;
+    let playerDamageImmune = false;
+    let sneakAttackDice: number[] | undefined;
+
+    breakdown.playerAttackRoll = {
+      d20: playerAtk.rolled, modifier: playerAtk.modifier,
+      total: playerAtk.total, targetAC: monster.ac,
+      hit: playerAtk.success, crit: playerAtk.rolled === 20,
+    };
+
+    if (playerAtk.success) {
+      const isCrit = playerAtk.rolled === 20;
+      const diceCount = isCrit ? weaponDmg.dice * 2 : weaponDmg.dice;
+      const weaponDice = roll(diceCount, weaponDmg.sides);
+      let rawDamage = weaponDice.reduce((a, b) => a + b, 0) + dmgBonus;
+
+      if (character.class === "Rogue" && isSneakAttackEligible(character) && !combatState.playerCombatant.sneakAttackUsedThisTurn) {
+        const sneakDiceCount = isCrit ? 2 : 1;
+        sneakAttackDice = roll(sneakDiceCount, 6);
+        rawDamage += sneakAttackDice.reduce((a, b) => a + b, 0);
+        combatState.playerCombatant.sneakAttackUsedThisTurn = true;
+      }
+
+      rawDamage = Math.max(1, rawDamage);
+      const defense = applyMonsterDefenses(rawDamage, damageType, monster);
+      playerDamage = defense.finalDamage;
+      playerDamageResisted = defense.resisted;
+      playerDamageImmune = defense.immune;
+
+      breakdown.playerDamageRoll = {
+        dice: weaponDice, bonus: dmgBonus, rawTotal: rawDamage,
+        sneakAttackDice, damageType,
+        resisted: defense.resisted, immune: defense.immune,
+        finalDamage: defense.finalDamage,
+      };
+    }
+
+    return { playerAtk, playerDamage, playerDamageResisted, playerDamageImmune, sneakAttackDice };
+  }
+
+  // ── Resolve attacks in initiative order ─────────────────────────
+  let playerAtk: RollResult;
   let playerDamage = 0;
   let playerDamageResisted = false;
   let playerDamageImmune = false;
   let sneakAttackDice: number[] | undefined;
-
-  breakdown.playerAttackRoll = {
-    d20: playerAtk.rolled,
-    modifier: playerAtk.modifier,
-    total: playerAtk.total,
-    targetAC: monster.ac,
-    hit: playerAtk.success,
-    crit: playerAtk.rolled === 20,
-  };
-
-  if (playerAtk.success) {
-    const isCrit = playerAtk.rolled === 20;
-    const diceCount = isCrit ? weaponDmg.dice * 2 : weaponDmg.dice;
-    const weaponDice = roll(diceCount, weaponDmg.sides);
-    let rawDamage = weaponDice.reduce((a, b) => a + b, 0) + dmgBonus;
-
-    // ── Sneak Attack: Rogues deal extra 1d6 damage ──────────────
-    // Only once per round (tracked by sneakAttackUsedThisTurn)
-    if (character.class === "Rogue" && isSneakAttackEligible(character) && !combatState.playerCombatant.sneakAttackUsedThisTurn) {
-      const sneakDiceCount = isCrit ? 2 : 1; // double on crit
-      sneakAttackDice = roll(sneakDiceCount, 6);
-      rawDamage += sneakAttackDice.reduce((a, b) => a + b, 0);
-      combatState.playerCombatant.sneakAttackUsedThisTurn = true;
-    }
-
-    rawDamage = Math.max(1, rawDamage); // minimum 1 damage
-
-    // Apply monster resistances/immunities
-    const defense = applyMonsterDefenses(rawDamage, damageType, monster);
-    playerDamage = defense.finalDamage;
-    playerDamageResisted = defense.resisted;
-    playerDamageImmune = defense.immune;
-
-    breakdown.playerDamageRoll = {
-      dice: weaponDice,
-      bonus: dmgBonus,
-      rawTotal: rawDamage,
-      sneakAttackDice,
-      damageType,
-      resisted: defense.resisted,
-      immune: defense.immune,
-      finalDamage: defense.finalDamage,
-    };
-  }
-
-  // Apply damage to enemy
-  const newEnemyHp = Math.max(0, combatState.enemyHp - playerDamage);
-
-  // ── Enemy attacks with multiattack (if still alive) ────────────
   let enemyAtk: RollResult | null = null;
   let enemyDamage = 0;
   let playerHpChange = 0;
   let specialAbilityNarrative = "";
+  let newEnemyHp: number;
 
-  if (newEnemyHp > 0) {
-    const attack = pickEnemyAttack(monster);
-    if (attack) {
-      const numAttacks = resolveMonsterMultiattack(monster.name);
+  if (enemyGoesFirst) {
+    // Enemy attacks first
+    const enemyPhase = resolveEnemyAttackPhase(combatState.enemyHp);
+    enemyAtk = enemyPhase.enemyAtk;
+    enemyDamage = enemyPhase.enemyDamage;
+    playerHpChange = enemyPhase.playerHpChange;
+    specialAbilityNarrative = enemyPhase.specialAbilityNarrative;
 
-      for (let i = 0; i < numAttacks; i++) {
-        // Check if enemy is prone/restrained (disadvantage on attacks)
-        const enemyConditions = combatState.enemyCombatant.conditions;
-        let enemyRolled: number;
-        if (enemyConditions.has("prone") || enemyConditions.has("restrained") || enemyConditions.has("poisoned") || enemyConditions.has("frightened") || enemyConditions.has("blinded")) {
-          // Disadvantage: roll twice, take lower
-          const r1 = d20();
-          const r2 = d20();
-          enemyRolled = Math.min(r1, r2);
-        } else {
-          enemyRolled = d20();
-        }
-
-        // Player prone: melee attackers have advantage, ranged have disadvantage
-        if (playerConditions.has("prone")) {
-          const advantageRoll = d20();
-          enemyRolled = Math.max(enemyRolled, advantageRoll); // advantage for melee
-        }
-
-        const enemyTotal = enemyRolled + attack.attackBonus;
-        enemyAtk = {
-          type: "attack",
-          dc: character.ac,
-          rolled: enemyRolled,
-          modifier: attack.attackBonus,
-          total: enemyTotal,
-          success: enemyRolled === 20 || (enemyRolled !== 1 && enemyTotal >= character.ac),
-          reason: `${monster.name} ${attack.name} (attack ${i + 1}/${numAttacks})`,
-        };
-
-        if (i === 0) {
-          breakdown.enemyAttackRoll = {
-            d20: enemyRolled,
-            modifier: attack.attackBonus,
-            total: enemyTotal,
-            targetAC: character.ac,
-            hit: enemyAtk.success,
-            crit: enemyRolled === 20,
-            attackName: `${attack.name}${numAttacks > 1 ? ` (×${numAttacks})` : ""}`,
-          };
-        }
-
-        if (enemyAtk.success) {
-          const isCrit = enemyRolled === 20;
-          const enemyDmgDice = rollDamageDiceDetailed(attack.damageDice);
-          let thisDmg = isCrit
-            ? (enemyDmgDice.dice.reduce((a, b) => a + b, 0) * 2 + enemyDmgDice.bonus)
-            : enemyDmgDice.total;
-          thisDmg = Math.max(1, thisDmg);
-
-          // Barbarian rage: halve physical damage
-          if (character.raging && PHYSICAL_DAMAGE_TYPES.includes(attack.damageType.toLowerCase())) {
-            thisDmg = Math.floor(thisDmg / 2);
-          }
-          enemyDamage += thisDmg;
-
-          // Apply monster special ability after each hit
-          const specialResult = resolveMonsterSpecialAbility(monster.name, character);
-          if (specialResult) {
-            specialAbilityNarrative += " " + specialResult.narrative;
-            if (specialResult.conditionApplied) {
-              combatState.playerCombatant.conditions.add(specialResult.conditionApplied);
-              combatState.playerCombatant.turnsUntilConditionExpires[specialResult.conditionApplied] = specialResult.duration;
-            }
-          }
-
-          if (i === 0) {
-            breakdown.enemyDamageRoll = {
-              dice: enemyDmgDice.dice,
-              bonus: enemyDmgDice.bonus,
-              total: enemyDamage,
-              damageType: attack.damageType,
-            };
-          }
-        }
-      }
-      playerHpChange = -enemyDamage;
-
-      // ── Concentration save if player takes damage ──────────────
-      if (enemyDamage > 0 && combatState.playerCombatant.concentrationSpell) {
-        const concResult = resolveConcentrationSave(character, enemyDamage);
-        if (concResult.concentrationBroke) {
-          const spellName = combatState.playerCombatant.concentrationSpell.spellName;
-          combatState.playerCombatant.concentrationSpell = null;
-          specialAbilityNarrative += ` Your concentration on ${spellName} breaks!`;
-        }
-      }
+    // If player goes down from enemy attack, skip player attack
+    if ((character.hp + playerHpChange) <= 0) {
+      newEnemyHp = combatState.enemyHp;
+      playerAtk = { type: "attack", dc: monster.ac, rolled: 0, modifier: 0, total: 0, success: false, reason: "Unable to attack — unconscious" };
+    } else {
+      // Player attacks second
+      const playerPhase = resolvePlayerAttackPhase();
+      playerAtk = playerPhase.playerAtk;
+      playerDamage = playerPhase.playerDamage;
+      playerDamageResisted = playerPhase.playerDamageResisted;
+      playerDamageImmune = playerPhase.playerDamageImmune;
+      sneakAttackDice = playerPhase.sneakAttackDice;
+      newEnemyHp = Math.max(0, combatState.enemyHp - playerDamage);
     }
+  } else {
+    // Player attacks first
+    const playerPhase = resolvePlayerAttackPhase();
+    playerAtk = playerPhase.playerAtk;
+    playerDamage = playerPhase.playerDamage;
+    playerDamageResisted = playerPhase.playerDamageResisted;
+    playerDamageImmune = playerPhase.playerDamageImmune;
+    sneakAttackDice = playerPhase.sneakAttackDice;
+    newEnemyHp = Math.max(0, combatState.enemyHp - playerDamage);
+
+    // Enemy attacks if still alive
+    const enemyPhase = resolveEnemyAttackPhase(newEnemyHp);
+    enemyAtk = enemyPhase.enemyAtk;
+    enemyDamage = enemyPhase.enemyDamage;
+    playerHpChange = enemyPhase.playerHpChange;
+    specialAbilityNarrative = enemyPhase.specialAbilityNarrative;
   }
 
   // ── Build updated combat state ─────────────────────────────────
