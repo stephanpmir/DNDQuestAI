@@ -34,7 +34,7 @@ export function getProxyFetch(): typeof fetch | undefined {
  * Full 4-provider cascade for DM/bot endpoints.
  * Cerebras → Groq → Z.ai (glm-4.5-air) → Moonshot
  */
-export function getDMProviders(timeout = 30_000): LLMProvider[] {
+export function getDMProviders(timeout = 8_000): LLMProvider[] {
   const proxyFetch = getProxyFetch();
   const providers: LLMProvider[] = [];
 
@@ -137,8 +137,8 @@ export function isRetryableError(error: unknown): boolean {
   return false;
 }
 
-const MAX_RETRY_ATTEMPTS = 2;
-const RETRY_DELAY_MS = 1500;
+const MAX_RETRY_ATTEMPTS = 1;
+const RETRY_DELAY_MS = 500;
 
 /** Try a single provider with retry logic. Returns content or null. */
 export async function tryProvider(
@@ -178,15 +178,28 @@ export async function callWithCascade(
   const providers = getDMProviders();
   let lastError: unknown;
   for (const provider of providers) {
+    console.log(`[cascade] Trying provider: ${provider.name} (model=${provider.model})`);
     const result = await tryProvider(provider, messages, maxTokens);
-    if (result.content) return { text: result.content, provider: result.providerName };
+    if (result.content) {
+      console.log(`[cascade] ${provider.name} succeeded`);
+      return { text: result.content, provider: result.providerName };
+    }
+    const errMsg = result.lastError instanceof Error ? result.lastError.message : String(result.lastError);
+    console.log(`[cascade] ${provider.name} failed: ${errMsg}`);
     lastError = result.lastError;
   }
   const zhipu = getZhipuFallback();
   if (zhipu) {
+    console.log(`[cascade] Trying fallback: ${zhipu.name}`);
     const result = await tryProvider(zhipu, messages, maxTokens);
-    if (result.content) return { text: result.content, provider: result.providerName };
+    if (result.content) {
+      console.log(`[cascade] ${zhipu.name} succeeded`);
+      return { text: result.content, provider: result.providerName };
+    }
+    const errMsg = result.lastError instanceof Error ? result.lastError.message : String(result.lastError);
+    console.log(`[cascade] ${zhipu.name} failed: ${errMsg}`);
     lastError = result.lastError;
   }
+  console.log(`[cascade] All providers exhausted, throwing last error`);
   throw lastError;
 }
