@@ -1,17 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useCharacterStore } from "@/stores/character-store";
 import { useGameStore } from "@/stores/game-store";
 import { useWorldStore } from "@/stores/world-store";
 import { useKarmaStore } from "@/stores/karma-store";
 import { useCrimeStore } from "@/stores/crime-store";
+import { useLanguageStore } from "@/stores/language-store";
 import type { ChatMessage as ChatMessageType, DMResponsePayload } from "@/types/game";
 import type { WorldEvent } from "@/types/world";
+import type { CombatState } from "@/lib/combat-engine";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
 import { CharacterSidebar } from "./character-sidebar";
 import { DeathScreen } from "./death-screen";
+import { AutoSaveProvider } from "./auto-save-provider";
+import { AutoSaveIndicator } from "./auto-save-indicator";
+import { SaveSlotsModal } from "./save-slots-modal";
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -26,6 +31,8 @@ export function GameView() {
     turnCount,
     isLoading,
     campaignStarted,
+    justLoaded,
+    loadedChatSummary,
     addMessage,
     setLocation,
     addQuest,
@@ -33,6 +40,11 @@ export function GameView() {
     incrementTurn,
     setLoading,
     setCampaignStarted,
+    clearJustLoaded,
+    groundItems,
+    addGroundItems,
+    removeGroundItem,
+    removeMessage,
   } = useGameStore();
 
   const {
@@ -54,6 +66,7 @@ export function GameView() {
     karmaHistory,
     companions,
     addKarmaEvent,
+    addFameEvent,
     updateCompanionApproval,
   } = useKarmaStore();
 
@@ -64,6 +77,10 @@ export function GameView() {
     markConfronted,
   } = useCrimeStore();
 
+  const languagePreference = useLanguageStore((s) => s.language);
+  const t = useLanguageStore((s) => s.t);
+
+  const [combatState, setCombatState] = useState<CombatState | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoStartFired = useRef(false);
 
@@ -76,6 +93,7 @@ export function GameView() {
     async (message: string, showUserMessage: boolean) => {
       setLoading(true);
 
+      let userMsgId: string | null = null;
       if (showUserMessage) {
         const userMsg: ChatMessageType = {
           id: generateId(),
@@ -83,15 +101,20 @@ export function GameView() {
           narrative: message,
           timestamp: Date.now(),
         };
+        userMsgId = userMsg.id;
         addMessage(userMsg);
       }
       incrementTurn();
 
       try {
-        const history = messages.slice(-10).map((m) => ({
-          role: m.role,
-          content: m.narrative,
-        }));
+        // Build history, filtering out roll_result cards (invalid LLM role)
+        const history = messages
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .slice(-10)
+          .map((m) => ({
+            role: m.role,
+            content: m.narrative,
+          }));
 
         const requestBody = JSON.stringify({
           message,
@@ -105,6 +128,9 @@ export function GameView() {
             history: karmaHistory,
             companions,
           },
+          languagePreference: languagePreference !== "English" ? languagePreference : undefined,
+          groundItems: groundItems.length > 0 ? groundItems : undefined,
+          combatState: combatState?.active ? combatState : undefined,
         });
 
         // Retry logic for transient errors (502, 503, 504)
@@ -131,6 +157,19 @@ export function GameView() {
 
         const data: DMResponsePayload = await res.json();
 
+        // ── Rules answer shortcut — no game state changes ───────────
+        if (data.rulesAnswer) {
+          addMessage({
+            id: generateId(),
+            role: "assistant",
+            narrative: data.narrative,
+            timestamp: Date.now(),
+            rulesAnswer: true,
+          });
+          setLoading(false);
+          return;
+        }
+
         // Apply engine-decided game state updates
         const u = data.gameStateUpdate;
         if (u) {
@@ -141,6 +180,11 @@ export function GameView() {
             goldChange: u.goldChange,
             xpGained: u.xpGained,
             lastRestTurn: u.lastRestTurn,
+            restType: u.restType,
+            raging: u.raging,
+            lastHealTurn: u.lastHealTurn,
+            lastTravelEncounterTurn: u.lastTravelEncounterTurn,
+            resourceUpdates: u.resourceUpdates,
           });
           if (u.locationChange) {
             setLocation(u.locationChange);
@@ -150,10 +194,32 @@ export function GameView() {
           if (u.completeQuest) completeQuest(u.completeQuest);
         }
 
+        // Apply ground item changes (loot drops, pickups)
+        if (data.addToGround?.length) {
+          addGroundItems(data.addToGround);
+        }
+        if (data.removeFromGround?.length) {
+          for (const item of data.removeFromGround) {
+            removeGroundItem(item);
+          }
+        }
+        // Clear ground items when changing location (items stay behind)
+        if (u?.locationChange && u.locationChange !== location) {
+          useGameStore.getState().clearGroundItems();
+        }
+
         // Handle death save tracking
         const eo = data.engineOutcome;
         if (eo?.deathSaveResult) {
           updateFromGameState({ deathSaveResult: eo.deathSaveResult });
+        }
+
+        // Handle equip/identify from engine
+        if (eo?.equipItem) {
+          useCharacterStore.getState().equipItem(eo.equipItem);
+        }
+        if (eo?.identifyItem) {
+          useCharacterStore.getState().identifyItem(eo.identifyItem);
         }
 
         // Handle karma changes
@@ -171,6 +237,12 @@ export function GameView() {
         // Handle fame changes
         if (data.fameChange) {
           updateFromGameState({ fameChange: data.fameChange });
+          addFameEvent({
+            amount: data.fameChange,
+            reason: data.fameReason ?? (data.fameChange > 0 ? t("game.defaultFameGain") : t("game.defaultFameLoss")),
+            category: data.fameCategory ?? (data.fameChange > 0 ? "social" : "crime"),
+            turn: turnCount,
+          });
         }
 
         // Handle crime detection
@@ -202,6 +274,11 @@ export function GameView() {
           if (matchingCrime) {
             markConfronted(matchingCrime.id);
           }
+        }
+
+        // Update combat state from server response
+        if (data.combatState !== undefined) {
+          setCombatState(data.combatState?.active ? data.combatState : null);
         }
 
         // Apply fact ledger updates
@@ -250,25 +327,54 @@ export function GameView() {
         };
         addEvent(worldEvent);
 
+        // If this was a check roll, insert a centered roll card before the DM narrative
+        const isCheckRoll = /\[CHECK_ROLL:/.test(message);
+        if (isCheckRoll && data.engineOutcome?.roll) {
+          const roll = data.engineOutcome.roll;
+          // Extract check info from the message pattern [CHECK_ROLL:skill|stat|dc]
+          const checkMatch = message.match(/\[CHECK_ROLL:([^|]+)\|([^|]+)\|(\d+)\]/);
+          const rollCardMsg: ChatMessageType = {
+            id: generateId(),
+            role: "roll_result",
+            narrative: "",
+            timestamp: Date.now(),
+            rollResult: roll,
+            checkRequired: checkMatch
+              ? { skill: checkMatch[1], stat: checkMatch[2], dc: parseInt(checkMatch[3], 10), description: "" }
+              : undefined,
+          };
+          addMessage(rollCardMsg);
+        }
+
         // Add DM message with roll result and karma/fame indicators
         const dmMsg: ChatMessageType = {
           id: generateId(),
           role: "assistant",
           narrative: data.narrative,
           timestamp: Date.now(),
-          rollResult: data.engineOutcome?.roll,
+          // Don't duplicate roll display when a roll card was already inserted
+          rollResult: isCheckRoll ? undefined : data.engineOutcome?.roll,
           karmaChange: data.karmaChange?.amount,
           fameChange: data.fameChange,
+          sceneImagePrompt: data.sceneImagePrompt,
+          checkRequired: data.checkRequired,
+          combatResult: data.combatResult ? {
+            ...data.combatResult,
+            enemyName: data.combatState?.enemyName,
+            enemyHp: data.combatState?.enemyHp ?? (data.combatResult.combatOver ? 0 : undefined),
+            enemyMaxHp: data.combatState?.enemyMaxHp,
+          } : undefined,
         };
         addMessage(dmMsg);
       } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Unknown error";
-        console.error("Error calling DM:", errorMessage, err);
+        // Remove the orphaned user bubble so it doesn't persist
+        if (userMsgId) {
+          useGameStore.getState().removeMessage(userMsgId);
+        }
         addMessage({
           id: generateId(),
           role: "assistant",
-          narrative: "The Dungeon Master pauses briefly... Something went wrong behind the scenes. Please try your action again.",
+          narrative: "The winds of fate pause for a moment\u2026 please try again.",
           timestamp: Date.now(),
         });
       } finally {
@@ -302,16 +408,28 @@ export function GameView() {
       karmaHistory,
       companions,
       addKarmaEvent,
+      addFameEvent,
       updateCompanionApproval,
       crimes,
       addCrime,
       updateEvidence,
       markConfronted,
+      languagePreference,
+      groundItems,
+      addGroundItems,
+      removeGroundItem,
+      combatState,
     ]
   );
 
   const sendToDM = useCallback(
     (message: string) => callDMApi(message, true),
+    [callDMApi]
+  );
+
+  /** Send a check roll to the DM without showing a player bubble */
+  const sendCheckRoll = useCallback(
+    (message: string) => callDMApi(message, false),
     [callDMApi]
   );
 
@@ -331,10 +449,45 @@ export function GameView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignStarted, character.name]);
 
+  // Welcome-back recap after loading a saved game
+  const loadRecapFired = useRef(false);
+  useEffect(() => {
+    if (justLoaded && !loadRecapFired.current) {
+      loadRecapFired.current = true;
+      clearJustLoaded();
+
+      const summary = loadedChatSummary ?? "";
+      const recapPrompt = [
+        `[SYSTEM: The player has returned to a saved game. Welcome them back in character as the Dungeon Master.`,
+        `Provide a brief, atmospheric recap of where they are, what they were doing, and what happened recently.`,
+        `Then ask what they want to do next. Keep the recap to 2-3 short paragraphs.]`,
+        ``,
+        `Session context:`,
+        summary,
+      ].join("\n");
+
+      callDMApi(recapPrompt, false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [justLoaded]);
+
   const isDead = character.isDead;
+  const [saveModalMode, setSaveModalMode] = useState<"save" | "load" | null>(null);
 
   return (
     <div className="flex h-[100dvh] gap-4 p-4 overflow-hidden">
+      {/* Auto-save listener (renders nothing) */}
+      <AutoSaveProvider />
+
+      {/* Save/Load modal */}
+      {saveModalMode && (
+        <SaveSlotsModal
+          mode={saveModalMode}
+          open
+          onClose={() => setSaveModalMode(null)}
+        />
+      )}
+
       {/* Death screen overlay */}
       {isDead && <DeathScreen />}
 
@@ -348,15 +501,22 @@ export function GameView() {
         <div className="flex-1 min-h-0 overflow-y-auto pr-4">
           <div className="space-y-4 py-4">
             {messages.map((msg) => (
-              <ChatMessage key={msg.id} message={msg} />
+              <ChatMessage
+                key={msg.id}
+                message={msg}
+                avatarUrl={character.avatarUrl}
+                onSendMessage={sendToDM}
+                onCheckRoll={sendCheckRoll}
+                disabled={isLoading}
+              />
             ))}
             {isLoading && (
               <div className="flex gap-3">
                 <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
-                  DM
+                  {t("chat.dm")}
                 </div>
                 <div className="bg-muted rounded-lg px-4 py-3 text-sm animate-pulse">
-                  The Dungeon Master is thinking...
+                  {t("game.dmThinking")}
                 </div>
               </div>
             )}
@@ -365,6 +525,23 @@ export function GameView() {
         </div>
 
         <div className="pt-3 border-t">
+          <div className="flex items-center justify-between mb-1">
+            <AutoSaveIndicator />
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setSaveModalMode("save")}
+                className="text-[10px] text-muted-foreground/60 hover:text-foreground px-2 py-0.5 rounded transition-colors cursor-pointer"
+              >
+                {t("game.saveGame")}
+              </button>
+              <button
+                onClick={() => setSaveModalMode("load")}
+                className="text-[10px] text-muted-foreground/60 hover:text-foreground px-2 py-0.5 rounded transition-colors cursor-pointer"
+              >
+                {t("game.loadGame")}
+              </button>
+            </div>
+          </div>
           <ChatInput onSend={sendToDM} disabled={isLoading || isDead} />
         </div>
       </div>

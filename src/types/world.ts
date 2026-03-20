@@ -75,6 +75,15 @@ export interface EngineOutcome {
   restDenied?: boolean;
   /** Track the turn of last rest */
   lastRestTurn?: number;
+  /** Type of rest taken (short or long) */
+  restType?: import("@/lib/resources").RestType;
+  /** Encounter during rest in unsafe location */
+  restEncounter?: {
+    type: "combat" | "environmental" | "social";
+    description: string;
+    /** True if the rest was interrupted (no rest benefits) */
+    interrupted: boolean;
+  };
   /** Death save result for unconscious characters */
   deathSaveResult?: "nat20" | "nat1" | "success" | "failure";
   /** Damage dealt by player attack */
@@ -89,6 +98,10 @@ export interface EngineOutcome {
   karmaChange?: { type: string; amount: number; description: string };
   /** Fame change from this action */
   fameChange?: number;
+  /** Reason for fame change (for history log) */
+  fameReason?: string;
+  /** Category of fame change */
+  fameCategory?: "quest" | "combat" | "crime" | "social" | "decay";
   /** Divine intervention effect */
   divineEffect?: {
     source: "good_god" | "evil_god";
@@ -123,6 +136,55 @@ export interface EngineOutcome {
     crimeType: string;
     crimeLocation: string;
   };
+  /** Trade action result */
+  tradeResult?: {
+    type: "buy" | "sell";
+    item: string;
+    price: number;
+    success: boolean;
+    reason?: string;
+  };
+  /** Item pickup result */
+  pickupResult?: {
+    item: string;
+    success: boolean;
+    reason?: string;
+  };
+  /** Item drop result */
+  dropResult?: {
+    item: string;
+    success: boolean;
+  };
+  /** Items to add to the ground (loot, dropped items) */
+  addToGround?: string[];
+  /** Items to remove from the ground (picked up) */
+  removeFromGround?: string[];
+  /** Item to equip (engine signals, store applies) */
+  equipItem?: string;
+  /** Item to add to identified list (engine signals, store applies) */
+  identifyItem?: string;
+  /** Barbarian rage state change */
+  raging?: boolean;
+  /** Turn of last healing spell (for cooldown tracking) */
+  lastHealTurn?: number;
+  /** Turn of last travel encounter (for XP farming prevention) */
+  lastTravelEncounterTurn?: number;
+  /** Updated resource pool after resource consumption */
+  resourceUpdates?: import("@/lib/resources").ResourcePool;
+  /** Condition applied to the player this turn */
+  conditionApplied?: import("@/types/combat").Condition;
+  /** Condition removed from the player this turn */
+  conditionRemoved?: import("@/types/combat").Condition;
+  /** Whether concentration broke this turn */
+  concentrationBroke?: boolean;
+  /** Death save successes (when at 0 HP) */
+  deathSaveSuccesses?: number;
+  /** Death save failures (when at 0 HP) */
+  deathSaveFailures?: number;
+  /** Whether the player died this turn */
+  playerDied?: boolean;
+  /** Reference to the current combat state */
+  combatState?: import("@/lib/combat-engine").CombatState;
 }
 
 /** What the LLM receives to narrate — it does NOT decide outcomes. */

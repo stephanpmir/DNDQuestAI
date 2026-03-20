@@ -1,15 +1,32 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChatMessage as ChatMessageType } from "@/types/game";
-import { DiceRollDisplay } from "./dice-roll-display";
+import type { DiceBreakdown } from "@/lib/combat-engine";
+import type { RollResult } from "@/types/world";
+import { useLanguageStore } from "@/stores/language-store";
+import { useCharacterStore } from "@/stores/character-store";
+
+const DM_AVATAR_URL = "/.netlify/functions/proxy-portrait?prompt=dragon%20eye%20close%20up%20perfectly%20centered%20slit%20pupil%20gold%20iris%20glowing%20arcane%20dark%20fantasy%20square%20portrait%20symmetrical&seed=666&width=128&height=128";
 
 interface Props {
   message: ChatMessageType;
+  avatarUrl?: string;
+  onSendMessage?: (message: string) => void;
+  onCheckRoll?: (message: string) => void;
+  disabled?: boolean;
 }
 
-export function ChatMessage({ message }: Props) {
+export function ChatMessage({ message, avatarUrl, onSendMessage, onCheckRoll, disabled }: Props) {
+  const t = useLanguageStore((s) => s.t);
   const isUser = message.role === "user";
+  const isRollResult = message.role === "roll_result";
+  const [dmAvatarError, setDmAvatarError] = useState(false);
+
+  // Centered roll result card — not a player or DM message
+  if (isRollResult && message.rollResult) {
+    return <RollResultCard roll={message.rollResult} check={message.checkRequired} />;
+  }
 
   if (isUser) {
     return (
@@ -18,8 +35,70 @@ export function ChatMessage({ message }: Props) {
           <div className="max-w-[80%] rounded-lg px-4 py-3 text-sm leading-relaxed bg-primary text-primary-foreground">
             <div className="whitespace-pre-wrap">{message.narrative}</div>
           </div>
-          <div className="w-8 h-8 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center text-sm font-bold shrink-0">
-            You
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={t("chat.you")}
+              className="w-8 h-8 rounded-full object-cover object-top shrink-0"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center text-sm font-bold shrink-0">
+              {t("chat.you")}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Rules Reference answer — distinct visual style ──────────────
+  if (message.rulesAnswer) {
+    return (
+      <div className="space-y-0">
+        <div className="flex gap-3 justify-start">
+          <div
+            style={{
+              width: 48, height: 48, minWidth: 48, borderRadius: "50%",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              backgroundColor: "#1a1a2e", fontSize: 22,
+              border: "2px solid rgba(201,162,39,0.3)",
+            }}
+          >
+            <span style={{ lineHeight: 1 }}>📖</span>
+          </div>
+          <div
+            style={{
+              backgroundColor: "rgba(20, 20, 40, 0.6)",
+              border: "1px solid rgba(201,162,39,0.2)",
+              borderRadius: 8,
+              padding: "12px 16px",
+              maxWidth: "85%",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "#c9a227",
+                textTransform: "uppercase" as const,
+                letterSpacing: "0.05em",
+                marginBottom: 8,
+              }}
+            >
+              Rules Reference
+            </div>
+            <div
+              style={{
+                color: "#d4d4d8",
+                fontSize: 14,
+                lineHeight: 1.6,
+                fontFamily: "system-ui, -apple-system, sans-serif",
+                fontStyle: "normal",
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {message.narrative}
+            </div>
           </div>
         </div>
       </div>
@@ -29,15 +108,64 @@ export function ChatMessage({ message }: Props) {
   const hasKarmaChange = message.karmaChange !== undefined && message.karmaChange !== 0;
   const hasFameChange = message.fameChange !== undefined && message.fameChange !== 0;
 
+  // Determine if we have a roll to animate
+  const hasRoll = !!message.rollResult;
+  const hasCombatRoll = !!message.combatResult?.diceBreakdown?.playerAttackRoll;
+  const hasSteppedRoll = hasRoll || hasCombatRoll;
+
   return (
     <div className="space-y-0">
-      {message.rollResult && <DiceRollDisplay roll={message.rollResult} />}
       <div className="flex gap-3 justify-start">
-        <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold shrink-0">
-          DM
-        </div>
-        <div className="max-w-[80%] rounded-lg px-4 py-3 text-sm leading-relaxed bg-muted text-foreground">
-          <TypewriterText text={message.narrative} />
+        {dmAvatarError ? (
+          <div
+            style={{
+              width: 48, height: 48, minWidth: 48, borderRadius: "50%",
+              boxShadow: "0 0 10px rgba(201,162,39,0.4)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              backgroundColor: "#1a1a1a", fontSize: 20,
+            }}
+          >
+            <span style={{ color: "#c9a227" }}>⚔</span>
+          </div>
+        ) : (
+          <img
+            src={DM_AVATAR_URL}
+            alt="DM"
+            onError={() => setDmAvatarError(true)}
+            style={{
+              width: 48, height: 48, minWidth: 48, borderRadius: "50%",
+              objectFit: "cover", objectPosition: "center",
+            }}
+          />
+        )}
+        <div
+          style={{
+            backgroundColor: "transparent", background: "none",
+            borderLeft: "3px solid rgba(201,162,39,0.25)", paddingLeft: 16,
+          }}
+        >
+          {message.sceneImagePrompt && (
+            <SceneImage prompt={message.sceneImagePrompt} seed={message.timestamp % 1000000} />
+          )}
+          {hasSteppedRoll ? (
+            <SteppedRollReveal
+              rollResult={message.rollResult}
+              combatResult={message.combatResult}
+              narrative={message.narrative}
+            />
+          ) : (
+            <TypewriterText text={message.narrative} />
+          )}
+          {!hasCombatRoll && message.combatResult && (
+            <CombatRoundCard combatResult={message.combatResult} />
+          )}
+          {message.checkRequired && onCheckRoll && (
+            <SkillCheckRoll
+              check={message.checkRequired}
+              onRoll={onCheckRoll}
+              disabled={disabled}
+            />
+          )}
         </div>
       </div>
       {(hasKarmaChange || hasFameChange) && (
@@ -48,7 +176,7 @@ export function ChatMessage({ message }: Props) {
                 ? "bg-emerald-950/60 text-emerald-400 border border-emerald-700/30"
                 : "bg-red-950/60 text-red-400 border border-red-700/30"
             }`}>
-              {message.karmaChange! > 0 ? "+" : ""}{message.karmaChange} karma
+              {message.karmaChange! > 0 ? "+" : ""}{message.karmaChange} {t("chat.karma")}
             </span>
           )}
           {hasFameChange && (
@@ -57,7 +185,7 @@ export function ChatMessage({ message }: Props) {
                 ? "bg-sky-950/60 text-sky-400 border border-sky-700/30"
                 : "bg-orange-950/60 text-orange-400 border border-orange-700/30"
             }`}>
-              {message.fameChange! > 0 ? "+" : ""}{message.fameChange} fame
+              {message.fameChange! > 0 ? "+" : ""}{message.fameChange} {t("chat.fame")}
             </span>
           )}
         </div>
@@ -66,10 +194,520 @@ export function ChatMessage({ message }: Props) {
   );
 }
 
+/** Scene image rendered above DM narrative text. Retries once on failure. */
+function SceneImage({ prompt, seed }: { prompt: string; seed: number }) {
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
+  const [retried, setRetried] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  const src = `/.netlify/functions/proxy-portrait?prompt=${encodeURIComponent(prompt)}&width=800&height=450&seed=${seed}`;
+
+  const handleError = () => {
+    if (!retried) {
+      setRetried(true);
+      setTimeout(() => {
+        if (imgRef.current) {
+          imgRef.current.src = src + "&retry=1";
+        }
+      }, 2000);
+    } else {
+      setError(true);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: "relative", width: "100%",
+        aspectRatio: "16/9",
+        borderRadius: 8, overflow: "hidden", marginBottom: 12,
+        backgroundColor: "#1a1a1a",
+        animation: !loaded && !error ? "scenePulse 2s ease-in-out infinite" : undefined,
+      }}
+    >
+      {/* Inline keyframes for pulse animation */}
+      {!loaded && !error && (
+        <style>{`@keyframes scenePulse { 0%, 100% { background-color: #1a1a1a; } 50% { background-color: #222222; } }`}</style>
+      )}
+      {/* Always-visible placeholder until image loads or errors */}
+      {!loaded && (
+        <div style={{
+          position: "absolute", inset: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          color: "#555", fontSize: 13, fontStyle: "italic",
+        }}>
+          {error ? "Scene unavailable" : "Loading scene\u2026"}
+        </div>
+      )}
+      {!loaded && !error && (
+        <div className="animate-shimmer" style={{
+          position: "absolute", inset: 0,
+          background: "linear-gradient(90deg, transparent 25%, rgba(212,175,55,0.08) 50%, transparent 75%)",
+          backgroundSize: "200% 100%",
+        }} />
+      )}
+      {!error && (
+        <img
+          ref={imgRef}
+          src={src}
+          alt=""
+          onLoad={() => setLoaded(true)}
+          onError={handleError}
+          style={{
+            width: "100%", height: "100%", objectFit: "cover",
+            borderRadius: 8,
+            display: loaded ? "block" : "none",
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function getDifficultyLabel(dc: number): string {
+  if (dc <= 9) return "Easy";
+  if (dc <= 14) return "Medium";
+  if (dc <= 19) return "Hard";
+  return "Very Hard";
+}
+
+/** Centered roll result card — distinct from DM/player bubbles. */
+function RollResultCard({
+  roll,
+  check,
+}: {
+  roll: import("@/types/world").RollResult;
+  check?: { stat: string; skill: string; dc: number; description: string };
+}) {
+  const [animDone, setAnimDone] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setAnimDone(true), 600);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const passed = roll.success;
+  const isCrit = roll.rolled === 20;
+  const isFumble = roll.rolled === 1;
+
+  const checkLabel = check
+    ? `${check.stat.charAt(0).toUpperCase() + check.stat.slice(1)} (${check.skill})`
+    : roll.reason ?? "Ability Check";
+
+  return (
+    <div style={{ display: "flex", justifyContent: "center", margin: "8px 0" }}>
+      <style>{`
+        @keyframes diceReveal {
+          0% { opacity: 0; transform: scale(0.6) rotate(-15deg); }
+          50% { opacity: 1; transform: scale(1.15) rotate(5deg); }
+          100% { opacity: 1; transform: scale(1) rotate(0deg); }
+        }
+        @keyframes resultSlam {
+          0% { opacity: 0; transform: scale(2); }
+          60% { opacity: 1; transform: scale(0.9); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 360,
+          padding: "16px 24px",
+          borderRadius: 12,
+          border: `2px solid ${passed ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)"}`,
+          backgroundColor: passed ? "rgba(34,197,94,0.06)" : "rgba(239,68,68,0.06)",
+          textAlign: "center",
+        }}
+      >
+        {/* Check label */}
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: "#c9a227",
+            fontFamily: "'Cinzel', serif",
+            letterSpacing: "0.05em",
+            marginBottom: 8,
+          }}
+        >
+          {checkLabel}
+        </div>
+
+        {/* Dice result row */}
+        <div
+          style={{
+            fontSize: 22,
+            fontWeight: 700,
+            fontFamily: "monospace",
+            color: "#e8d5b0",
+            marginBottom: 4,
+            animation: "diceReveal 0.6s ease-out both",
+          }}
+        >
+          <span role="img" aria-label="dice">🎲</span>{" "}
+          <span style={{ color: isCrit ? "#fbbf24" : isFumble ? "#ef4444" : "#e8d5b0" }}>
+            {animDone ? roll.rolled : "?"}
+          </span>{" "}
+          <span style={{ color: "#8a8a8a" }}>
+            {roll.modifier >= 0 ? "+" : ""}{roll.modifier}
+          </span>{" "}
+          <span style={{ color: "#8a8a8a" }}>=</span>{" "}
+          <span style={{ fontWeight: 900, color: "#fff" }}>{animDone ? roll.total : "?"}</span>
+        </div>
+
+        {/* DC line */}
+        {roll.dc != null && (
+          <div style={{ fontSize: 12, color: "#8a8a8a", marginBottom: 10 }}>
+            vs DC {roll.dc}
+          </div>
+        )}
+
+        {/* PASS / FAIL */}
+        <div
+          style={{
+            fontSize: 28,
+            fontWeight: 900,
+            fontFamily: "'Cinzel', serif",
+            letterSpacing: "0.1em",
+            color: passed ? "#22c55e" : "#ef4444",
+            animation: animDone ? "resultSlam 0.3s ease-out both" : undefined,
+            opacity: animDone ? 1 : 0,
+          }}
+        >
+          {passed ? "PASS" : "FAIL"}
+        </div>
+
+        {/* Crit/fumble callout */}
+        {isCrit && (
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#fbbf24", marginTop: 2 }}>
+            NATURAL 20!
+          </div>
+        )}
+        {isFumble && (
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#ef4444", marginTop: 2 }}>
+            NATURAL 1!
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Describe enemy condition using words instead of raw HP numbers. */
+function getEnemyConditionLabel(hp: number, maxHp: number): { text: string; color: string } {
+  if (hp <= 0) return { text: "Defeated", color: "#6b0000" };
+  const pct = hp / maxHp;
+  if (pct >= 1) return { text: "Uninjured", color: "#8a8a8a" };
+  if (pct >= 0.75) return { text: "Lightly wounded", color: "#c9a227" };
+  if (pct >= 0.5) return { text: "Wounded", color: "#d97706" };
+  if (pct >= 0.25) return { text: "Badly wounded", color: "#b91c1c" };
+  if (pct > 0) return { text: "On the verge of death", color: "#ef4444" };
+  return { text: "Defeated", color: "#6b0000" };
+}
+
+/** Combat round card — shows enemy condition and enemy attack roll. Player attack is already shown in the roll line above. */
+function CombatRoundCard({ combatResult }: { combatResult: NonNullable<ChatMessageType["combatResult"]> }) {
+  const db = combatResult.diceBreakdown;
+
+  return (
+    <div
+      style={{
+        marginTop: 12, marginBottom: 8, padding: "12px 16px", borderRadius: 8,
+        backgroundColor: "rgba(107,0,0,0.12)",
+        border: "1px solid rgba(107,0,0,0.3)",
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#c9a227", marginBottom: 8, letterSpacing: "0.05em", fontFamily: "'Cinzel', serif" }}>
+        {combatResult.enemyName ? `Combat — ${combatResult.enemyName}` : "Combat Round"}
+      </div>
+
+      {/* Enemy condition descriptor (no raw HP numbers) */}
+      {combatResult.enemyHp !== undefined && combatResult.enemyMaxHp !== undefined && (() => {
+        const condition = getEnemyConditionLabel(combatResult.enemyHp, combatResult.enemyMaxHp);
+        return (
+          <div style={{ fontSize: 12, marginBottom: 4, color: condition.color }}>
+            <span style={{ fontWeight: 600 }}>Condition:</span>{" "}
+            <span style={{ fontStyle: "italic" }}>{condition.text}</span>
+            {combatResult.enemyHp <= 0 && <span style={{ color: "#c9a227", fontWeight: 700 }}> — DEFEATED</span>}
+          </div>
+        );
+      })()}
+
+      {/* Enemy attack */}
+      {db.enemyAttackRoll && (
+        <div style={{ fontSize: 12, marginBottom: 4, color: db.enemyAttackRoll.hit ? "#b91c1c" : "#6b6b6b" }}>
+          <span style={{ fontWeight: 600 }}>Enemy {db.enemyAttackRoll.attackName}:</span>{" "}
+          d20({db.enemyAttackRoll.d20}) + {db.enemyAttackRoll.modifier} = {db.enemyAttackRoll.total} vs AC {db.enemyAttackRoll.targetAC}
+          {" — "}
+          <span style={{ fontWeight: 700, color: db.enemyAttackRoll.crit ? "#ef4444" : db.enemyAttackRoll.hit ? "#b91c1c" : "#6b6b6b" }}>
+            {db.enemyAttackRoll.crit ? "CRITICAL HIT!" : db.enemyAttackRoll.hit ? "Hit" : "Miss"}
+          </span>
+        </div>
+      )}
+
+      {/* Enemy damage */}
+      {db.enemyDamageRoll && db.enemyAttackRoll?.hit && (
+        <div style={{ fontSize: 12, marginBottom: 4, color: "#b91c1c" }}>
+          <span style={{ fontWeight: 600 }}>Damage Taken:</span>{" "}
+          {db.enemyDamageRoll.total} {db.enemyDamageRoll.damageType}
+        </div>
+      )}
+
+      {/* Initiative display (round 1 only) */}
+      {db.initiative && (
+        <div style={{ fontSize: 11, marginTop: 4, color: "#8a8a8a", fontStyle: "italic" }}>
+          Initiative: You {db.initiative.playerTotal} vs {combatResult.enemyName} {db.initiative.enemyTotal}
+          {" — "}
+          {db.initiative.playerTotal >= db.initiative.enemyTotal ? "You go first" : `${combatResult.enemyName} goes first`}
+        </div>
+      )}
+
+      {/* Combat over indicator */}
+      {combatResult.combatOver && combatResult.combatEndReason !== "ongoing" && (
+        <div style={{
+          marginTop: 6, paddingTop: 6, borderTop: "1px solid rgba(201,162,39,0.15)",
+          fontSize: 12, fontWeight: 700,
+          color: combatResult.combatEndReason === "enemy_killed" ? "#c9a227" : "#b91c1c",
+        }}>
+          {combatResult.combatEndReason === "enemy_killed" && "Victory!"}
+          {combatResult.combatEndReason === "player_fled" && "Fled from combat"}
+          {combatResult.combatEndReason === "player_down" && "You have fallen..."}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Dice roll UI for DM-requested skill checks.
+ *  No client-side rolling — sends structured params so the server rolls. */
+function SkillCheckRoll({
+  check,
+  onRoll,
+  disabled,
+}: {
+  check: { stat: string; skill: string; dc: number; description: string };
+  onRoll: (message: string) => void;
+  disabled?: boolean;
+}) {
+  const [rolled, setRolled] = useState(false);
+
+  const diffLabel = getDifficultyLabel(check.dc);
+
+  const handleRoll = () => {
+    if (rolled || disabled) return;
+    setRolled(true);
+    // Send structured message for server-side rolling
+    onRoll(`[CHECK_ROLL:${check.skill}|${check.stat}|${check.dc}]`);
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: 12, padding: "12px 16px", borderRadius: 8,
+        backgroundColor: "rgba(201,162,39,0.08)",
+        border: "1px solid rgba(201,162,39,0.2)",
+      }}
+    >
+      <div style={{ fontSize: 13, color: "#c9a227", fontWeight: 600, marginBottom: 4 }}>
+        {check.stat} ({check.skill}) — {diffLabel}
+      </div>
+      <div style={{ fontSize: 12, color: "#8a8a8a", marginBottom: 8 }}>
+        {check.description}
+      </div>
+      <button
+        type="button"
+        onClick={handleRoll}
+        disabled={rolled || disabled}
+        style={{
+          padding: "6px 20px", borderRadius: 6, fontSize: 13, fontWeight: 700,
+          fontFamily: "'Cinzel', serif", letterSpacing: "0.05em",
+          backgroundColor: rolled ? "#333" : "#6b0000",
+          color: rolled ? "#888" : "#fff",
+          border: rolled ? "1px solid #444" : "1px solid #c9a227",
+          cursor: rolled || disabled ? "default" : "pointer",
+          transition: "all 0.2s",
+        }}
+      >
+        {rolled ? "Rolled" : "Roll d20"}
+      </button>
+    </div>
+  );
+}
+
+// ── Stepped roll line styles ────────────────────────────────────
+
+const rollLineBase: React.CSSProperties = {
+  textAlign: "center",
+  fontSize: 13,
+  fontFamily: "'Cinzel', monospace",
+  letterSpacing: "0.03em",
+  padding: "4px 0",
+  lineHeight: 1.6,
+};
+
+function getRollLabel(roll: RollResult | undefined, combatDb: DiceBreakdown | undefined): string {
+  if (combatDb?.playerAttackRoll) {
+    return "Rolling for attack\u2026";
+  }
+  if (!roll) return "Rolling\u2026";
+  if (roll.type === "attack") return "Rolling for attack\u2026";
+  if (roll.type === "damage") return "Rolling for damage\u2026";
+  if (roll.type === "save") return `Rolling for saving throw\u2026`;
+  if (roll.reason) return `Rolling for ${roll.reason}\u2026`;
+  if (roll.ability) return `Rolling for ${roll.ability}\u2026`;
+  return "Rolling\u2026";
+}
+
+function getResultLabel(
+  roll: RollResult | undefined,
+  combatDb: DiceBreakdown | undefined,
+): { text: string; color: string } {
+  // Combat attack roll
+  if (combatDb?.playerAttackRoll) {
+    const atk = combatDb.playerAttackRoll;
+    if (atk.d20 === 20) return { text: `Roll: ${atk.total} vs AC ${atk.targetAC} — Critical Success`, color: "#fbbf24" };
+    if (atk.d20 === 1) return { text: `Roll: ${atk.total} vs AC ${atk.targetAC} — Critical Failure`, color: "#ef4444" };
+    if (atk.hit) return { text: `Roll: ${atk.total} vs AC ${atk.targetAC} — Hit`, color: "#c9a227" };
+    return { text: `Roll: ${atk.total} vs AC ${atk.targetAC} — Miss`, color: "#6b6b6b" };
+  }
+  // Skill check / save / attack from rollResult
+  if (!roll) return { text: "", color: "#6b6b6b" };
+  const isAttack = roll.type === "attack";
+  const targetLabel = isAttack ? "AC" : "DC";
+  const targetStr = roll.dc != null ? ` vs ${targetLabel} ${roll.dc}` : "";
+  if (roll.rolled === 20) return { text: `Roll: ${roll.total}${targetStr} — Critical Success`, color: "#fbbf24" };
+  if (roll.rolled === 1) return { text: `Roll: ${roll.total}${targetStr} — Critical Failure`, color: "#ef4444" };
+  if (isAttack) {
+    return roll.success
+      ? { text: `Roll: ${roll.total}${targetStr} — Hit`, color: "#c9a227" }
+      : { text: `Roll: ${roll.total}${targetStr} — Miss`, color: "#6b6b6b" };
+  }
+  return roll.success
+    ? { text: `Roll: ${roll.total}${targetStr} — Success`, color: "#c9a227" }
+    : { text: `Roll: ${roll.total}${targetStr} — Failure`, color: "#6b6b6b" };
+}
+
+// ── Blood drop damage indicator style ────────────────────────────
+
+const damageLineStyle: React.CSSProperties = {
+  textAlign: "center",
+  fontSize: 13,
+  color: "#cc2200",
+  fontFamily: "monospace",
+  fontWeight: 600,
+  padding: "2px 0",
+  lineHeight: 1.5,
+};
+
 /**
- * Typewriter effect — reveals text letter-by-letter at ~1200 WPM
+ * Three-step animated dice roll reveal:
+ * Step 1 (0ms): "🎲 Rolling for X…" (italic, centered)
+ * Step 2 (+400ms): "Roll: N vs DC/AC — result" (gold/gray/red, centered)
+ *    + blood drop damage lines for hits
+ * Step 3 (+800ms): DM narrative + combat card (normal typewriter)
+ */
+function SteppedRollReveal({
+  rollResult,
+  combatResult,
+  narrative,
+}: {
+  rollResult?: RollResult;
+  combatResult?: ChatMessageType["combatResult"];
+  narrative: string;
+}) {
+  const [step, setStep] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const characterName = useCharacterStore((s) => s.character.name);
+
+  useEffect(() => {
+    // Step 0 → 1: show roll announcement immediately, then after 400ms show result
+    setStep(1);
+    timerRef.current = setTimeout(() => {
+      setStep(2);
+      timerRef.current = setTimeout(() => {
+        setStep(3);
+      }, 400);
+    }, 400);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const db = combatResult?.diceBreakdown;
+  const rollLabel = getRollLabel(rollResult, db);
+  const result = getResultLabel(rollResult, db);
+
+  // Build damage indicator lines
+  const damageLines: { text: string }[] = [];
+  if (db) {
+    const enemyName = combatResult?.enemyName ?? "Enemy";
+    // Player hits enemy
+    if (db.playerAttackRoll?.hit && db.playerDamageRoll) {
+      const finalDmg = db.playerDamageRoll.finalDamage;
+      console.log(`BLOOD DROP: ${characterName} hits ${enemyName} for ${finalDmg}`);
+      if (finalDmg > 0) {
+        damageLines.push({ text: `🩸 ${characterName} hits ${enemyName} for ${finalDmg} HP` });
+      }
+    }
+    // Enemy hits player
+    if (db.enemyAttackRoll?.hit && db.enemyDamageRoll) {
+      const enemyDmg = db.enemyDamageRoll.total;
+      console.log(`BLOOD DROP: ${enemyName} hits ${characterName} for ${enemyDmg}`);
+      if (enemyDmg > 0) {
+        damageLines.push({ text: `🩸 ${enemyName} hits ${characterName} for ${enemyDmg} HP` });
+      }
+    }
+  }
+  // Log for debugging — confirms whether damage lines exist at render time
+  if (damageLines.length > 0) {
+    console.log(`BLOOD DROP RENDER: ${damageLines.length} lines`, damageLines.map(l => l.text));
+  }
+
+  return (
+    <div>
+      {/* Initiative display (round 1 only) */}
+      {db?.initiative && step >= 1 && (
+        <div style={{ ...rollLineBase, color: "#c9a227", fontWeight: 600, fontSize: 12, marginBottom: 4 }}>
+          Initiative: You rolled {db.initiative.playerTotal}, {combatResult?.enemyName ?? "Enemy"} rolled {db.initiative.enemyTotal}
+          {" — "}
+          {db.initiative.playerTotal >= db.initiative.enemyTotal ? "You go first!" : `${combatResult?.enemyName ?? "Enemy"} goes first!`}
+        </div>
+      )}
+      {/* Step 1: Rolling announcement */}
+      {step >= 1 && (
+        <div style={{ ...rollLineBase, color: "#8a8a8a", fontStyle: "italic", opacity: step === 1 ? 1 : 0.5 }}>
+          <span role="img" aria-label="dice">🎲</span> {rollLabel}
+        </div>
+      )}
+      {/* Step 2: Roll result + damage indicators */}
+      {step >= 2 && (
+        <>
+          <div style={{ ...rollLineBase, color: result.color, fontWeight: 700 }}>
+            {result.text}
+          </div>
+          {damageLines.map((line, i) => (
+            <div key={i} style={damageLineStyle}>{line.text}</div>
+          ))}
+        </>
+      )}
+      {/* Step 3: DM narrative + combat card */}
+      {step >= 3 && (
+        <>
+          <TypewriterText text={narrative} />
+          {combatResult && (
+            <CombatRoundCard combatResult={combatResult} />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Typewriter effect — reveals text letter-by-letter at ~1600 WPM
  * using direct DOM manipulation to avoid React re-render batching.
- * 1200 WPM ≈ 6000 chars/min ≈ 10ms per character.
+ * 1600 WPM ≈ 8000 chars/min ≈ 7.5ms per character.
  */
 function TypewriterText({ text }: { text: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -104,7 +742,7 @@ function TypewriterText({ text }: { text: string }) {
     el.textContent = "";
     cursor.style.display = "";
 
-    // 1200 WPM ≈ 10ms per character
+    // 1600 WPM ≈ 7.5ms per character
     const timer = setInterval(() => {
       if (charIndex < text.length) {
         el.textContent += text[charIndex];
@@ -127,7 +765,7 @@ function TypewriterText({ text }: { text: string }) {
           scrollParent.scrollTop = scrollParent.scrollHeight;
         }
       }
-    }, 10);
+    }, 7.5);
 
     return () => {
       clearInterval(timer);
@@ -137,7 +775,13 @@ function TypewriterText({ text }: { text: string }) {
   }, [text]);
 
   return (
-    <div className="whitespace-pre-wrap">
+    <div
+      className="whitespace-pre-wrap"
+      style={{
+        color: "#e8d5b0", fontStyle: "italic",
+        fontFamily: "Georgia, serif", lineHeight: 1.8,
+      }}
+    >
       <span ref={containerRef} />
       <span
         ref={cursorRef}

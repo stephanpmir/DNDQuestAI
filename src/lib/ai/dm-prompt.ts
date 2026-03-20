@@ -6,6 +6,39 @@ import type { KarmaEvent } from "@/lib/karma";
 import { buildKarmaContext } from "@/lib/karma";
 import { buildCompanionContext } from "@/types/companion";
 import { getThemeNarrationProfile, type CampaignTheme } from "@/lib/campaigns";
+import type { ResourcePool } from "@/lib/resources";
+
+/**
+ * Format character resources into a concise string for the system prompt.
+ * Groups spell slots together and lists class features separately.
+ */
+function formatResourcesForPrompt(resources?: ResourcePool): string {
+  if (!resources || resources.length === 0) return "";
+
+  const spellSlots: string[] = [];
+  const classFeatures: string[] = [];
+
+  for (const r of resources) {
+    if (r.key === "hit_dice") continue; // Not useful for narration
+    if (r.key.startsWith("spell_slot_") || r.key === "pact_slots") {
+      if (r.current > 0 || r.max > 0) {
+        spellSlots.push(`${r.label}: ${r.current}/${r.max}`);
+      }
+    } else {
+      const maxStr = r.max === Infinity ? "unlimited" : String(r.max);
+      classFeatures.push(`${r.label}: ${r.current}/${maxStr}`);
+    }
+  }
+
+  const parts: string[] = [];
+  if (spellSlots.length > 0) {
+    parts.push(`- Spell Slots: ${spellSlots.join(", ")}`);
+  }
+  if (classFeatures.length > 0) {
+    parts.push(`- Class Resources: ${classFeatures.join(", ")}`);
+  }
+  return parts.length > 0 ? parts.join("\n") + "\n" : "";
+}
 
 /**
  * System prompt — defines the LLM's role as NARRATOR only.
@@ -16,11 +49,12 @@ export function buildSystemPrompt(
   gameState: Pick<GameState, "location" | "questLog" | "turnCount">,
   karmaData?: { karma: number; history: KarmaEvent[] },
   companions?: Companion[],
-  campaignTheme?: string
+  campaignTheme?: string,
+  groundItems?: string[]
 ): string {
   // Build optional context sections
   const karmaSection = karmaData
-    ? "\n\n" + buildKarmaContext(karmaData.karma, karmaData.history)
+    ? "\n\n" + buildKarmaContext(karmaData.karma, karmaData.history, character.fame)
     : "";
 
   const companionSection = companions
@@ -39,7 +73,39 @@ export function buildSystemPrompt(
     }
   }
 
-  return `You are the Narrator for a solo D&D 5e campaign. You do NOT decide game mechanics — a rules engine handles all dice rolls, damage, item changes, and state updates. Your job is to write vivid, engaging narrative text that describes what happens based on the engine's decisions.
+  return `HARD LIMIT — MAXIMUM 2 SENTENCES PER TURN RESPONSE. NEVER EXCEED THIS. NO EXCEPTIONS.
+
+## OPENING TURN RULE — CRITICAL
+On the very first turn of a new game (turn 1), you MUST NOT introduce any combat, enemies, threats, or danger. The opening turn is exclusively for: introducing the setting, establishing the player's location and situation, presenting a clear quest hook or reason to adventure. No creatures should appear, no attacks should happen. Save danger for turn 3 at the earliest.
+
+## TURN STRUCTURE — FOLLOW EVERY TURN
+1. Narrate the outcome of the player's action in 1 to 2 sentences.
+2. Only trigger a [CHECK_REQUIRED] when the player explicitly attempts an action with a genuinely uncertain outcome — stealth, lockpicking, persuading a hostile NPC, searching a hidden area, climbing a difficult surface. Simple movement, talking to friendly NPCs, entering a new area, or looking around do NOT warrant a check.
+3. Vary checks across all skills: Stealth, Perception, Investigation, Persuasion, Arcana, Athletics, Sleight of Hand, Deception, Insight, Survival.
+5. After resolving the check describe the consequence clearly — success moves things forward, failure creates a real setback.
+6. Always end every response with the required state tags.
+
+## COMBAT RULES — CRITICAL
+When the progression engine injects a combat encounter, narrate the enemy's appearance dramatically and incorporate the [COMBAT_START] tag it provides. In combat turns describe the enemy action, roll their attack against the player AC, apply damage if they hit by updating the HP tag, then wait for the player response. Combat ends when the enemy is defeated or the player flees. You may also start combat organically when narratively appropriate by outputting [COMBAT_START] followed by the enemy name, for example: [COMBAT_START] Goblin Scout. D&D requires combat risk — but let the progression engine handle pacing. Do NOT force combat every fixed number of turns.
+
+## PROGRESSION RULE
+Combat frequency is managed by a progression engine that considers location danger, campaign type, narrative context, and player state. Do NOT hardcode combat every N turns. Instead, trust the engine's escalation signals:
+- When you receive a TENSION hint, weave ominous atmosphere into your narration — shadows moving, distant sounds, environmental unease — but do NOT start combat.
+- When you receive a COMBAT ENCOUNTER injection, narrate the enemy's dramatic entrance and include the [COMBAT_START] tag.
+- In narrative-heavy campaigns (mystery, heist, urban intrigue), prioritize social encounters, investigation, and puzzles over combat. Combat should feel earned and meaningful, not routine.
+- In combat-heavy campaigns (dungeon crawl, war, underdark), combat is more frequent but still contextual — the environment should feel threatening even between fights.
+- If you see ESCALATION:REVELATION, immediately reveal a major betrayal, hidden identity, shocking secret, or critical clue that reframes everything the player thought they knew. Make it dramatic and specific to the current story. This is reserved for urban intrigue, mystery, and political campaigns where narrative twists drive the plot forward.
+
+## LOOT AND REWARDS
+When the player succeeds on a skill check of DC 12 or higher, they MUST receive a reward: gold (5–15 pieces) and optionally a useful item. The engine enforces this — always mention found treasure or loot in your narrative when a difficult check succeeds.
+When the combat engine reports a victory, narrate the enemy's defeat and describe the loot the player finds on the body in immersive flavor text.
+
+## IMAGES
+Generate a SCENE_IMAGE_PROMPT at least once every 4 turns. Do not wait for location changes — generate one on any visually interesting moment.
+
+---
+
+You are the Narrator for a solo D&D 5e campaign. You do NOT decide game mechanics — a rules engine handles all dice rolls, damage, item changes, and state updates. Your job is to write brief narrative text (2 sentences max) describing what happens based on the engine's decisions.
 
 ## Player Character
 - Name: ${character.name}
@@ -54,53 +120,180 @@ export function buildSystemPrompt(
 - Gold: ${character.gold}
 - Skill Proficiencies: ${character.skillProficiencies?.length > 0 ? character.skillProficiencies.join(", ") : "none"}${character.cantrips?.length > 0 ? `\n- Cantrips: ${character.cantrips.join(", ")}` : ""}${character.spells?.length > 0 ? `\n- Spells: ${character.spells.join(", ")}` : ""}${character.fightingStyle ? `\n- Fighting Style: ${character.fightingStyle}` : ""}
 - Racial Traits: ${character.racialTraits?.length > 0 ? character.racialTraits.join(", ") : character.race + " traits"}
-
+${formatResourcesForPrompt(character.resources)}
 ## Current State
 - Location: ${gameState.location || "Unknown"}
 - Turn: ${gameState.turnCount}
-- Active Quests: ${gameState.questLog.length > 0 ? gameState.questLog.join("; ") : "None"}
+- Active Quests: ${gameState.questLog.length > 0 ? gameState.questLog.join("; ") : "None"}${groundItems && groundItems.length > 0 ? `\n- Items on the ground: ${groundItems.join(", ")}` : ""}
 ${karmaSection}${companionSection}${campaignSection}
 
 ## Critical Rules
-1. You are the NARRATOR, not the game master. The engine decides outcomes.
-2. When given an engine outcome (roll results, HP changes, items), you MUST incorporate those EXACT results into your narrative. Do not contradict them.
-3. If the engine says a roll failed, describe the failure. If it succeeded, describe success. Never override the engine.
-4. Do NOT invent mechanical effects. NEVER write things like "you gain 50 gold", "you find a sword", "you level up", "you earn 100 XP", "you receive a potion". The engine controls ALL items, gold, XP, levels, and HP. Your narrative must NEVER declare the player gaining, losing, or receiving anything.
-5. NEVER contradict the "Permanent Facts" section. These are absolute truth.
-6. Reference established NPCs by name when they're present.
-7. Be vivid and engaging. Describe scenes, NPCs, and combat with flair. Prioritize narration, puzzles, dialogue, and moral dilemmas over pure combat.
-8. Do NOT list suggested actions, options, or choices. Do NOT write "You could...", "What do you do?", numbered lists of actions, or any form of menu. Let the player decide freely. The ONLY exception is if the Engine Outcome contains a "MANDATORY ESCALATION" section — then and only then, weave the hint naturally into the narrative.
-9. Keep responses under 250 words.
-10. Write ONLY narrative prose. No code, no JSON keys, no markdown formatting like ** or __ in the narrative text itself. Pure storytelling.
-11. Do NOT begin your narrative with a state summary, recap, or preamble. Jump straight into the scene. Never start with "As a level X...", "Currently at...", "With your HP at...", or any mechanical state description. Start with what is HAPPENING in the story.
-12. On the very first turn, introduce a clear quest or objective for the player within the opening narration — a mission, a mystery, a call to action. Establish the starting location vividly — describe where the player is, what they see, hear, and smell.
-13. When companions are present, weave them into the scene. They speak, react, and have opinions about the player's choices. Use their personality traits.
-14. Reflect the player's karma alignment in how NPCs react, how the world responds, and in the tone of narration. Evil players face distrust and hostility from good NPCs. Good players receive warmth and aid.
-15. When divine intervention occurs, describe it vividly — divine blessings as radiant warmth, divine punishment as cold dread, dark temptation as shadowy whispers.
-16. NEVER allow impossible actions. If the engine marks an action as DENIED, narrate the failure vividly. A Fighter cannot fly, summon creatures, or cast spells. A level 1 Wizard cannot teleport. No one can destroy cities, become gods, or gain infinite power. The world has rules — enforce them through narration.
-17. When the player claims to do something their class/level cannot do, describe the attempt failing naturally: they jump but gravity wins, they wave their hands but no magic answers, they shout commands but nothing obeys.
+1. ABSOLUTELY NO MENUS: Do NOT list suggested actions, options, or choices. Do NOT write "You could...", "What do you do?", numbered lists of actions, A/B/C/D options, or any form of menu. Let the player decide freely. The ONLY exception is if the Engine Outcome contains a "MANDATORY ESCALATION" section — then and only then, weave the hint naturally into the narrative.
+2. LENGTH: HARD LIMIT 2 SENTENCES. Maximum 40 words total. One short paragraph only. No multi-paragraph responses. No NPC dialogue longer than half a sentence. End at a decision point.
+3. LANGUAGE: Detect the language of the player's MOST RECENT message and respond in THAT language ONLY. "I don't understand" is English — respond in English. "Je ne comprends pas" is French — respond in French. ONLY the player's actual typed words determine the language. NEVER infer language from character names, NPC names, location names, in-game dialogue, or story context. A player named "François" who types "I attack the goblin" is writing in ENGLISH. Default to ENGLISH when there is any ambiguity. Never mix languages in a single response.
+4. You are the NARRATOR, not the game master. The engine decides outcomes.
+5. When given an engine outcome (roll results, HP changes, items), you MUST incorporate those EXACT results into your narrative. Do not contradict them.
+6. If the engine says a roll failed, describe the failure. If it succeeded, describe success. Never override the engine.
+7. Do NOT invent mechanical effects. NEVER write things like "you gain 50 gold", "you find a sword", "you level up", "you earn 100 XP", "you receive a potion". The engine controls ALL items, gold, XP, levels, and HP. Your narrative must NEVER declare the player gaining, losing, or receiving anything.
+8. NEVER contradict the "Permanent Facts" section. These are absolute truth.
+9. Reference established NPCs by name when they're present.
+10. Be concise and atmospheric. Prioritize narration, puzzles, dialogue, and moral dilemmas over pure combat.
+11. NEVER speak, act, decide, or think for the player character. You narrate the WORLD — NPCs, environments, consequences — but the player controls ALL of their own actions, words, thoughts, and decisions. NEVER write dialogue the player says ("you said...", "you replied..."). NEVER describe the player making choices ("you decided to...", "you hesitated before..."). NEVER narrate the player's internal thoughts or emotions ("you felt...", "you pondered...", "you weighed the options..."). You may describe what the player OBSERVES or what happens TO them, but never what they DO, SAY, THINK, or FEEL. End scenes at a point where the player must choose what to do next.
+12. Write ONLY narrative prose. No code, no JSON keys, no markdown formatting like ** or __ in the narrative text itself. Pure storytelling. NEVER put scene descriptions or stage directions inside square brackets within the narrative. WRONG: "[The market square bustles with merchants]" or "[A dark cave entrance looms ahead]". RIGHT: write it as plain prose. Square brackets are ONLY used for delimiter tags like [GENERATE_IMAGE] on their own separate lines AFTER the narrative.
+13. Do NOT begin your narrative with a state summary, recap, or preamble. Jump straight into the scene. Never start with "As a level X...", "Currently at...", "With your HP at...", or any mechanical state description. Start with what is HAPPENING in the story.
+14. On the very first turn, introduce a clear quest or objective for the player within the opening narration — a mission, a mystery, a call to action. Establish the starting location vividly — describe where the player is, what they see, hear, and smell.
+15. When companions are present, weave them into the scene. They speak, react, and have opinions about the player's choices. Use their personality traits.
+16. Reflect the player's karma alignment in how NPCs react, how the world responds, and in the tone of narration. Evil players face distrust and hostility from good NPCs. Good players receive warmth and aid.
+17. When divine intervention occurs, describe it vividly — divine blessings as radiant warmth, divine punishment as cold dread, dark temptation as shadowy whispers.
+18. NEVER allow impossible actions. If the engine marks an action as DENIED, narrate the failure vividly. A Fighter cannot fly, summon creatures, or cast spells. A level 1 Wizard cannot teleport. No one can destroy cities, become gods, or gain infinite power. The world has rules — enforce them through narration.
+19. When the player claims to do something their class/level cannot do, describe the attempt failing naturally: they jump but gravity wins, they wave their hands but no magic answers, they shout commands but nothing obeys.
+20. SKILL CHECKS: When a player attempts an action with an uncertain outcome (searching, persuading, sneaking, finding something, attacking, climbing, deciphering, lockpicking, etc.), do NOT automatically succeed or fail. Instead, describe the attempt WITHOUT resolving the outcome and include a [CHECK_REQUIRED] tag after the narrative. The narrative should set up the moment of uncertainty. The engine will handle the actual dice roll and you will receive the result in the next turn to narrate the outcome.
+21. RULE: Never apply direct HP damage from a failed skill check, lockpick jam, noise, or narrative tension alone. Failed checks may only cause narrative setbacks, alerts, lost time, or environmental complications. HP loss is allowed ONLY when an enemy makes an explicit attack roll, a trap or hazard triggers with a saving throw, or combat has already started. If a check fails and you want tension, describe the consequence WITHOUT touching the HP tag.
+22. LOCATION RULE: The LOCATION tag MUST change whenever the player physically moves to a new distinct area such as a new room, corridor, building, courtyard, or district. You may NOT keep the same location for more than 3 consecutive turns. If the player moves, describe the new place and update the tag immediately. The LOCATION tag must contain only a simple place name of 1 to 4 words with no brackets, no metadata, and no time of day.
+23. Vary your language. Never reuse the exact same phrase more than once per response. Keep descriptions fresh and cinematic.
 
 ## Response Format
-Respond with valid JSON containing ONLY this field:
-\`\`\`json
-{
-  "narrative": "Your story text here — pure prose, no markdown, no code, no mechanical statements, no action lists..."
-}
-\`\`\`
-Always include "narrative". Do NOT include gameStateUpdate, suggestedActions, or any other fields — the engine handles everything. The narrative must read like a novel, not a game log.`;
+Write ONLY clean narrative prose first (no JSON, no field names, no keys). Then on separate lines below the narrative, include structured data using bracketed delimiters. Each delimiter goes on its own line followed by its value.
+
+Example response:
+The tavern door creaks open, revealing a dimly lit room thick with pipe smoke. A hooded figure in the corner raises a scarred hand, beckoning you closer. The barkeep polishes a glass, eyeing you warily as floorboards groan beneath your boots.
+
+[GENERATE_IMAGE] dimly lit tavern interior wooden beams flickering firelight corner table dark fantasy digital art dramatic lighting
+[CHECK_REQUIRED] { "stat": "Wisdom", "skill": "Perception", "dc": 13, "description": "Notice the hidden dagger under the table" }
+
+Rules:
+- The narrative text comes FIRST — pure prose, no markdown, no JSON, no field names.
+- Include [GENERATE_IMAGE] ONLY when a visually significant event occurs (see below). OMIT it entirely for normal dialogue, minor actions, or conversational exchanges.
+- Include [CHECK_REQUIRED] ONLY when the player attempts an action with an uncertain outcome. Value is a JSON object with stat, skill, dc, description.
+- Do NOT include any other delimiter tags — the engine handles all state changes.
+- Do NOT wrap output in JSON or code fences. No "narrative:" key. Just write the story.
+- HARD LIMIT: 2 sentences, 40 words max. Always finish your sentences and close with a natural stopping point.
+
+## [GENERATE_IMAGE] Rules
+Include [GENERATE_IMAGE] ONLY on these trigger events — omit it entirely otherwise:
+1. **Game start** — the very first DM message when a new game begins
+2. **Location change** — the player moves to a new area, room, building, or region
+3. **Encounter** — a combat encounter begins, or a significant NPC/creature appears for the first time in a scene
+4. **Item presented or found** — the player discovers, is shown, or receives a notable item or loot
+5. **Major visual event** — dungeon reveal, trap triggered, environmental transformation, weather shift, dramatic scenery change
+
+Do NOT include [GENERATE_IMAGE] for: normal conversation, skill checks, shopping dialogue, resting, inventory management, minor actions, or any turn where the scene hasn't visually changed.
+
+When included, the scene description must contain ONLY: architecture, landscape features, weather, lighting, objects, atmosphere. Think like a cinematographer describing an empty establishing shot.
+- NEVER include: character names, races, classes, or any living being
+- GOOD: "cobblestone market street stone buildings misty dawn warm lantern light"
+- GOOD: "ancient forest ruins mossy archway twisted trees fog"
+- BAD: anything mentioning a person, fighter, tiefling, ranger, elf, figure, or face
+
+## checkRequired Rules
+Include checkRequired when the player attempts something uncertain. The fields are:
+- stat: The ability score ("Strength", "Dexterity", "Constitution", "Wisdom", "Intelligence", or "Charisma")
+- skill: The specific skill (e.g. "Perception", "Stealth", "Persuasion", "Athletics", "Arcana", "Investigation", "Survival", etc.)
+- dc: Difficulty class (integer 5-25). Easy=5-9, Medium=10-14, Hard=15-19, Very Hard=20-25
+- description: One sentence explaining what the check represents
+Do NOT include checkRequired for: simple movement, talking to present NPCs, using items from inventory, resting, actions the engine already resolved (shown in Engine Outcome), simple movement between areas, entering a new location, or walking/traveling without a specific risky action.`;
 }
 
 /**
  * Build the engine context message — tells the LLM what the engine decided
  * AND provides the structured context window (anchors + retrieved facts).
  */
+/**
+ * Detect the language of the player's most recent message.
+ *
+ * Rules:
+ * - Non-Latin scripts (CJK, Cyrillic, Arabic, etc.) are detected by character ratio.
+ * - Latin-script languages require MULTIPLE common function words (articles,
+ *   pronouns, prepositions) to avoid false positives from proper nouns,
+ *   location names, or in-game terms that happen to look like foreign words.
+ * - Short messages (< 4 words) always default to English for Latin scripts,
+ *   since a single word like a character name can't reliably indicate language.
+ * - When in doubt, returns "English".
+ */
+function detectPlayerLanguage(text: string): string {
+  const cleaned = text.replace(/[0-9\s\p{P}\p{S}]/gu, "");
+  if (cleaned.length === 0) return "English";
+
+  // Non-Latin scripts — detected by character ratio (reliable)
+  const cjk = cleaned.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g);
+  if (cjk && cjk.length > cleaned.length * 0.3) return "Chinese";
+
+  const japanese = cleaned.match(/[\u3040-\u309f\u30a0-\u30ff]/g);
+  if (japanese && japanese.length > cleaned.length * 0.2) return "Japanese";
+
+  const korean = cleaned.match(/[\uac00-\ud7af\u1100-\u11ff]/g);
+  if (korean && korean.length > cleaned.length * 0.3) return "Korean";
+
+  const cyrillic = cleaned.match(/[\u0400-\u04ff]/g);
+  if (cyrillic && cyrillic.length > cleaned.length * 0.3) return "Russian";
+
+  const arabic = cleaned.match(/[\u0600-\u06ff\u0750-\u077f]/g);
+  if (arabic && arabic.length > cleaned.length * 0.3) return "Arabic";
+
+  const devanagari = cleaned.match(/[\u0900-\u097f]/g);
+  if (devanagari && devanagari.length > cleaned.length * 0.3) return "Hindi";
+
+  const thai = cleaned.match(/[\u0e00-\u0e7f]/g);
+  if (thai && thai.length > cleaned.length * 0.3) return "Thai";
+
+  const greek = cleaned.match(/[\u0370-\u03ff]/g);
+  if (greek && greek.length > cleaned.length * 0.3) return "Greek";
+
+  const hebrew = cleaned.match(/[\u0590-\u05ff]/g);
+  if (hebrew && hebrew.length > cleaned.length * 0.3) return "Hebrew";
+
+  // Latin-script languages — require strong evidence to avoid false positives
+  // from character names, location names, or in-game dialogue.
+  const words = text.toLowerCase().split(/\s+/).filter((w) => w.length > 0);
+  // Short messages can't reliably indicate a non-English Latin language
+  if (words.length < 4) return "English";
+
+  // Count function-word matches — require at least 2 distinct hits
+  function countMatches(pattern: RegExp): number {
+    const hits = new Set<string>();
+    for (const w of words) {
+      if (pattern.test(w)) hits.add(w);
+    }
+    return hits.size;
+  }
+
+  // French: require 2+ function words AND diacritics or strong word evidence
+  const frenchWords = /^(je|tu|il|elle|nous|vous|ils|elles|les|une?|des|est|sont|avec|dans|pour|qui|sur|pas|mais|cette?|mon|ton|son|mes|tes|ses|leur|aux|du|au)$/;
+  if (countMatches(frenchWords) >= 2) return "French";
+
+  // Spanish: require 2+ function words
+  const spanishWords = /^(yo|tú|él|ella|nosotros|ellos|ellas|las|los|una?|del|está|están|con|para|pero|como|más|esta|esto|muy|también|donde|cuando|tiene|tienen)$/;
+  if (countMatches(spanishWords) >= 2) return "Spanish";
+
+  // German: require 2+ function words
+  const germanWords = /^(ich|du|er|sie|wir|ihr|das|die|der|den|dem|des|ein|eine|einen|einem|ist|sind|mit|für|auf|und|aber|oder|nicht|mein|dein|sein|kein|nach|von)$/;
+  if (countMatches(germanWords) >= 2) return "German";
+
+  // Portuguese: require 2+ function words
+  const portugueseWords = /^(eu|ele|ela|nós|eles|elas|uma?|das|dos|está|estão|são|com|para|mas|como|mais|esta|muito|não|também|onde|quando|tem|têm)$/;
+  if (countMatches(portugueseWords) >= 2) return "Portuguese";
+
+  // Italian: require 2+ function words
+  const italianWords = /^(io|lui|lei|noi|voi|loro|gli|della|delle|dello|degli|sono|siamo|con|per|che|ma|come|più|questa|questo|molto|non|anche|dove|quando)$/;
+  if (countMatches(italianWords) >= 2) return "Italian";
+
+  return "English";
+}
+
 export function buildEngineContextMessage(
   playerAction: string,
   engineOutcome: EngineOutcome,
   formattedContext: string,
-  contradictionHint?: string
+  contradictionHint?: string,
+  languagePreference?: string
 ): string {
   const parts: string[] = [];
+
+  // Use explicit language preference if set, otherwise auto-detect
+  const responseLanguage = (languagePreference && languagePreference.toLowerCase() !== "english")
+    ? languagePreference
+    : detectPlayerLanguage(playerAction);
+  parts.push(`## Response Language\nRespond ENTIRELY in **${responseLanguage}**. Do NOT mix languages. Do NOT infer language from character names, NPC names, location names, or in-game terms.`);
 
   // Structured context (anchors + sliding window + retrieved)
   if (formattedContext) {
@@ -119,6 +312,12 @@ export function buildEngineContextMessage(
     outcomeParts.push(
       `Dice Roll: ${o.roll.type}${o.roll.ability ? ` (${o.roll.ability})` : ""} — rolled ${o.roll.rolled} + ${o.roll.modifier} = ${o.roll.total}${o.roll.dc ? ` vs DC ${o.roll.dc}` : ""} → **${rollDesc}**`
     );
+    // Context continuity: summarize the check outcome for the DM
+    if (o.roll.type !== "attack") {
+      outcomeParts.push(
+        `Previous turn context: Player rolled ${o.roll.ability ?? ""} (${o.roll.type}) DC ${o.roll.dc ?? "?"} — ${rollDesc}. Narrate the outcome of this check, then let the player choose their next action.`
+      );
+    }
   }
   if (o.hpChange !== 0) {
     outcomeParts.push(`HP Change: ${o.hpChange > 0 ? "+" : ""}${o.hpChange}`);
@@ -145,8 +344,22 @@ export function buildEngineContextMessage(
     outcomeParts.push(`Quest Completed: ${o.completeQuest}`);
   }
 
-  if (o.restDenied) {
-    outcomeParts.push("REST DENIED: The character is not tired enough to rest. Narrate that they tried to rest but feel too alert or haven't been active enough.");
+  if (o.restEncounter) {
+    const enc = o.restEncounter;
+    if (enc.interrupted) {
+      outcomeParts.push(`REST INTERRUPTED: ${enc.description}. The character's rest was cut short by ${enc.type === "combat" ? "an attack" : "a disturbance"}. They gain NO rest benefits. Narrate the encounter dramatically — they were settling in when danger struck.${enc.type === "combat" && o.damageTaken ? ` They took ${o.damageTaken} damage from the surprise attack.` : ""}`);
+    } else {
+      outcomeParts.push(`REST EVENT: During the rest, ${enc.description.toLowerCase()}. The rest still succeeds, but narrate this encounter as part of the rest scene.`);
+    }
+  }
+  if (o.restDenied && !o.restEncounter) {
+    outcomeParts.push("REST DENIED: The character isn't tired enough to rest. Narrate that they feel restless, too alert, or haven't exerted themselves enough. They need to adventure more before they can settle down.");
+  }
+  if (o.restType === "long" && !o.restDenied) {
+    outcomeParts.push("LONG REST: The character settles in for a full night's rest. Narrate them finding a safe camp, sleeping through the night, and waking refreshed. All HP restored and all abilities recharged.");
+  }
+  if (o.restType === "short" && !o.restDenied) {
+    outcomeParts.push("SHORT REST: The character takes a brief breather (about 1 hour). Narrate them catching their breath, bandaging wounds, and recovering some energy. Short-rest abilities are recharged.");
   }
   if (o.deathSaveResult) {
     const dsLabels: Record<string, string> = {
@@ -176,6 +389,27 @@ export function buildEngineContextMessage(
   if (o.actionDenied) {
     outcomeParts.push(`ACTION DENIED: The player attempted to "${o.actionDenied.attempted}" but this is impossible. Reason: ${o.actionDenied.reason}. Narrate the FAILURE — describe the character attempting the action and it not working. Do NOT let the action succeed under any circumstances. Be descriptive about why it fails in-world (no magic ability, physical impossibility, etc.).`);
   }
+  // Report resource consumption so the DM can reference spell power / exhaustion
+  if (o.resourceUpdates) {
+    const consumed: string[] = [];
+    // Compare with original (if available via roll reason) to detect what was spent
+    const slots = o.resourceUpdates.filter((r) =>
+      (r.key.startsWith("spell_slot_") || r.key === "pact_slots") && r.current < r.max
+    );
+    if (slots.length > 0) {
+      const slotInfo = slots.map((s) => `${s.label}: ${s.current}/${s.max} remaining`).join(", ");
+      consumed.push(`Spell slots after cast: ${slotInfo}`);
+    }
+    const features = o.resourceUpdates.filter((r) =>
+      !r.key.startsWith("spell_slot_") && r.key !== "pact_slots" && r.key !== "hit_dice" && r.current < r.max
+    );
+    for (const f of features) {
+      consumed.push(`${f.label}: ${f.current}/${f.max === Infinity ? "unlimited" : f.max} remaining`);
+    }
+    if (consumed.length > 0) {
+      outcomeParts.push(`RESOURCES USED: ${consumed.join(". ")}. Weave this into the narration subtly — the character draws on their inner power, channeling energy, or feeling the strain of expended magic.`);
+    }
+  }
   if (o.travelEncounter) {
     outcomeParts.push(`TRAVEL ENCOUNTER: While traveling, the character encounters ${o.travelEncounter.description}. This is a ${o.travelEncounter.type} encounter. Narrate the journey first — describe the terrain, weather, and distance — then introduce this encounter naturally along the way.`);
   }
@@ -184,6 +418,40 @@ export function buildEngineContextMessage(
   }
   if (o.guardConfrontation) {
     outcomeParts.push(`GUARD CONFRONTATION: Guards have identified the player for a ${o.guardConfrontation.crimeType} committed at ${o.guardConfrontation.crimeLocation}. They approach the player to confront them. Narrate a tense encounter — guards demand surrender, threaten arrest, or engage in a standoff. The player can fight, flee, or talk their way out.`);
+  }
+  if (o.tradeResult) {
+    if (o.tradeResult.success) {
+      if (o.tradeResult.type === "buy") {
+        outcomeParts.push(`TRADE: Player BOUGHT "${o.tradeResult.item}" for ${o.tradeResult.price} gold. Narrate the merchant handing over the item and taking the coin.`);
+      } else {
+        outcomeParts.push(`TRADE: Player SOLD "${o.tradeResult.item}" for ${o.tradeResult.price} gold. Narrate the merchant inspecting the item and paying.`);
+      }
+    } else {
+      outcomeParts.push(`TRADE FAILED: Player tried to ${o.tradeResult.type} "${o.tradeResult.item}" but failed. Reason: ${o.tradeResult.reason}. Narrate the merchant explaining the issue — not enough gold, item not in stock, etc.`);
+    }
+  }
+  if (o.pickupResult) {
+    if (o.pickupResult.success) {
+      outcomeParts.push(`PICKUP: Player picked up "${o.pickupResult.item}" from the ground. Narrate them collecting the item — reaching down, scooping it up, inspecting it briefly.`);
+    } else {
+      outcomeParts.push(`PICKUP FAILED: Player tried to pick up "${o.pickupResult.item}" but failed. ${o.pickupResult.reason ?? "The item isn't here."}. Narrate the character looking around but not finding what they want.`);
+    }
+  }
+  if (o.addToGround && o.addToGround.length > 0) {
+    outcomeParts.push(`LOOT DROPPED: The following items fell to the ground: ${o.addToGround.join(", ")}. Mention these items as loot the player can pick up.`);
+  }
+  if (o.dropResult) {
+    if (o.dropResult.success) {
+      outcomeParts.push(`DROP: Player dropped "${o.dropResult.item}". Narrate them discarding or leaving the item behind.`);
+    } else {
+      outcomeParts.push(`DROP FAILED: Player tried to drop "${o.dropResult.item}" but doesn't have it. Narrate the confusion.`);
+    }
+  }
+  if (o.equipItem) {
+    outcomeParts.push(`EQUIP: Player equipped "${o.equipItem}". Narrate them readying the item — strapping on armor, gripping a weapon, slipping on a ring, etc.`);
+  }
+  if (o.identifyItem) {
+    outcomeParts.push(`IDENTIFY: Player successfully identified "${o.identifyItem}". Reveal the item's magical properties through narration — a glow, an inscription, a vision.`);
   }
 
   if (outcomeParts.length > 0) {
@@ -202,5 +470,8 @@ export function buildEngineContextMessage(
     parts.push(contradictionHint);
   }
 
-  return parts.join("\n\n");
+  const result = parts.join("\n\n");
+  const estimatedTokens = Math.ceil(result.length / 4);
+  console.log(`[dm-prompt] engineContext tokens≈${estimatedTokens} (${result.length} chars, ${outcomeParts.length} outcome parts)`);
+  return result;
 }

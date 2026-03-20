@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { buildSystemPrompt, buildEngineContextMessage } from "@/lib/ai/dm-prompt";
-import { parseDMResponse } from "@/lib/ai/parse-response";
+import { parseDMResponse, enforceGameState } from "@/lib/ai/parse-response";
 import { preGenerate, postGenerate } from "@/lib/engine/pipeline";
 import type { PipelineInput } from "@/lib/engine/pipeline";
 import { getRandomThemeForLevel, getRandomCampaign } from "@/lib/campaigns";
@@ -11,22 +11,12 @@ import type { GameState } from "@/types/game";
 import type { WorldEvent, NPC, LocationRecord } from "@/types/world";
 import type { Fact } from "@/lib/engine/fact-ledger";
 import { computeNpcDisposition } from "@/lib/karma";
-import { runGuardInvestigations, shouldGuardsConfront, buildCrimeContext } from "@/lib/crimes";
+import { runGuardInvestigations, shouldGuardsConfront } from "@/lib/crimes";
 import type { Crime } from "@/lib/crimes";
-
-function getClient(): OpenAI {
-  const apiKey = process.env.CEREBRAS_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      "CEREBRAS_API_KEY is not set. Add it to your environment variables."
-    );
-  }
-  return new OpenAI({
-    baseURL: "https://api.cerebras.ai/v1",
-    apiKey,
-    timeout: 30_000,
-  });
-}
+import { callWithCascade } from "@/lib/ai/providers";
+import { initCombat, resolveCombatTurn, detectAttackTarget, findMonster, createGenericNpc, resolveDeathSave } from "@/lib/combat-engine";
+import type { CombatState, CombatRoundResult } from "@/lib/combat-engine";
+import { detectRulesQuestion, getRulesAnswer } from "@/lib/rules-detector";
 
 interface RequestBody {
   message: string;
@@ -41,6 +31,12 @@ interface RequestBody {
   };
   /** Crime log */
   crimes?: Crime[];
+  /** Player's chosen UI/game language */
+  languagePreference?: string;
+  /** Items currently on the ground at the player's location */
+  groundItems?: string[];
+  /** Active combat state from previous round */
+  combatState?: CombatState | null;
   /** Karma system data */
   karmaData?: {
     karma: number;
@@ -50,76 +46,66 @@ interface RequestBody {
 }
 
 const MAX_REGENERATION_ATTEMPTS = 1;
-const MAX_RETRY_ATTEMPTS = 4;
-const RETRY_BASE_DELAY_MS = 2000;
-
-/** Sleep for the given number of milliseconds */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** Check if an error is a timeout/network error worth retrying */
-function isRetryableError(error: unknown): boolean {
-  if (error instanceof Error) {
-    const msg = error.message.toLowerCase();
-    return (
-      msg.includes("timeout") ||
-      msg.includes("econnreset") ||
-      msg.includes("econnrefused") ||
-      msg.includes("socket hang up") ||
-      msg.includes("network") ||
-      msg.includes("fetch failed") ||
-      msg.includes("aborted") ||
-      msg.includes("503") ||
-      msg.includes("502") ||
-      msg.includes("429")
-    );
-  }
-  return false;
-}
-
-/** Make an LLM call with exponential backoff retry on timeout/network errors */
-async function callWithRetry(
-  client: OpenAI,
-  messages: OpenAI.ChatCompletionMessageParam[]
-): Promise<string> {
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
-    try {
-      const response = await client.chat.completions.create({
-        model: "llama3.1-8b",
-        messages,
-        max_tokens: 1024,
-      });
-      return response.choices[0]?.message?.content ?? "";
-    } catch (error) {
-      lastError = error;
-      if (!isRetryableError(error) || attempt >= MAX_RETRY_ATTEMPTS) {
-        throw error;
-      }
-      const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
-      console.warn(
-        `[DM API] Retry ${attempt + 1}/${MAX_RETRY_ATTEMPTS} after ${delay}ms`,
-        error instanceof Error ? error.message : error
-      );
-      await sleep(delay);
-    }
-  }
-
-  throw lastError;
-}
 
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as RequestBody;
-    const { message, character, gameState, history, worldState, karmaData, crimes } = body;
+    const { message, character, gameState, history, worldState, karmaData, crimes, languagePreference } = body;
 
     if (!message || !character || !gameState) {
       return NextResponse.json(
         { error: "Missing required fields: message, character, and gameState are all required." },
         { status: 400 }
       );
+    }
+
+    // ── Rules question interception ────────────────────────────────
+    // If the player is asking about game mechanics, return an immediate
+    // plain English answer without running the pipeline or calling the LLM.
+    if (detectRulesQuestion(message)) {
+      const rulesAnswer = getRulesAnswer(message, character);
+      return NextResponse.json({
+        narrative: rulesAnswer,
+        rulesAnswer: true,
+        gameStateUpdate: {},
+      });
+    }
+
+    // ── Unconscious gate — death saves only ────────────────────────
+    // When the player is unconscious at 0 HP, skip the entire pipeline.
+    // Run only a death saving throw and return immediately.
+    if (character.isUnconscious && character.hp <= 0 && !character.isDead) {
+      const ds = resolveDeathSave(
+        character.deathSaves?.successes ?? 0,
+        character.deathSaves?.failures ?? 0,
+      );
+      console.log(`[dm-route] DEATH SAVE: roll=${ds.roll} type=${ds.type} successes=${ds.totalSuccesses} failures=${ds.totalFailures} stabilized=${ds.stabilized} revived=${ds.revived} died=${ds.died}`);
+
+      let narrative: string;
+      if (ds.revived) {
+        narrative = "You are unconscious. Death saving throw: Natural 20! Your eyes snap open as life floods back into your body.";
+      } else if (ds.died) {
+        narrative = "You are unconscious. Death saving throw: failure. The last flicker of life fades from your body.";
+      } else if (ds.stabilized) {
+        narrative = "You are unconscious. Death saving throw: success. Your breathing steadies — you have stabilized.";
+      } else if (ds.type === "nat1") {
+        narrative = `You are unconscious. Death saving throw: Natural 1 — two failures. (${ds.totalSuccesses}S/${ds.totalFailures}F)`;
+      } else if (ds.type === "success") {
+        narrative = `You are unconscious. Death saving throw: ${ds.roll} — success. (${ds.totalSuccesses}S/${ds.totalFailures}F)`;
+      } else {
+        narrative = `You are unconscious. Death saving throw: ${ds.roll} — failure. (${ds.totalSuccesses}S/${ds.totalFailures}F)`;
+      }
+
+      return NextResponse.json({
+        narrative,
+        gameStateUpdate: {
+          hpChange: ds.revived ? 1 : undefined,
+        },
+        engineOutcome: {
+          deathSaveResult: ds.type,
+        },
+        combatState: body.combatState ?? null,
+      });
     }
 
     // ── Set starting location on first turn ────────────────────────
@@ -141,45 +127,167 @@ export async function POST(request: Request) {
       npcs: worldState?.npcs ?? [],
       locations: worldState?.locations ?? [],
       karma: karmaData?.karma ?? character.karma ?? 0,
+      groundItems: body.groundItems ?? [],
     };
 
     const preResult = preGenerate(pipelineInput);
 
+    // ── PRE-LLM ATTACK DETECTION ──────────────────────────────────
+    // If the player's action contains an attack verb + target name and
+    // no combat is active, look up the target in the monster DB and
+    // auto-initiate combat so the engine resolves with real stats.
+    let combatResult: CombatRoundResult | null = null;
+    let activeCombatState: CombatState | null = body.combatState ?? null;
+
+    if (!activeCombatState?.active) {
+      const attackTarget = detectAttackTarget(message);
+      if (attackTarget) {
+        console.log(`[dm-route] Pre-LLM attack detected: target="${attackTarget}"`);
+        // initCombat will use monster DB if found, otherwise create generic NPC
+        activeCombatState = initCombat(attackTarget, character);
+      }
+    }
+
+    // ── COMBAT ROUND RESOLUTION ───────────────────────────────────
+    // If combat is active, resolve the round BEFORE calling the LLM
+    // so the engine outcome reflects combat results for narration.
+    if (activeCombatState?.active) {
+      combatResult = resolveCombatTurn(message, character, activeCombatState);
+      activeCombatState = combatResult.combatState;
+
+      // Inject combat results into engine outcome
+      const eo = preResult.engineOutcome;
+      eo.hpChange = (eo.hpChange || 0) + combatResult.playerHpChange;
+      eo.damageDealt = combatResult.playerDamage;
+      eo.isCriticalHit = combatResult.diceBreakdown.playerAttackRoll?.crit ?? false;
+      eo.damageTaken = combatResult.enemyDamage > 0 ? combatResult.enemyDamage : undefined;
+
+      if (combatResult.combatEndReason === "enemy_killed") {
+        eo.xpGained = (eo.xpGained || 0) + combatResult.xpAwarded;
+        eo.goldChange = (eo.goldChange || 0) + combatResult.goldDropped;
+        if (combatResult.itemsDropped.length > 0) {
+          eo.itemsGained.push(...combatResult.itemsDropped);
+        }
+      }
+
+      // HP writeback trace
+      console.log(`HP WRITE: before=[${character.hp}] delta=[${combatResult.playerHpChange}] after=[${Math.max(0, Math.min(character.maxHp, character.hp + combatResult.playerHpChange))}] (server-side combat result)`);
+
+      // Detailed combat engine log
+      const bd = combatResult.diceBreakdown;
+      console.log(
+        `COMBAT ENGINE: target=[${activeCombatState.enemyName}] AC=[${activeCombatState.enemyAc}] HP=[${activeCombatState.enemyHp}/${activeCombatState.enemyMaxHp}]` +
+        ` playerRoll=[${bd.playerAttackRoll?.d20 ?? "-"}+${bd.playerAttackRoll?.modifier ?? 0}=${bd.playerAttackRoll?.total ?? "-"}]` +
+        ` hit=[${bd.playerAttackRoll?.hit ?? false}] damage=[${combatResult.playerDamage}]` +
+        ` enemyRoll=[${bd.enemyAttackRoll?.d20 ?? "-"}+${bd.enemyAttackRoll?.modifier ?? 0}=${bd.enemyAttackRoll?.total ?? "-"}]` +
+        ` enemyHit=[${bd.enemyAttackRoll?.hit ?? false}] enemyDamage=[${combatResult.enemyDamage}]` +
+        ` round=[${activeCombatState.roundNumber}] result=[${combatResult.combatEndReason}]`
+      );
+    }
+
     // ── PIPELINE STEP 5: LLM Generation ───────────────────────────
-    const client = getClient();
     const systemPrompt = buildSystemPrompt(
       character,
       gameState,
       karmaData ? { karma: karmaData.karma, history: karmaData.history as import("@/lib/karma").KarmaEvent[] } : undefined,
       karmaData?.companions as import("@/types/companion").Companion[] | undefined,
-      campaignThemeStr
+      campaignThemeStr,
+      body.groundItems
     );
 
     let narrative = "";
+    let sceneImagePrompt: string | undefined;
+    let checkRequired: { stat: string; skill: string; dc: number; description: string } | undefined;
     let postResult = null;
     let contradictionHint: string | undefined;
+    let lastParsed: ReturnType<typeof parseDMResponse> | null = null;
+    let lastRawText = "";
 
     for (let attempt = 0; attempt <= MAX_REGENERATION_ATTEMPTS; attempt++) {
       const engineContext = buildEngineContextMessage(
         message,
         preResult.engineOutcome,
         preResult.formattedContext,
-        contradictionHint
+        contradictionHint,
+        languagePreference
       );
+
+      // Clean the CHECK_ROLL raw tag into natural language for the LLM
+      let userMessage = message;
+      const checkRollTag = message.match(/\[CHECK_ROLL:([^|]+)\|([^|]+)\|(\d+)\]/);
+      if (checkRollTag) {
+        userMessage = `I rolled a ${checkRollTag[1]} check (${checkRollTag[2]}).`;
+      }
+
+      // Truncate long player input to prevent cascade timeouts
+      const MAX_INPUT_LENGTH = 300;
+      if (userMessage.length > MAX_INPUT_LENGTH) {
+        console.log(`[dm-route] Truncating player input from ${userMessage.length} to ${MAX_INPUT_LENGTH} chars`);
+        userMessage = userMessage.slice(0, MAX_INPUT_LENGTH);
+      }
+
+      // Filter history to only valid LLM roles and cap token size
+      const estimateTokens = (s: string) => Math.ceil(s.length / 4);
+
+      // Estimate non-history token budget (system prompt + engine context + user message + combat)
+      const fixedTokens = estimateTokens(systemPrompt) + estimateTokens(engineContext) + estimateTokens(userMessage);
+
+      // Use tighter history window when fixed context is large (complex actions with
+      // crime detection, karma, divine effects, resource updates, guard confrontation)
+      const AGGRESSIVE_HISTORY_TURNS = 6;
+      const NORMAL_HISTORY_TURNS = 10;
+      const FIXED_TOKEN_THRESHOLD = 5000;
+      const historyTurnLimit = fixedTokens > FIXED_TOKEN_THRESHOLD ? AGGRESSIVE_HISTORY_TURNS : NORMAL_HISTORY_TURNS;
+
+      const validHistory = (history ?? [])
+        .filter((h) => h.role === "user" || h.role === "assistant")
+        .slice(-historyTurnLimit);
+
+      // Token guard: trim history to stay under budget
+      const MAX_HISTORY_TOKENS = 6000;
+      let historyTokens = validHistory.reduce((sum, h) => sum + estimateTokens(h.content), 0);
+      while (historyTokens > MAX_HISTORY_TOKENS && validHistory.length > 2) {
+        const removed = validHistory.shift();
+        if (removed) historyTokens -= estimateTokens(removed.content);
+      }
 
       const messages: OpenAI.ChatCompletionMessageParam[] = [
         { role: "system", content: systemPrompt },
-        ...history.slice(-10).map((h) => ({
+        ...validHistory.map((h) => ({
           role: h.role as "user" | "assistant",
           content: h.content,
         })),
         { role: "system", content: engineContext },
-        { role: "user", content: message },
+        { role: "user", content: userMessage },
       ];
 
-      const rawText = await callWithRetry(client, messages);
+      // Log total token estimate for diagnosing timeouts
+      const totalTokens = messages.reduce((sum, m) => sum + estimateTokens(typeof m.content === "string" ? m.content : ""), 0);
+      console.log(`[dm-route] LLM payload: ${totalTokens} tokens≈ (fixed=${fixedTokens}, history=${historyTokens}/${validHistory.length} turns, limit=${historyTurnLimit})`);
+
+      // Inject combat round narrative so the LLM can use it
+      if (combatResult) {
+        messages.push({
+          role: "system",
+          content: `## Combat Round Result\n${combatResult.narrative}${combatResult.combatOver ? `\nCOMBAT ENDED: ${combatResult.combatEndReason}.${combatResult.lootNarrative ? ` ${combatResult.lootNarrative}` : ""}` : `\nEnemy HP: ${combatResult.combatState.enemyHp}/${combatResult.combatState.enemyMaxHp}`}\nNarrate this combat round. Use the dice results above exactly.`,
+        });
+      }
+
+      const { text: rawText } = await callWithCascade(messages);
+      lastRawText = rawText;
       const parsed = parseDMResponse(rawText);
+      lastParsed = parsed;
       narrative = parsed.narrative;
+      sceneImagePrompt = parsed.sceneImagePrompt;
+      checkRequired = parsed.checkRequired;
+
+      // ── Handle COMBAT_START from LLM ──────────────────────────────
+      if (parsed.parsedState.combatStart && !activeCombatState?.active) {
+        const newCombat = initCombat(parsed.parsedState.combatStart, character);
+        if (newCombat) {
+          activeCombatState = newCombat;
+        }
+      }
 
       // ── PIPELINE STEPS 6-7: Validate + Update ───────────────────
       postResult = postGenerate(narrative, pipelineInput, preResult);
@@ -190,18 +298,77 @@ export async function POST(request: Request) {
 
       // Contradiction found — regenerate with correction hint
       contradictionHint = postResult.regenerationHint;
-      console.warn(
-        `[Pipeline] Regenerating due to ${postResult.contradictions.length} contradiction(s)`,
-        postResult.contradictions.map((c) => c.factContent)
-      );
     }
 
     if (!postResult) {
       throw new Error("Pipeline failed to produce a result");
     }
 
-    // ── Crime Processing ────────────────────────────────────────────
+    // ── ENFORCE: Apply parsed state tags to gameState ──────────────
     const eo = preResult.engineOutcome;
+    if (lastParsed) {
+      const enforced = enforceGameState(
+        lastParsed,
+        {
+          hp: character.hp,
+          maxHp: character.maxHp,
+          xp: character.xp ?? 0,
+          gold: character.gold,
+          location: gameState.location,
+          inventory: character.inventory,
+        },
+        {
+          hpChange: eo.hpChange,
+          goldChange: eo.goldChange,
+          xpGained: eo.xpGained,
+          locationChange: eo.locationChange,
+          itemsGained: eo.itemsGained,
+          itemsLost: eo.itemsLost,
+          roll: eo.roll ? { success: eo.roll.success, dc: eo.roll.dc } : undefined,
+        },
+        lastRawText,
+        combatResult?.combatEndReason === "enemy_killed" ? {
+          gold: combatResult.goldDropped,
+          items: combatResult.itemsDropped,
+          xp: combatResult.xpAwarded,
+          narrative: combatResult.lootNarrative,
+        } : undefined,
+        { combatState: activeCombatState, character },
+        campaignThemeStr,
+      );
+
+      // Use enforced values — overwrite engine outcome so the response reflects them
+      narrative = enforced.narrative;
+      eo.hpChange = enforced.hp - character.hp;
+      eo.goldChange = enforced.gold - character.gold;
+      eo.xpGained = enforced.xp - (character.xp ?? 0);
+      if (enforced.location !== gameState.location) {
+        eo.locationChange = enforced.location;
+      }
+      // Items: enforced.inventory is the final set; compute diff
+      const gainedItems = enforced.inventory.filter(
+        (item, i) => !character.inventory.includes(item) || enforced.inventory.indexOf(item) !== character.inventory.indexOf(item)
+      );
+      // Only override if enforced added items beyond what engine already granted
+      if (gainedItems.length > eo.itemsGained.length) {
+        eo.itemsGained = gainedItems;
+      }
+
+      // Handle combat injection from enforceGameState (Fix 3: safe turn combat)
+      if (enforced.narrative.includes("[COMBAT_START]") && !activeCombatState?.active) {
+        const combatMatch = enforced.narrative.match(/\[COMBAT_START\]\s*(.+?)$/m);
+        if (combatMatch) {
+          const newCombat = initCombat(combatMatch[1].trim(), character);
+          if (newCombat) {
+            activeCombatState = newCombat;
+          }
+          // Strip the [COMBAT_START] line from narrative
+          narrative = enforced.narrative.replace(/\[COMBAT_START\][^\n]*/g, "").trim();
+        }
+      }
+    }
+
+    // ── Crime Processing ────────────────────────────────────────────
 
     // Run guard investigations on existing crimes (background, once per turn)
     const crimeList = crimes ?? [];
@@ -223,9 +390,43 @@ export async function POST(request: Request) {
       };
     }
 
+    // ── Force scene image on game start ─────────────────────────────
+    if (isFirstTurn && !sceneImagePrompt) {
+      // Extract environment descriptors from the first 2 sentences of the narrative
+      const narrativeText = postResult.narrative;
+      const firstSentences = narrativeText
+        .split(/[.!?]/)
+        .slice(0, 2)
+        .join(" ")
+        .toLowerCase();
+      const envWords = [
+        "market", "cobblestone", "vendors", "dawn", "dusk", "sunset", "sunrise",
+        "mountain", "forest", "tavern", "inn", "castle", "dungeon", "cave",
+        "river", "bridge", "tower", "village", "city", "temple", "ruins",
+        "swamp", "desert", "snow", "rain", "fog", "mist", "moonlight",
+        "torch", "lantern", "candlelight", "firelight", "shadow", "dark",
+        "ancient", "crumbling", "mossy", "stone", "wooden", "iron",
+        "narrow", "winding", "cobbled", "muddy", "dusty", "crowded",
+        "quiet", "bustling", "abandoned", "haunted", "sacred", "cursed",
+        "port", "harbor", "dock", "alley", "street", "road", "path",
+        "gate", "wall", "fountain", "plaza", "square", "graveyard",
+        "crypt", "cathedral", "chapel", "shrine", "library", "vault",
+        "throne", "hall", "chamber", "corridor", "stairway", "cellar",
+        "garden", "courtyard", "rampart", "battlement", "watchtower",
+        "campfire", "clearing", "grove", "cliff", "canyon", "ravine",
+        "ocean", "sea", "lake", "waterfall", "stream", "marsh",
+        "stormy", "overcast", "starlit", "twilight", "golden", "crimson",
+      ];
+      const matched = envWords.filter(w => firstSentences.includes(w));
+      const descriptors = matched.length > 0 ? matched.slice(0, 6).join(" ") : "";
+      sceneImagePrompt = `${gameState.location} ${descriptors} warm atmospheric lighting`.trim();
+    }
+
     // ── PIPELINE STEP 8: Deliver ──────────────────────────────────
     return NextResponse.json({
       narrative: postResult.narrative,
+      sceneImagePrompt,
+      checkRequired,
       gameStateUpdate: {
         hpChange: eo.hpChange || undefined,
         newItems: eo.itemsGained.length > 0 ? eo.itemsGained : undefined,
@@ -236,6 +437,11 @@ export async function POST(request: Request) {
         completeQuest: eo.completeQuest,
         xpGained: eo.xpGained || undefined,
         lastRestTurn: eo.lastRestTurn,
+        restType: eo.restType,
+        raging: eo.raging,
+        lastHealTurn: eo.lastHealTurn,
+        lastTravelEncounterTurn: eo.lastTravelEncounterTurn,
+        resourceUpdates: eo.resourceUpdates,
       },
       engineOutcome: {
         roll: eo.roll,
@@ -246,6 +452,8 @@ export async function POST(request: Request) {
         isCriticalHit: eo.isCriticalHit,
         damageTaken: eo.damageTaken,
         itemNotFound: eo.itemNotFound,
+        equipItem: eo.equipItem,
+        identifyItem: eo.identifyItem,
       },
       // Fact ledger updates for the client
       factUpdates: {
@@ -266,18 +474,31 @@ export async function POST(request: Request) {
         : undefined,
       karmaChange: eo.karmaChange,
       fameChange: eo.fameChange,
+      fameReason: eo.fameReason,
+      fameCategory: eo.fameCategory,
       divineEffect: eo.divineEffect,
       crimeDetected: eo.crimeDetected,
       guardInvestigation: eo.guardInvestigation,
       guardConfrontation: eo.guardConfrontation,
+      tradeResult: eo.tradeResult,
+      pickupResult: eo.pickupResult,
+      dropResult: eo.dropResult,
+      addToGround: eo.addToGround?.length ? eo.addToGround : undefined,
+      removeFromGround: eo.removeFromGround?.length ? eo.removeFromGround : undefined,
+      // Combat state — sent to client to persist across turns
+      combatState: activeCombatState,
+      combatResult: combatResult ? {
+        diceBreakdown: combatResult.diceBreakdown,
+        combatOver: combatResult.combatOver,
+        combatEndReason: combatResult.combatEndReason,
+        lootNarrative: combatResult.lootNarrative || undefined,
+      } : undefined,
     });
   } catch (error: unknown) {
     const errMsg =
       error instanceof Error ? error.message : "Unknown error occurred";
-    console.error("DM API error:", errMsg, error);
-
     return NextResponse.json(
-      { error: `DM API failed: ${errMsg}` },
+      { error: "The winds of fate pause for a moment\u2026 please try again." },
       { status: 500 }
     );
   }

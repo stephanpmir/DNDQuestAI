@@ -1,6 +1,7 @@
 import type { Character } from "./character";
 import type { RollResult } from "./world";
 import type { Fact } from "@/lib/engine/fact-ledger";
+import type { CombatState, DiceBreakdown } from "@/lib/combat-engine";
 
 export interface GameState {
   character: Character;
@@ -11,7 +12,7 @@ export interface GameState {
 
 export interface ChatMessage {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "roll_result";
   narrative: string;
   gameState?: Partial<GameState>;
   timestamp: number;
@@ -21,11 +22,42 @@ export interface ChatMessage {
   karmaChange?: number;
   /** Fame change to display as floating indicator */
   fameChange?: number;
+  /** Scene image prompt for AI-generated scene illustration */
+  sceneImagePrompt?: string;
+  /** Skill check requested by DM — player must roll before action resolves */
+  checkRequired?: {
+    stat: string;
+    skill: string;
+    dc: number;
+    description: string;
+  };
+  /** Whether this is a rules reference answer (not narrative) */
+  rulesAnswer?: boolean;
+  /** Combat round result with dice breakdown for styled combat log display */
+  combatResult?: {
+    diceBreakdown: DiceBreakdown;
+    combatOver: boolean;
+    combatEndReason: "ongoing" | "enemy_killed" | "player_fled" | "player_down";
+    lootNarrative?: string;
+    enemyName?: string;
+    enemyHp?: number;
+    enemyMaxHp?: number;
+  };
 }
 
 /** The structured JSON the API returns. */
 export interface DMResponsePayload {
   narrative: string;
+  /** Whether this is a rules reference answer (no game state changes) */
+  rulesAnswer?: boolean;
+  sceneImagePrompt?: string;
+  /** Skill check the DM wants the player to perform */
+  checkRequired?: {
+    stat: string;
+    skill: string;
+    dc: number;
+    description: string;
+  };
   gameStateUpdate: {
     hpChange?: number;
     newItems?: string[];
@@ -36,6 +68,11 @@ export interface DMResponsePayload {
     completeQuest?: string;
     xpGained?: number;
     lastRestTurn?: number;
+    restType?: import("@/lib/resources").RestType;
+    raging?: boolean;
+    lastHealTurn?: number;
+    lastTravelEncounterTurn?: number;
+    resourceUpdates?: import("@/lib/resources").ResourcePool;
   };
   /** Engine outcome details */
   engineOutcome?: {
@@ -47,6 +84,8 @@ export interface DMResponsePayload {
     isCriticalHit?: boolean;
     damageTaken?: number;
     itemNotFound?: boolean;
+    equipItem?: string;
+    identifyItem?: string;
   };
   /** Fact ledger updates */
   factUpdates?: {
@@ -70,6 +109,10 @@ export interface DMResponsePayload {
   karmaChange?: { type: string; amount: number; description: string };
   /** Fame change from this action */
   fameChange?: number;
+  /** Reason for fame change (for history log) */
+  fameReason?: string;
+  /** Category of fame change */
+  fameCategory?: "quest" | "combat" | "crime" | "social" | "decay";
   /** Divine intervention that occurred */
   divineEffect?: {
     source: "good_god" | "evil_god";
@@ -93,5 +136,37 @@ export interface DMResponsePayload {
   guardConfrontation?: {
     crimeType: string;
     crimeLocation: string;
+  };
+  /** Trade result */
+  tradeResult?: {
+    type: "buy" | "sell";
+    item: string;
+    price: number;
+    success: boolean;
+    reason?: string;
+  };
+  /** Item pickup result */
+  pickupResult?: {
+    item: string;
+    success: boolean;
+    reason?: string;
+  };
+  /** Item drop result */
+  dropResult?: {
+    item: string;
+    success: boolean;
+  };
+  /** Items to add to the ground (loot drops, dropped items) */
+  addToGround?: string[];
+  /** Items to remove from the ground (picked up) */
+  removeFromGround?: string[];
+  /** Updated combat state (active combat, or null if combat ended) */
+  combatState?: CombatState | null;
+  /** Combat round result with dice breakdown */
+  combatResult?: {
+    diceBreakdown: DiceBreakdown;
+    combatOver: boolean;
+    combatEndReason: "ongoing" | "enemy_killed" | "player_fled" | "player_down";
+    lootNarrative?: string;
   };
 }

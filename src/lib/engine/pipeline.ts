@@ -46,6 +46,8 @@ export interface PipelineInput {
   locations: LocationRecord[];
   /** Current karma score for rules engine */
   karma?: number;
+  /** Items currently on the ground at the player's location */
+  groundItems?: string[];
 }
 
 /** The result after steps 1-4 (everything before LLM call) */
@@ -98,7 +100,7 @@ export function preGenerate(input: PipelineInput): PreGenerationResult {
   const referencedFactIds = referencedFacts.map((f) => f.id);
 
   // STEP 3: Resolve — deterministic rules engine
-  const engineOutcome = resolveAction(playerAction, character, gameState, events, input.karma);
+  const engineOutcome = resolveAction(playerAction, character, gameState, events, input.karma, input.groundItems);
 
   // Check escalation
   const escalation = checkEscalation(events, gameState.location);
@@ -158,6 +160,13 @@ export function postGenerate(
   const regenerationHint = needsRegeneration
     ? buildContradictionHint(hardContradictions)
     : "";
+
+  // Award XP for successful skill checks based on DC difficulty
+  if (engineOutcome.roll?.success && engineOutcome.roll.dc) {
+    const dc = engineOutcome.roll.dc;
+    const xpAward = dc >= 16 ? 3 : dc >= 11 ? 2 : 1;
+    engineOutcome.xpGained = (engineOutcome.xpGained || 0) + xpAward;
+  }
 
   // STEP 7: Update — generate new facts from this turn
   const newFacts: Fact[] = [];

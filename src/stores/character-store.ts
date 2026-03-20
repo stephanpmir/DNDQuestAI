@@ -1,9 +1,11 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Character, Gender, Race, CharacterClass, AbilityScores } from "@/types/character";
+import type { Character, Gender, Race, CharacterClass, AbilityScores, AvatarCustomization, BeginnerSurvey } from "@/types/character";
 import { createDefaultCharacter, getXpToNextLevel } from "@/types/character";
-import { getDefaultEquipped, getItemInfo } from "@/lib/items";
+import { getItemInfo, getEquipSlot, SLOT_LIMITS } from "@/lib/items";
 import { RACIAL_DATA, applyRacialBonuses } from "@/lib/races";
+import { buildResourcePool, recalculateResources, rechargeResources } from "@/lib/resources";
+import type { ResourcePool } from "@/lib/resources";
 
 interface CharacterStore {
   character: Character;
@@ -19,6 +21,10 @@ interface CharacterStore {
   setSpells: (spells: string[]) => void;
   setFightingStyle: (style: string) => void;
   setHalfElfBonuses: (bonuses: [string, string]) => void;
+  setAvatar: (avatar: Partial<AvatarCustomization>) => void;
+  setAvatarUrl: (url: string) => void;
+  setAppearanceDescription: (desc: string) => void;
+  setBeginnerSurvey: (survey: BeginnerSurvey) => void;
   finalizeCharacter: () => void;
   equipItem: (item: string) => void;
   unequipItem: (item: string) => void;
@@ -30,9 +36,14 @@ interface CharacterStore {
     goldChange?: number;
     xpGained?: number;
     lastRestTurn?: number;
+    restType?: import("@/lib/resources").RestType;
     deathSaveResult?: "nat20" | "nat1" | "success" | "failure";
     karmaChange?: number;
     fameChange?: number;
+    raging?: boolean;
+    lastHealTurn?: number;
+    lastTravelEncounterTurn?: number;
+    resourceUpdates?: ResourcePool;
   }) => void;
   reset: () => void;
 }
@@ -47,50 +58,134 @@ const HIT_DICE: Record<string, number> = {
   Sorcerer: 6, Wizard: 6,
 };
 
-/** D&D 5e starting equipment by class */
-function getStartingEquipment(cls: CharacterClass): string[] {
-  const base = ["Backpack", "Waterskin", "Rations (3 days)", "Torch"];
-  const classGear: Record<string, string[]> = {
-    Barbarian: ["Greataxe", "Handaxe", "Explorer's Pack"],
-    Bard: ["Rapier", "Lute", "Leather Armor", "Diplomat's Pack"],
-    Cleric: ["Mace", "Shield", "Scale Mail", "Priest's Pack", "Holy Symbol"],
-    Druid: ["Wooden Shield", "Scimitar", "Leather Armor", "Explorer's Pack", "Druidic Focus"],
-    Fighter: ["Longsword", "Shield", "Chain Mail", "Dungeoneer's Pack"],
-    Monk: ["Shortsword", "Dungeoneer's Pack"],
-    Paladin: ["Longsword", "Shield", "Chain Mail", "Priest's Pack", "Holy Symbol"],
-    Ranger: ["Longbow", "Quiver (20 Arrows)", "Shortsword", "Leather Armor", "Explorer's Pack"],
-    Rogue: ["Shortsword", "Shortbow", "Quiver (20 Arrows)", "Leather Armor", "Burglar's Pack", "Thieves' Tools"],
-    Sorcerer: ["Dagger", "Arcane Focus", "Dungeoneer's Pack"],
-    Warlock: ["Dagger", "Arcane Focus", "Scholar's Pack", "Leather Armor"],
-    Wizard: ["Quarterstaff", "Spellbook", "Arcane Focus", "Scholar's Pack"],
+/** D&D 5e starting equipment by class — split into worn (equipped) and backpack (inventory) */
+function getStartingEquipment(cls: CharacterClass): { worn: string[]; backpack: string[] } {
+  const baseBackpack = ["Backpack", "Waterskin", "Rations x4", "Torch x4"];
+  const classGear: Record<string, { worn: string[]; backpack: string[] }> = {
+    Barbarian: {
+      worn: ["Greataxe"],
+      backpack: ["Handaxe", "Explorer's Pack"],
+    },
+    Bard: {
+      worn: ["Rapier", "Leather Armor"],
+      backpack: ["Lute", "Diplomat's Pack"],
+    },
+    Cleric: {
+      worn: ["Mace", "Scale Mail", "Shield"],
+      backpack: ["Holy Symbol", "Priest's Pack"],
+    },
+    Druid: {
+      worn: ["Scimitar", "Leather Armor", "Wooden Shield"],
+      backpack: ["Druidic Focus", "Explorer's Pack"],
+    },
+    Fighter: {
+      worn: ["Longsword", "Chain Mail", "Shield"],
+      backpack: ["Dungeoneer's Pack"],
+    },
+    Monk: {
+      worn: ["Shortsword"],
+      backpack: ["Dart x10", "Dungeoneer's Pack"],
+    },
+    Paladin: {
+      worn: ["Longsword", "Chain Mail", "Shield"],
+      backpack: ["Holy Symbol", "Priest's Pack"],
+    },
+    Ranger: {
+      worn: ["Shortbow", "Leather Armor"],
+      backpack: ["Shortsword", "Quiver with 20 Arrows", "Explorer's Pack"],
+    },
+    Rogue: {
+      worn: ["Shortsword", "Leather Armor"],
+      backpack: ["Shortbow", "Quiver with 20 Arrows", "Thieves' Tools", "Burglar's Pack"],
+    },
+    Sorcerer: {
+      worn: ["Dagger"],
+      backpack: ["Arcane Focus", "Dungeoneer's Pack"],
+    },
+    Warlock: {
+      worn: ["Dagger", "Leather Armor"],
+      backpack: ["Arcane Focus", "Scholar's Pack"],
+    },
+    Wizard: {
+      worn: ["Quarterstaff"],
+      backpack: ["Arcane Focus", "Spellbook", "Scholar's Pack"],
+    },
   };
-  return [...base, ...(classGear[cls] ?? [])];
+  const gear = classGear[cls] ?? classGear.Fighter;
+  return {
+    worn: gear.worn,
+    backpack: [...baseBackpack, ...gear.backpack],
+  };
 }
 
-/** Calculate starting AC based on class armor */
-function computeStartingAC(cls: CharacterClass, dexScore: number, conScore: number = 10): number {
+/** Calculate AC based on equipped armor and class features */
+function computeAC(cls: CharacterClass, dexScore: number, conScore: number, wisScore: number, equipped: string[], fightingStyle?: string): number {
   const dexMod = computeModifier(dexScore);
   const conMod = computeModifier(conScore);
-  switch (cls) {
-    case "Barbarian": return 10 + dexMod + conMod; // Unarmored defense
-    case "Monk": return 10 + dexMod; // Unarmored defense (+ WIS later)
-    case "Sorcerer":
-    case "Wizard": return 10 + dexMod;
-    case "Bard":
-    case "Ranger":
-    case "Rogue":
-    case "Warlock": return 11 + dexMod; // Leather
-    case "Druid": return 11 + dexMod; // Leather (druids won't wear metal)
-    case "Cleric": return 14 + Math.min(dexMod, 2); // Scale mail
-    case "Fighter":
-    case "Paladin": return 16; // Chain mail
-    default: return 10 + dexMod;
+  const wisMod = computeModifier(wisScore);
+
+  // Check what armor is equipped
+  const equippedLower = equipped.map(i => i.toLowerCase());
+  const hasShield = equippedLower.some(i => i.includes("shield"));
+  const shieldBonus = hasShield ? 2 : 0;
+
+  // Find equipped armor
+  const armorNames: Record<string, { base: number; type: "light" | "medium" | "heavy" }> = {
+    "padded armor": { base: 11, type: "light" },
+    "leather armor": { base: 11, type: "light" },
+    "+1 leather armor": { base: 12, type: "light" },
+    "studded leather": { base: 12, type: "light" },
+    "hide armor": { base: 12, type: "medium" },
+    "chain shirt": { base: 13, type: "medium" },
+    "scale mail": { base: 14, type: "medium" },
+    "breastplate": { base: 14, type: "medium" },
+    "half plate": { base: 15, type: "medium" },
+    "ring mail": { base: 14, type: "heavy" },
+    "chain mail": { base: 16, type: "heavy" },
+    "splint armor": { base: 17, type: "heavy" },
+    "plate armor": { base: 18, type: "heavy" },
+  };
+
+  let armorAC: number | null = null;
+  for (const item of equippedLower) {
+    for (const [name, data] of Object.entries(armorNames)) {
+      if (item.includes(name)) {
+        if (data.type === "light") {
+          armorAC = data.base + dexMod;
+        } else if (data.type === "medium") {
+          armorAC = data.base + Math.min(dexMod, 2);
+        } else {
+          armorAC = data.base;
+        }
+        break;
+      }
+    }
+    if (armorAC !== null) break;
   }
+
+  // Defense fighting style: +1 AC while wearing armor
+  const defenseBonus = (armorAC !== null && fightingStyle?.includes("Defense")) ? 1 : 0;
+
+  if (armorAC !== null) {
+    return armorAC + shieldBonus + defenseBonus;
+  }
+
+  // No armor — use unarmored defense
+  let baseAC = 10 + dexMod;
+  if (cls === "Barbarian") baseAC = 10 + dexMod + conMod;
+  if (cls === "Monk") baseAC = 10 + dexMod + wisMod;
+  // Sorcerer Draconic Resilience: AC = 13 + DEX mod when not wearing armor
+  if (cls === "Sorcerer") baseAC = 13 + dexMod;
+
+  return baseAC + shieldBonus;
 }
+
 
 function computeStartingHp(cls: CharacterClass, conScore: number): number {
   const base = HIT_DICE[cls] ?? 8;
-  return base + computeModifier(conScore);
+  // Sorcerer Draconic Resilience: +1 HP per level (including level 1)
+  const draconicBonus = cls === "Sorcerer" ? 1 : 0;
+  return base + computeModifier(conScore) + draconicBonus;
 }
 
 function computeMaxHpForLevel(cls: CharacterClass, conScore: number, level: number): number {
@@ -98,7 +193,9 @@ function computeMaxHpForLevel(cls: CharacterClass, conScore: number, level: numb
   const conMod = computeModifier(conScore);
   // Level 1: full hit die + CON mod. Levels 2+: avg roll + CON mod per level.
   const avgRoll = Math.floor(hitDie / 2) + 1;
-  return hitDie + conMod + (level - 1) * (avgRoll + conMod);
+  // Sorcerer Draconic Resilience: +1 HP per level
+  const draconicBonus = cls === "Sorcerer" ? level : 0;
+  return hitDie + conMod + (level - 1) * (avgRoll + conMod) + draconicBonus;
 }
 
 export const useCharacterStore = create<CharacterStore>()(
@@ -140,6 +237,23 @@ export const useCharacterStore = create<CharacterStore>()(
       setHalfElfBonuses: (bonuses) =>
         set((s) => ({ character: { ...s.character, halfElfBonuses: bonuses } })),
 
+      setAvatar: (avatar) =>
+        set((s) => ({
+          character: {
+            ...s.character,
+            avatar: { ...s.character.avatar, ...avatar },
+          },
+        })),
+
+      setAvatarUrl: (url) =>
+        set((s) => ({ character: { ...s.character, avatarUrl: url } })),
+
+      setAppearanceDescription: (desc) =>
+        set((s) => ({ character: { ...s.character, appearanceDescription: desc } })),
+
+      setBeginnerSurvey: (survey) =>
+        set((s) => ({ character: { ...s.character, beginnerSurvey: survey } })),
+
       finalizeCharacter: () =>
         set((s) => {
           const c = s.character;
@@ -165,6 +279,13 @@ export const useCharacterStore = create<CharacterStore>()(
 
           const racialTraits = RACIAL_DATA[c.race]?.traits ?? [];
 
+          // Add racial cantrips
+          const cantrips = [...c.cantrips];
+          // Tiefling Infernal Legacy: Thaumaturgy cantrip
+          if (c.race === "Tiefling" && !cantrips.includes("Thaumaturgy")) {
+            cantrips.push("Thaumaturgy");
+          }
+
           // Add racial skill proficiencies
           const skillProfs = [...c.skillProficiencies];
           // Elf: Perception proficiency
@@ -177,13 +298,28 @@ export const useCharacterStore = create<CharacterStore>()(
           }
 
           const hp = computeStartingHp(c.class, abilityScores.constitution);
-          const ac = computeStartingAC(c.class, abilityScores.dexterity, abilityScores.constitution);
-          const inventory = getStartingEquipment(c.class);
-          const equipped = getDefaultEquipped(inventory);
+          const gear = getStartingEquipment(c.class);
+          const equipped = [...gear.worn];
+          const inventory = [...gear.worn, ...gear.backpack];
+          // Use full computeAC with equipped items so shield bonus is included
+          const ac = computeAC(c.class, abilityScores.dexterity, abilityScores.constitution, abilityScores.wisdom, equipped, c.fightingStyle);
           const identifiedItems = inventory.filter((item) => {
             const info = getItemInfo(item);
             return info?.isMagical;
           });
+
+          // Build initial resource pool
+          const chaMod = computeModifier(abilityScores.charisma);
+          const resources = buildResourcePool(c.class, c.race, 1);
+          // Adjust Bard inspiration uses based on CHA
+          if (c.class === "Bard") {
+            const bardRes = resources.find((r) => r.key === "bardic_inspiration");
+            if (bardRes) {
+              const uses = Math.max(1, chaMod);
+              bardRes.max = uses;
+              bardRes.current = uses;
+            }
+          }
 
           return {
             isCreated: true,
@@ -191,6 +327,7 @@ export const useCharacterStore = create<CharacterStore>()(
               ...c,
               abilityScores,
               racialTraits,
+              cantrips,
               skillProficiencies: skillProfs,
               hp,
               maxHp: hp,
@@ -204,27 +341,47 @@ export const useCharacterStore = create<CharacterStore>()(
               deathSaves: { successes: 0, failures: 0 },
               isUnconscious: false,
               isDead: false,
+              resources,
             },
           };
         }),
 
       equipItem: (item) =>
-        set((s) => ({
-          character: {
-            ...s.character,
-            equipped: s.character.equipped.includes(item)
-              ? s.character.equipped
-              : [...s.character.equipped, item],
-          },
-        })),
+        set((s) => {
+          if (s.character.equipped.includes(item)) {
+            return s; // Already equipped
+          }
+          // Enforce slot limits: unequip existing item in same slot if at limit
+          const slot = getEquipSlot(item);
+          let filtered = [...s.character.equipped];
+          if (slot !== "none") {
+            const limit = SLOT_LIMITS[slot] ?? 1;
+            const inSlot = filtered.filter((e) => getEquipSlot(e) === slot);
+            if (inSlot.length >= limit) {
+              // Remove oldest item in this slot to make room
+              const toRemove = inSlot[0];
+              filtered = filtered.filter((e) => e !== toRemove);
+            }
+          }
+          const newEquipped = [...filtered, item];
+          const ac = computeAC(
+            s.character.class, s.character.abilityScores.dexterity,
+            s.character.abilityScores.constitution, s.character.abilityScores.wisdom,
+            newEquipped, s.character.fightingStyle
+          );
+          return { character: { ...s.character, equipped: newEquipped, ac } };
+        }),
 
       unequipItem: (item) =>
-        set((s) => ({
-          character: {
-            ...s.character,
-            equipped: s.character.equipped.filter((i) => i !== item),
-          },
-        })),
+        set((s) => {
+          const newEquipped = s.character.equipped.filter((i) => i !== item);
+          const ac = computeAC(
+            s.character.class, s.character.abilityScores.dexterity,
+            s.character.abilityScores.constitution, s.character.abilityScores.wisdom,
+            newEquipped, s.character.fightingStyle
+          );
+          return { character: { ...s.character, equipped: newEquipped, ac } };
+        }),
 
       identifyItem: (item) =>
         set((s) => ({
@@ -242,18 +399,29 @@ export const useCharacterStore = create<CharacterStore>()(
 
           // HP changes
           if (updates.hpChange) {
+            console.log(`HP WRITE: before=[${c.hp}] delta=[${updates.hpChange}] max=[${c.maxHp}]`);
             c.hp = Math.max(0, Math.min(c.maxHp, c.hp + updates.hpChange));
+            console.log(`HP WRITE: after=[${c.hp}] unconscious=[${c.isUnconscious}]`);
 
             // D&D death rules: 0 HP = unconscious
             if (c.hp <= 0) {
-              c.hp = 0;
-              c.isUnconscious = true;
+              // Half-Orc Relentless Endurance: drop to 1 HP instead of 0, once per long rest
+              if (c.race === "Half-Orc" && !c.isUnconscious && !c.relentlessUsed) {
+                c.hp = 1;
+                c.relentlessUsed = true;
+                console.log(`HP WRITE: Half-Orc Relentless Endurance → hp=1`);
+              } else {
+                c.hp = 0;
+                c.isUnconscious = true;
+                console.log(`HP WRITE: knocked unconscious at 0 HP`);
+              }
             }
 
             // Healing from unconscious
             if (c.isUnconscious && updates.hpChange > 0 && c.hp > 0) {
               c.isUnconscious = false;
               c.deathSaves = { successes: 0, failures: 0 };
+              console.log(`HP WRITE: healed from unconscious, hp=${c.hp}`);
             }
           }
 
@@ -265,10 +433,14 @@ export const useCharacterStore = create<CharacterStore>()(
             c.inventory = c.inventory.filter(
               (item) => !updates.removeItems!.includes(item)
             );
-            // Also remove from equipped
+            // Also remove from equipped and recalculate AC
+            const oldEquipped = c.equipped;
             c.equipped = c.equipped.filter(
               (item) => !updates.removeItems!.includes(item)
             );
+            if (c.equipped.length !== oldEquipped.length) {
+              c.ac = computeAC(c.class, c.abilityScores.dexterity, c.abilityScores.constitution, c.abilityScores.wisdom, c.equipped, c.fightingStyle);
+            }
           }
 
           // Gold
@@ -276,21 +448,56 @@ export const useCharacterStore = create<CharacterStore>()(
             c.gold = Math.max(0, c.gold + updates.goldChange);
           }
 
+          // Barbarian rage state
+          if (updates.raging !== undefined) {
+            c.raging = updates.raging;
+          }
+
+          // Healing spell cooldown tracking
+          if (updates.lastHealTurn !== undefined) {
+            c.lastHealTurn = updates.lastHealTurn;
+          }
+
+          // Travel encounter cooldown tracking
+          if (updates.lastTravelEncounterTurn !== undefined) {
+            c.lastTravelEncounterTurn = updates.lastTravelEncounterTurn;
+          }
+
+          // Resource pool updates (from engine resource consumption)
+          if (updates.resourceUpdates) {
+            c.resources = updates.resourceUpdates;
+          }
+
           // Rest tracking
           if (updates.lastRestTurn !== undefined) {
             c.lastRestTurn = updates.lastRestTurn;
+            const restType = updates.restType ?? "short";
+            // Reset Half-Orc Relentless Endurance on long rest
+            if (c.race === "Half-Orc" && restType === "long") {
+              c.relentlessUsed = false;
+            }
+            // End Barbarian Rage on rest
+            if (c.class === "Barbarian") {
+              c.raging = false;
+            }
+            // Recharge resources based on rest type
+            if (c.resources) {
+              c.resources = rechargeResources(c.resources, restType);
+            }
           }
 
           // Death save tracking
           if (updates.deathSaveResult) {
+            console.log(`DEATH SAVE: type=${updates.deathSaveResult} before=${c.deathSaves.successes}S/${c.deathSaves.failures}F`);
+
             if (updates.deathSaveResult === "nat20") {
               c.deathSaves = { successes: 0, failures: 0 };
+              c.isUnconscious = false;
               // HP is already handled above via hpChange
             } else if (updates.deathSaveResult === "nat1") {
               c.deathSaves = { ...c.deathSaves, failures: Math.min(3, c.deathSaves.failures + 2) };
             } else if (updates.deathSaveResult === "success") {
               c.deathSaves = { ...c.deathSaves, successes: Math.min(3, c.deathSaves.successes + 1) };
-              // 3 successes = stabilize at 0 HP (still unconscious but no longer dying)
             } else if (updates.deathSaveResult === "failure") {
               c.deathSaves = { ...c.deathSaves, failures: Math.min(3, c.deathSaves.failures + 1) };
             }
@@ -298,6 +505,7 @@ export const useCharacterStore = create<CharacterStore>()(
             // 3 failures = character is dead
             if (c.deathSaves.failures >= 3) {
               c.isDead = true;
+              console.log(`DEATH SAVE: CHARACTER DIED — 3 failures reached`);
             }
 
             // 3 successes = stabilized, regain 1 HP and wake up
@@ -305,7 +513,10 @@ export const useCharacterStore = create<CharacterStore>()(
               c.deathSaves = { successes: 0, failures: 0 };
               c.hp = 1;
               c.isUnconscious = false;
+              console.log(`DEATH SAVE: STABILIZED — 3 successes, waking up at 1 HP`);
             }
+
+            console.log(`DEATH SAVE: after=${c.deathSaves.successes}S/${c.deathSaves.failures}F unconscious=${c.isUnconscious} isDead=${c.isDead}`);
           }
 
           // XP and level-up
@@ -326,6 +537,12 @@ export const useCharacterStore = create<CharacterStore>()(
               const hpIncrease = newMaxHp - c.maxHp;
               c.maxHp = newMaxHp;
               c.hp = Math.min(c.maxHp, c.hp + hpIncrease);
+
+              // Recalculate resource pools on level-up
+              if (c.resources) {
+                const chaMod = computeModifier(c.abilityScores.charisma);
+                c.resources = recalculateResources(c.resources, c.class, c.race, c.level, chaMod);
+              }
             }
           }
 

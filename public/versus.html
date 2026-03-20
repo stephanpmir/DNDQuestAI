@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DM vs Grok — Live AI Playtest</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #080808;
+    color: #e8d5b0;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 {
+    text-align: center;
+    color: #c9a227;
+    font-size: 1.8rem;
+    margin-bottom: 4px;
+    letter-spacing: 1px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #8a7a5a;
+    font-size: 0.9rem;
+    margin-bottom: 24px;
+  }
+  #status {
+    text-align: center;
+    padding: 12px;
+    margin-bottom: 20px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+  .status-idle { background: #1a1a1a; color: #8a7a5a; }
+  .status-running { background: #1a1a0a; color: #c9a227; border: 1px solid rgba(201,162,39,0.3); }
+  .status-done { background: #0a1a0a; color: #4a9; border: 1px solid rgba(68,170,153,0.3); }
+  .status-error { background: #1a0a0a; color: #c44; border: 1px solid rgba(204,68,68,0.3); }
+
+  #controls { text-align: center; margin-bottom: 24px; }
+  button {
+    background: linear-gradient(135deg, #c9a227, #a08020);
+    color: #080808;
+    border: none;
+    padding: 10px 28px;
+    font-size: 1rem;
+    font-weight: 700;
+    border-radius: 6px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+  }
+  button:hover { background: linear-gradient(135deg, #ddb830, #b89028); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  #turn-log { max-width: 900px; margin: 0 auto; }
+
+  .turn-card {
+    margin-bottom: 20px;
+    border: 1px solid rgba(201,162,39,0.15);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #0e0e0e;
+  }
+  .turn-header {
+    background: #141410;
+    padding: 8px 16px;
+    font-weight: 700;
+    color: #c9a227;
+    font-size: 0.85rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .turn-header .timing { color: #8a7a5a; font-weight: 400; font-size: 0.8rem; }
+
+  .dm-block {
+    padding: 14px 18px;
+    border-left: 3px solid rgba(201,162,39,0.25);
+    margin: 10px 14px;
+    background: none;
+  }
+  .dm-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #c9a227;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .dm-narrative {
+    color: #e8d5b0;
+    font-style: italic;
+    line-height: 1.6;
+    font-size: 0.95rem;
+  }
+
+  .grok-block {
+    padding: 14px 18px;
+    border-left: 3px solid rgba(100,180,255,0.3);
+    margin: 10px 14px;
+    background: none;
+  }
+  .grok-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #64b4ff;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .grok-action {
+    color: #a0d0ff;
+    line-height: 1.5;
+    font-size: 0.95rem;
+  }
+  .grok-reasoning {
+    color: #6a8aaa;
+    font-size: 0.85rem;
+    margin-top: 4px;
+    font-style: italic;
+  }
+
+  .bug-report {
+    margin: 8px 14px 12px;
+    padding: 10px 14px;
+    background: rgba(180,40,40,0.1);
+    border: 1px solid rgba(180,40,40,0.3);
+    border-radius: 4px;
+    color: #e06060;
+    font-size: 0.85rem;
+  }
+  .bug-report-label {
+    font-weight: 700;
+    color: #cc4444;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+
+  .check-roll {
+    margin: 4px 14px 10px;
+    padding: 6px 12px;
+    background: rgba(201,162,39,0.08);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: #c9a227;
+  }
+  .image-prompt {
+    margin: 4px 14px 10px;
+    padding: 6px 12px;
+    background: rgba(100,180,255,0.05);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: #6a8aaa;
+  }
+
+  .error-block {
+    margin: 8px 14px;
+    padding: 10px;
+    background: rgba(180,40,40,0.15);
+    border: 1px solid rgba(180,40,40,0.4);
+    border-radius: 4px;
+    color: #e06060;
+    font-size: 0.85rem;
+  }
+
+  #report-section {
+    max-width: 900px;
+    margin: 30px auto 0;
+    padding: 20px;
+    background: #0e0e0e;
+    border: 1px solid rgba(201,162,39,0.15);
+    border-radius: 8px;
+    display: none;
+  }
+  #report-section h2 {
+    color: #c9a227;
+    font-size: 1.2rem;
+    margin-bottom: 14px;
+  }
+  .report-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(201,162,39,0.08);
+    font-size: 0.9rem;
+  }
+  .report-row .label { color: #8a7a5a; }
+  .report-row .value { color: #e8d5b0; font-weight: 600; }
+
+  .bug-summary {
+    margin-top: 16px;
+    padding: 12px;
+    background: rgba(180,40,40,0.08);
+    border: 1px solid rgba(180,40,40,0.2);
+    border-radius: 6px;
+  }
+  .bug-summary h3 { color: #cc4444; font-size: 0.95rem; margin-bottom: 8px; }
+  .bug-summary li { color: #e06060; font-size: 0.85rem; margin-bottom: 4px; line-height: 1.4; }
+
+  .state-panel {
+    margin: 10px 14px 12px;
+    padding: 12px 14px;
+    background: #0a0a0a;
+    border: 1px solid rgba(201,162,39,0.15);
+    border-radius: 6px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 20px;
+    font-size: 0.82rem;
+  }
+  .state-panel .state-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .state-panel .state-label {
+    color: #c9a227;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.5px;
+  }
+  .state-panel .state-value {
+    color: #e8d5b0;
+    font-weight: 600;
+  }
+  .state-panel .hp-bar-wrap {
+    grid-column: 1 / -1;
+    margin-bottom: 2px;
+  }
+  .state-panel .hp-bar-outer {
+    background: #1a0a0a;
+    border-radius: 3px;
+    height: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(107,0,0,0.4);
+  }
+  .state-panel .hp-bar-inner {
+    height: 100%;
+    background: linear-gradient(90deg, #6b0000, #a02020);
+    border-radius: 2px;
+    transition: width 0.3s;
+  }
+  .state-panel .hp-text {
+    text-align: center;
+    font-size: 0.75rem;
+    color: #e8d5b0;
+    margin-top: 2px;
+  }
+  .state-panel .equip-list {
+    grid-column: 1 / -1;
+    color: #b0a080;
+    font-size: 0.78rem;
+    line-height: 1.4;
+  }
+  .state-panel .equip-list .equip-title {
+    color: #c9a227;
+    font-weight: 700;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .loading { animation: pulse 1.5s infinite; }
+</style>
+</head>
+<body>
+
+<h1>DM vs Grok</h1>
+<p class="subtitle">Dynamic AI-vs-AI Playtest &mdash; Zephmir (Tiefling Rogue) played by Grok</p>
+
+<div id="status" class="status-idle">Ready to start match</div>
+
+<div id="controls">
+  <button id="start-btn" onclick="startMatch()">Start Match</button>
+</div>
+
+<div id="turn-log"></div>
+<div id="report-section"></div>
+
+<script>
+  const statusEl = document.getElementById('status');
+  const logEl = document.getElementById('turn-log');
+  const reportEl = document.getElementById('report-section');
+  const startBtn = document.getElementById('start-btn');
+
+  function setStatus(text, cls) {
+    statusEl.textContent = text;
+    statusEl.className = cls;
+  }
+
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function renderTurn(turn) {
+    const card = document.createElement('div');
+    card.className = 'turn-card';
+
+    const grokTime = turn.grok ? `Grok: ${turn.grok.responseTimeMs}ms` : '';
+    const dmTime = turn.dm.responseTimeMs > 0 ? `DM: ${turn.dm.responseTimeMs}ms` : '';
+    const timing = [grokTime, dmTime].filter(Boolean).join(' · ');
+    const label = turn.turn === 0 ? 'Opening — Game Start' : `Turn ${turn.turn}`;
+
+    let html = `<div class="turn-header"><span>${escapeHtml(label)}</span><span class="timing">${escapeHtml(timing)}</span></div>`;
+
+    // DM narrative
+    if (turn.dm.narrative) {
+      html += `<div class="dm-block"><div class="dm-label">Dungeon Master${turn.dm.provider ? ' (' + escapeHtml(turn.dm.provider) + ')' : ''}</div><div class="dm-narrative">${escapeHtml(turn.dm.narrative)}</div></div>`;
+    }
+
+    // Check roll
+    if (turn.dm.checkRoll) {
+      const cr = turn.dm.checkRoll;
+      html += `<div class="check-roll">&#x1F3B2; Check: ${escapeHtml(cr.skill)} (${escapeHtml(cr.stat)}) DC ${cr.dc} — ${escapeHtml(cr.description)}</div>`;
+    }
+
+    // Image prompt
+    if (turn.dm.imagePrompt) {
+      html += `<div class="image-prompt">&#x1F5BC; Scene: ${escapeHtml(turn.dm.imagePrompt)}</div>`;
+    }
+
+    // Game state panel
+    if (turn.gameState) {
+      const gs = turn.gameState;
+      const hpPct = gs.maxHp > 0 ? Math.round((gs.hp / gs.maxHp) * 100) : 0;
+      html += `<div class="state-panel">`;
+      html += `<div class="hp-bar-wrap"><div class="state-row"><span class="state-label">HP</span><span class="state-value">${gs.hp} / ${gs.maxHp}</span></div><div class="hp-bar-outer"><div class="hp-bar-inner" style="width:${hpPct}%"></div></div></div>`;
+      html += `<div class="state-row"><span class="state-label">XP</span><span class="state-value">${gs.xp}</span></div>`;
+      html += `<div class="state-row"><span class="state-label">Gold</span><span class="state-value">${gs.gold}</span></div>`;
+      html += `<div class="state-row"><span class="state-label">AC</span><span class="state-value">${gs.ac}</span></div>`;
+      html += `<div class="state-row"><span class="state-label">Location</span><span class="state-value">${escapeHtml(gs.location)}</span></div>`;
+      html += `<div class="state-row"><span class="state-label">Karma</span><span class="state-value">${gs.karma}</span></div>`;
+      html += `<div class="state-row"><span class="state-label">Fame</span><span class="state-value">${gs.fame}</span></div>`;
+      if (gs.worn && gs.worn.length > 0) {
+        html += `<div class="equip-list"><div class="equip-title">Worn</div>${escapeHtml(gs.worn.join(', '))}</div>`;
+      }
+      if (gs.backpack && gs.backpack.length > 0) {
+        html += `<div class="equip-list"><div class="equip-title">Backpack</div>${escapeHtml(gs.backpack.join(', '))}</div>`;
+      }
+      html += `</div>`;
+    }
+
+    // Grok's response
+    if (turn.grok) {
+      html += `<div class="grok-block"><div class="grok-label">Grok (Player)</div><div class="grok-action">${escapeHtml(turn.grok.action)}</div>`;
+      if (turn.grok.reasoning) {
+        html += `<div class="grok-reasoning">${escapeHtml(turn.grok.reasoning)}</div>`;
+      }
+      html += `</div>`;
+
+      // Bug report
+      if (turn.grok.bugReport) {
+        html += `<div class="bug-report"><div class="bug-report-label">Bug Report (Turn ${turn.turn})</div>${escapeHtml(turn.grok.bugReport)}</div>`;
+      }
+    }
+
+    // Error
+    if (turn.error) {
+      html += `<div class="error-block">&#x26A0; ${escapeHtml(turn.error)}</div>`;
+    }
+
+    card.innerHTML = html;
+    logEl.appendChild(card);
+    card.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }
+
+  function renderReport(data) {
+    const r = data.report;
+    const v = data.versus;
+
+    let html = `<h2>Match Report</h2>`;
+
+    html += `<div class="report-row"><span class="label">Campaign</span><span class="value">${escapeHtml(v.campaign)}</span></div>`;
+    html += `<div class="report-row"><span class="label">Total Duration</span><span class="value">${(v.totalDurationMs / 1000).toFixed(1)}s</span></div>`;
+    html += `<div class="report-row"><span class="label">Turns Completed</span><span class="value">${v.totalTurns}</span></div>`;
+    html += `<div class="report-row"><span class="label">Narrative Consistency</span><span class="value">${escapeHtml(r.narrativeConsistencyScore)}</span></div>`;
+    html += `<div class="report-row"><span class="label">Check Rolls Triggered</span><span class="value">${r.checkRollAssessment.totalCheckRolls}</span></div>`;
+    html += `<div class="report-row"><span class="label">Scene Images Generated</span><span class="value">${r.imagePrompts.length}</span></div>`;
+    html += `<div class="report-row"><span class="label">Avg Grok Response</span><span class="value">${r.avgResponseTimes.grokMs}ms</span></div>`;
+    html += `<div class="report-row"><span class="label">Avg DM Response</span><span class="value">${r.avgResponseTimes.dmMs}ms</span></div>`;
+    html += `<div class="report-row"><span class="label">Assessment</span><span class="value">${escapeHtml(r.overallAssessment)}</span></div>`;
+
+    // Mechanical engagement
+    const checksTriggered = r.checkRollAssessment.totalCheckRolls;
+    const combatEncounters = data.turns.filter(t => t.dm && t.dm.checkRoll && t.dm.checkRoll.skill && /attack|initiative/i.test(t.dm.checkRoll.skill)).length;
+    const imagesGenerated = r.imagePrompts.length;
+    html += `<div class="report-row"><span class="label">Mechanical Engagement</span><span class="value">${checksTriggered} checks triggered / ${combatEncounters} combat encounters / ${imagesGenerated} images generated</span></div>`;
+
+    // Final character state
+    const fs = data.finalState;
+    html += `<div class="report-row"><span class="label">Final HP</span><span class="value">${fs.hp}/${fs.maxHp}</span></div>`;
+    html += `<div class="report-row"><span class="label">Final XP / Gold</span><span class="value">${fs.xp} XP / ${fs.gold} gold</span></div>`;
+    html += `<div class="report-row"><span class="label">Location</span><span class="value">${escapeHtml(fs.location)}</span></div>`;
+
+    // Bug notes
+    if (r.bugNotes.length > 0) {
+      html += `<div class="bug-summary"><h3>All Bug Reports from Grok</h3><ul>`;
+      for (const note of r.bugNotes) {
+        html += `<li><strong>Turn ${note.turn}:</strong> ${escapeHtml(note.note)}</li>`;
+      }
+      html += `</ul></div>`;
+    } else {
+      html += `<div class="report-row"><span class="label">Bug Reports</span><span class="value">None — Grok found no issues</span></div>`;
+    }
+
+    // Consistency issues
+    if (r.consistencyIssues.length > 0) {
+      html += `<div class="bug-summary"><h3>Consistency Issues</h3><ul>`;
+      for (const issue of r.consistencyIssues) {
+        html += `<li>${escapeHtml(issue)}</li>`;
+      }
+      html += `</ul></div>`;
+    }
+
+    // Errors
+    if (r.errors.length > 0) {
+      html += `<div class="bug-summary"><h3>Errors</h3><ul>`;
+      for (const err of r.errors) {
+        html += `<li>${escapeHtml(err)}</li>`;
+      }
+      html += `</ul></div>`;
+    }
+
+    reportEl.innerHTML = html;
+    reportEl.style.display = 'block';
+  }
+
+  async function startMatch() {
+    startBtn.disabled = true;
+    logEl.innerHTML = '';
+    reportEl.style.display = 'none';
+    setStatus('Match running — Grok vs DM pipeline (this takes 1-3 minutes)...', 'status-running loading');
+
+    try {
+      const resp = await fetch('/api/bot-versus', { method: 'GET' });
+      if (!resp.ok) {
+        const errBody = await resp.text();
+        throw new Error(`HTTP ${resp.status}: ${errBody}`);
+      }
+      const data = await resp.json();
+
+      // Render turns one by one with a small delay for visual effect
+      for (let i = 0; i < data.turns.length; i++) {
+        renderTurn(data.turns[i]);
+        if (i < data.turns.length - 1) {
+          await new Promise(r => setTimeout(r, 300));
+        }
+      }
+
+      renderReport(data);
+      setStatus(`Match complete — ${data.versus.totalTurns} turns in ${(data.versus.totalDurationMs / 1000).toFixed(1)}s`, 'status-done');
+    } catch (err) {
+      setStatus(`Error: ${err.message}`, 'status-error');
+    } finally {
+      startBtn.disabled = false;
+    }
+  }
+</script>
+
+</body>
+</html>
