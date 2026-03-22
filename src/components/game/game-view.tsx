@@ -6,15 +6,144 @@ import { useGameStore } from "@/stores/game-store";
 import { useWorldStore } from "@/stores/world-store";
 import { useKarmaStore } from "@/stores/karma-store";
 import { useCrimeStore } from "@/stores/crime-store";
-import type { ChatMessage as ChatMessageType, DMResponsePayload } from "@/types/game";
+import type {
+  ChatMessage as ChatMessageType,
+  DMResponsePayload,
+  GamePhase,
+  CombatState,
+  LootState,
+} from "@/types/game";
 import type { WorldEvent } from "@/types/world";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
 import { CharacterSidebar } from "./character-sidebar";
 import { DeathScreen } from "./death-screen";
+import { SkillCheckCard } from "./skill-check-card";
+import { LootModal } from "./loot-modal";
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+/** NPC name patterns — detects "X says", "X speaks", quoted speech from named entity */
+const NPC_SPEECH_PATTERNS = [
+  /^[""].*[""]$/m,
+  /\b[A-Z][a-z]+\s+(?:says?|speaks?|whispers?|shouts?|exclaims?|replies?|asks?|murmurs?|growls?)\b/,
+];
+
+/**
+ * Detect if the narrative is primarily NPC dialogue.
+ * Returns the NPC name if detected, null otherwise.
+ */
+function detectNpcDialogue(narrative: string, newNpcs?: string[]): string | null {
+  // If we have known NPCs mentioned, check if the narrative is dialogue-heavy
+  if (newNpcs && newNpcs.length > 0) {
+    for (const npc of newNpcs) {
+      const speechPattern = new RegExp(
+        `\\b${npc.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+(?:says?|speaks?|whispers?|shouts?|exclaims?|replies?|asks?|murmurs?|growls?)`,
+        "i"
+      );
+      if (speechPattern.test(narrative)) return npc;
+    }
+  }
+
+  // Check for generic dialogue patterns
+  for (const pattern of NPC_SPEECH_PATTERNS) {
+    const match = narrative.match(pattern);
+    if (match) {
+      // Try to extract the NPC name from "Name says/speaks" patterns
+      const nameMatch = narrative.match(
+        /\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s+(?:says?|speaks?|whispers?|shouts?|exclaims?|replies?|asks?|murmurs?|growls?)/
+      );
+      if (nameMatch) return nameMatch[1];
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Determine what phase a DM response should trigger.
+ */
+function determinePhase(
+  data: DMResponsePayload,
+  currentPhase: GamePhase
+): { phase: GamePhase; npcName?: string } {
+  const eo = data.engineOutcome;
+
+  // Skill check: any non-attack, non-damage roll
+  if (eo?.roll && eo.roll.type !== "attack" && eo.roll.type !== "damage") {
+    return { phase: "skill_check" };
+  }
+
+  // Combat: attack roll or damage dealt/taken
+  if (
+    eo?.roll?.type === "attack" ||
+    (eo?.damageDealt != null && eo.damageDealt > 0) ||
+    (eo?.damageTaken != null && eo.damageTaken > 0)
+  ) {
+    return { phase: "combat" };
+  }
+
+  // Looting: items gained after combat ended
+  const hasLoot =
+    (data.gameStateUpdate.newItems && data.gameStateUpdate.newItems.length > 0) ||
+    (data.gameStateUpdate.goldChange && data.gameStateUpdate.goldChange > 0);
+  if (hasLoot && currentPhase === "combat") {
+    return { phase: "looting" };
+  }
+
+  // Dialogue: detect NPC speech
+  const npcName = detectNpcDialogue(data.narrative, data.newNpcs);
+  if (npcName) {
+    return { phase: "dialogue", npcName };
+  }
+
+  // Default: exploration
+  return { phase: "exploration" };
+}
+
+/**
+ * Build combat state from engine outcome for the combat card.
+ */
+function buildCombatState(
+  data: DMResponsePayload,
+  characterName: string,
+  round: number,
+  narrative: string
+): CombatState {
+  const eo = data.engineOutcome;
+  // Extract a short flavor sentence from the full narrative
+  const sentences = narrative.split(/(?<=[.!?])\s+/);
+  const flavorText = sentences[0]?.slice(0, 120) ?? "";
+
+  // Determine enemy condition based on whether damage was dealt
+  let enemyCondition = "ready to fight";
+  if (eo?.damageDealt && eo.damageDealt > 10) {
+    enemyCondition = "badly wounded";
+  } else if (eo?.damageDealt && eo.damageDealt > 5) {
+    enemyCondition = "wounded";
+  } else if (eo?.damageDealt && eo.damageDealt > 0) {
+    enemyCondition = "scratched";
+  }
+
+  // Try to determine enemy name from narrative
+  const enemyMatch = narrative.match(
+    /\b(?:the\s+)?([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s+(?:snarls?|lunges?|attacks?|strikes?|swings?|charges?|hisses?|roars?|growls?)/
+  );
+  const enemyName = enemyMatch?.[1] ?? "Enemy";
+
+  return {
+    round,
+    enemyName,
+    initiativeOrder: [characterName, enemyName],
+    playerAttackRoll: eo?.roll?.type === "attack" ? eo.roll : undefined,
+    damageDealt: eo?.damageDealt,
+    enemyCondition,
+    damageTaken: eo?.damageTaken,
+    isCriticalHit: eo?.isCriticalHit,
+    flavorText,
+  };
 }
 
 export function GameView() {
@@ -26,6 +155,9 @@ export function GameView() {
     turnCount,
     isLoading,
     campaignStarted,
+    gamePhase,
+    pendingLoot,
+    combatRound,
     addMessage,
     setLocation,
     addQuest,
@@ -33,6 +165,10 @@ export function GameView() {
     incrementTurn,
     setLoading,
     setCampaignStarted,
+    setGamePhase,
+    setPendingLoot,
+    incrementCombatRound,
+    resetCombatRound,
   } = useGameStore();
 
   const {
@@ -66,6 +202,11 @@ export function GameView() {
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoStartFired = useRef(false);
+  // Ref for pending skill check roll result — stores the roll and narrative
+  const pendingSkillCheck = useRef<{
+    narrative: string;
+    data: DMResponsePayload;
+  } | null>(null);
 
   // Scroll to bottom when messages change or loading state changes
   useEffect(() => {
@@ -193,7 +334,6 @@ export function GameView() {
 
         // Handle guard confrontation
         if (data.guardConfrontation) {
-          // Find the matching crime and mark as confronted
           const matchingCrime = crimes.find(
             (c) => c.type === data.guardConfrontation!.crimeType &&
                    c.location === data.guardConfrontation!.crimeLocation &&
@@ -222,7 +362,6 @@ export function GameView() {
           for (const npcName of data.newNpcs) {
             registerNpc(npcName, turnCount, location);
           }
-          // Apply computed dispositions from fame/karma check
           if (data.npcDispositions) {
             for (const npcDisp of data.npcDispositions) {
               updateNpcDisposition(npcDisp.name, npcDisp.disposition, npcDisp.recognized);
@@ -250,17 +389,111 @@ export function GameView() {
         };
         addEvent(worldEvent);
 
-        // Add DM message with roll result and karma/fame indicators
-        const dmMsg: ChatMessageType = {
-          id: generateId(),
-          role: "assistant",
-          narrative: data.narrative,
-          timestamp: Date.now(),
-          rollResult: data.engineOutcome?.roll,
-          karmaChange: data.karmaChange?.amount,
-          fameChange: data.fameChange,
-        };
-        addMessage(dmMsg);
+        // ── Phase detection and transitions ──────────────────────────
+        const { phase: newPhase, npcName: detectedNpc } = determinePhase(data, gamePhase);
+
+        if (newPhase === "combat") {
+          // Enter or continue combat
+          const nextRound = gamePhase === "combat" ? combatRound + 1 : 1;
+          if (gamePhase !== "combat") {
+            resetCombatRound();
+          }
+          incrementCombatRound();
+          setGamePhase("combat");
+
+          const combatState = buildCombatState(
+            data,
+            character.name,
+            nextRound,
+            data.narrative
+          );
+
+          const dmMsg: ChatMessageType = {
+            id: generateId(),
+            role: "assistant",
+            narrative: data.narrative,
+            timestamp: Date.now(),
+            rollResult: data.engineOutcome?.roll,
+            karmaChange: data.karmaChange?.amount,
+            fameChange: data.fameChange,
+            phase: "combat",
+            combatState,
+          };
+          addMessage(dmMsg);
+
+          // Check if combat ends (enemy defeated — player hit and dealt damage)
+          // If there's loot, transition to looting
+          if (
+            eo?.damageDealt &&
+            eo.damageDealt > 0 &&
+            u?.newItems &&
+            u.newItems.length > 0
+          ) {
+            const loot: LootState = {
+              items: u.newItems,
+              gold: u.goldChange ?? undefined,
+              selectedItems: [],
+            };
+            setPendingLoot(loot);
+            setGamePhase("looting");
+            resetCombatRound();
+          }
+        } else if (newPhase === "skill_check" && data.engineOutcome?.roll) {
+          // Transition to skill check — store data, show card, block input
+          setGamePhase("skill_check");
+          pendingSkillCheck.current = { narrative: data.narrative, data };
+          // Don't add the DM message yet — wait for roll to complete
+        } else if (newPhase === "looting") {
+          setGamePhase("looting");
+          const loot: LootState = {
+            items: u?.newItems ?? [],
+            gold: u?.goldChange ?? undefined,
+            selectedItems: [],
+          };
+          setPendingLoot(loot);
+          resetCombatRound();
+
+          // Add a brief DM message
+          const dmMsg: ChatMessageType = {
+            id: generateId(),
+            role: "assistant",
+            narrative: data.narrative,
+            timestamp: Date.now(),
+            karmaChange: data.karmaChange?.amount,
+            fameChange: data.fameChange,
+            phase: "exploration",
+          };
+          addMessage(dmMsg);
+        } else if (newPhase === "dialogue") {
+          setGamePhase("dialogue");
+          const dmMsg: ChatMessageType = {
+            id: generateId(),
+            role: "assistant",
+            narrative: data.narrative,
+            timestamp: Date.now(),
+            rollResult: data.engineOutcome?.roll,
+            karmaChange: data.karmaChange?.amount,
+            fameChange: data.fameChange,
+            phase: "dialogue",
+            npcName: detectedNpc ?? undefined,
+          };
+          addMessage(dmMsg);
+        } else {
+          // Exploration (default)
+          setGamePhase("exploration");
+          resetCombatRound();
+          const dmMsg: ChatMessageType = {
+            id: generateId(),
+            role: "assistant",
+            narrative: data.narrative,
+            timestamp: Date.now(),
+            rollResult: data.engineOutcome?.roll,
+            karmaChange: data.karmaChange?.amount,
+            fameChange: data.fameChange,
+            phase: "exploration",
+          };
+          addMessage(dmMsg);
+        }
       } catch (err) {
         const errorMessage =
           err instanceof Error ? err.message : "Unknown error";
@@ -285,6 +518,8 @@ export function GameView() {
       npcs,
       locations,
       facts,
+      gamePhase,
+      combatRound,
       addMessage,
       incrementTurn,
       setLoading,
@@ -307,12 +542,50 @@ export function GameView() {
       addCrime,
       updateEvidence,
       markConfronted,
+      setGamePhase,
+      setPendingLoot,
+      incrementCombatRound,
+      resetCombatRound,
     ]
   );
 
   const sendToDM = useCallback(
     (message: string) => callDMApi(message, true),
     [callDMApi]
+  );
+
+  /** Called when the skill check roll animation completes */
+  const handleSkillCheckComplete = useCallback(() => {
+    const pending = pendingSkillCheck.current;
+    if (!pending) {
+      setGamePhase("exploration");
+      return;
+    }
+
+    // Now add the DM message with the roll result showing the outcome
+    const dmMsg: ChatMessageType = {
+      id: generateId(),
+      role: "assistant",
+      narrative: pending.narrative,
+      timestamp: Date.now(),
+      rollResult: pending.data.engineOutcome?.roll,
+      karmaChange: pending.data.karmaChange?.amount,
+      fameChange: pending.data.fameChange,
+      phase: "exploration",
+    };
+    addMessage(dmMsg);
+    pendingSkillCheck.current = null;
+    setGamePhase("exploration");
+  }, [addMessage, setGamePhase]);
+
+  /** Called when loot modal is dismissed */
+  const handleLootComplete = useCallback(
+    (_selectedItems: string[]) => {
+      // Items were already applied by the engine — just dismiss modal
+      setPendingLoot(null);
+      setGamePhase("exploration");
+    },
+    [setPendingLoot, setGamePhase]
   );
 
   // Auto-start campaign — DM intro fires exactly once
@@ -333,10 +606,18 @@ export function GameView() {
 
   const isDead = character.isDead;
 
+  // Get the pending skill check roll for display
+  const skillCheckRoll = pendingSkillCheck.current?.data.engineOutcome?.roll;
+
   return (
     <div className="flex h-[100dvh] gap-4 p-4 overflow-hidden">
       {/* Death screen overlay */}
       {isDead && <DeathScreen />}
+
+      {/* Loot modal overlay */}
+      {gamePhase === "looting" && pendingLoot && (
+        <LootModal loot={pendingLoot} onComplete={handleLootComplete} />
+      )}
 
       {/* Sidebar */}
       <aside className="hidden md:block w-72 shrink-0">
@@ -350,6 +631,15 @@ export function GameView() {
             {messages.map((msg) => (
               <ChatMessage key={msg.id} message={msg} />
             ))}
+
+            {/* Skill check card — shown between messages when in skill_check phase */}
+            {gamePhase === "skill_check" && skillCheckRoll && (
+              <SkillCheckCard
+                roll={skillCheckRoll}
+                onRollComplete={handleSkillCheckComplete}
+              />
+            )}
+
             {isLoading && (
               <div className="flex gap-3">
                 <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
@@ -365,7 +655,11 @@ export function GameView() {
         </div>
 
         <div className="pt-3 border-t">
-          <ChatInput onSend={sendToDM} disabled={isLoading || isDead} />
+          <ChatInput
+            onSend={sendToDM}
+            disabled={isLoading || isDead}
+            gamePhase={gamePhase}
+          />
         </div>
       </div>
     </div>

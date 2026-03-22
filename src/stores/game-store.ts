@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { ChatMessage } from "@/types/game";
+import type { ChatMessage, GamePhase, LootState } from "@/types/game";
 
 interface GameStore {
   messages: ChatMessage[];
@@ -9,6 +9,9 @@ interface GameStore {
   turnCount: number;
   isLoading: boolean;
   campaignStarted: boolean;
+  gamePhase: GamePhase;
+  pendingLoot: LootState | null;
+  combatRound: number;
 
   addMessage: (msg: ChatMessage) => void;
   setLocation: (location: string) => void;
@@ -17,6 +20,10 @@ interface GameStore {
   incrementTurn: () => void;
   setLoading: (loading: boolean) => void;
   setCampaignStarted: (started: boolean) => void;
+  setGamePhase: (phase: GamePhase) => void;
+  setPendingLoot: (loot: LootState | null) => void;
+  incrementCombatRound: () => void;
+  resetCombatRound: () => void;
   reset: () => void;
 }
 
@@ -29,6 +36,9 @@ export const useGameStore = create<GameStore>()(
       turnCount: 0,
       isLoading: false,
       campaignStarted: false,
+      gamePhase: "exploration" as GamePhase,
+      pendingLoot: null,
+      combatRound: 0,
 
       addMessage: (msg) =>
         set((s) => ({ messages: [...s.messages, msg] })),
@@ -52,6 +62,11 @@ export const useGameStore = create<GameStore>()(
 
       setLoading: (isLoading) => set({ isLoading }),
       setCampaignStarted: (campaignStarted) => set({ campaignStarted }),
+      setGamePhase: (gamePhase) => set({ gamePhase }),
+      setPendingLoot: (pendingLoot) => set({ pendingLoot }),
+      incrementCombatRound: () =>
+        set((s) => ({ combatRound: s.combatRound + 1 })),
+      resetCombatRound: () => set({ combatRound: 0 }),
 
       reset: () =>
         set({
@@ -61,6 +76,9 @@ export const useGameStore = create<GameStore>()(
           turnCount: 0,
           isLoading: false,
           campaignStarted: false,
+          gamePhase: "exploration" as GamePhase,
+          pendingLoot: null,
+          combatRound: 0,
         }),
     }),
     {
@@ -71,6 +89,8 @@ export const useGameStore = create<GameStore>()(
         questLog: s.questLog,
         turnCount: s.turnCount,
         campaignStarted: s.campaignStarted,
+        gamePhase: s.gamePhase,
+        combatRound: s.combatRound,
       }),
     }
   )

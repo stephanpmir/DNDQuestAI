@@ -2,6 +2,27 @@ import type { Character } from "./character";
 import type { RollResult } from "./world";
 import type { Fact } from "@/lib/engine/fact-ledger";
 
+export type GamePhase = "exploration" | "combat" | "skill_check" | "looting" | "dialogue";
+
+export interface CombatState {
+  round: number;
+  enemyName: string;
+  initiativeOrder: string[];
+  playerAttackRoll?: RollResult;
+  damageDealt?: number;
+  enemyCondition: string;
+  enemyAttackTotal?: number;
+  damageTaken?: number;
+  isCriticalHit?: boolean;
+  flavorText?: string;
+}
+
+export interface LootState {
+  items: string[];
+  gold?: number;
+  selectedItems: string[];
+}
+
 export interface GameState {
   character: Character;
   location: string;
@@ -21,6 +42,14 @@ export interface ChatMessage {
   karmaChange?: number;
   /** Fame change to display as floating indicator */
   fameChange?: number;
+  /** Phase this message belongs to */
+  phase?: GamePhase;
+  /** Combat state for combat phase messages */
+  combatState?: CombatState;
+  /** Loot available after combat */
+  lootState?: LootState;
+  /** NPC name for dialogue phase */
+  npcName?: string;
 }
 
 /** The structured JSON the API returns. */
