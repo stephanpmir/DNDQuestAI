@@ -1,4 +1,4 @@
-name: Auto-merge claude/* into main
+name: Auto-merge claude/* into master
 
 on:
   push:
@@ -22,8 +22,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Merge into main
+      - name: Merge into master
         run: |
-          git checkout main
+          git checkout master
           git merge --ff-only ${{ github.sha }} || git merge --no-edit ${{ github.sha }}
-          git push origin main
+          git push origin master
