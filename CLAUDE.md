@@ -1,85 +1,14 @@
-# DNDQuestAI
-
-Solo AI-powered D&D 5e game where Claude acts as Dungeon Master.
-
-## Tech Stack
-
-- **Framework**: Next.js 15 (App Router)
-- **Language**: TypeScript (strict mode)
-- **Styling**: Tailwind CSS + shadcn/ui
-- **AI**: Cerebras API (Llama 3.1 8B) via OpenAI SDK — all calls server-side only
-- **Database**: Supabase (Postgres + Auth)
-- **State Management**: Zustand
-- **Deploy**: Vercel
-
-## Folder Structure
-
-```
-src/
-├── app/                    # Next.js App Router pages
-│   ├── layout.tsx          # Root layout
-│   ├── page.tsx            # Landing / home page
-│   ├── character/
-│   │   └── page.tsx        # Character creation
-│   ├── game/
-│   │   └── page.tsx        # Main game / conversation UI
-│   └── api/
-│       └── dm/
-│           └── route.ts    # AI Dungeon Master proxy (POST)
-├── components/
-│   ├── ui/                 # shadcn/ui primitives
-│   ├── character/          # Character creation components
-│   └── game/               # Game/conversation components
-├── lib/
-│   ├── ai/
-│   │   ├── dm-prompt.ts    # System prompt for the DM
-│   │   └── parse-response.ts # Parse structured JSON from AI
-│   ├── supabase/
-│   │   ├── client.ts       # Browser Supabase client
-│   │   └── server.ts       # Server Supabase client
-│   ├── utils.ts            # Shared utilities (cn helper, etc.)
-│   └── constants.ts        # Game constants (races, classes, etc.)
-├── stores/
-│   ├── character-store.ts  # Zustand store for character state
-│   └── game-store.ts       # Zustand store for game/session state
-└── types/
-    ├── character.ts        # Character types
-    └── game.ts             # Game state, message, campaign types
-```
-
-## Rules
-
-1. **Never expose API keys client-side.** All Anthropic SDK calls go through `/api/dm` route.
-2. **TypeScript strict mode.** No `any` types unless absolutely necessary and documented.
-3. **Server Components by default.** Only add `"use client"` when the component needs interactivity.
-4. **AI responses are dual-format.** The DM returns narrative text AND structured JSON game state in every response.
-5. **Keep components small.** Max ~150 lines per component file.
-6. **Use shadcn/ui primitives.** Don't reinvent buttons, inputs, cards, etc.
-7. **Zustand for client state.** No prop drilling beyond 2 levels.
-8. **Tailwind only.** No CSS modules or styled-components.
-9. **Commit after each major step.** Keep commits atomic and descriptive.
-
-## Commands
-
-```bash
-npm run dev          # Start dev server
-npm run build        # Production build
-npm run lint         # ESLint
-npm run type-check   # TypeScript check (tsc --noEmit)
-```
-
-## Environment Variables
-
-```
-CEREBRAS_API_KEY=            # Server-side only — never prefix with NEXT_PUBLIC_
-NEXT_PUBLIC_SUPABASE_URL=    # Supabase project URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY= # Supabase anon key
-```
-
-## Phase 1 MVP Scope
-
-- Character creation (name, race, class, basic stats)
-- Start a campaign with a DM-generated intro
-- Conversation UI: player sends actions, AI DM responds with narrative + game state
-- Game state tracks HP, inventory, location, quest progress
-- All AI calls proxied server-side
+DNDQuestAI
+Text-based AI Dungeons and Dragons game. Next.js 15 App Router, TypeScript, Tailwind, shadcn/ui, Zustand, Netlify. Developed via Claude Code on iPhone and iPad.
+For all game logic, DM behavior, combat engine, narrative rules, response formats, image generation, UI constraints, and known mistakes — ALWAYS read and follow DNDQUEST.md exactly before making any changes.
+DEVELOPMENT WORKFLOW
+Never push directly to main. Never create PRs. Never manually merge.
+	1.	Make changes in Claude Code
+	2.	Lint before committing: npm run lint
+	3.	Build to verify: npm run build
+	4.	Commit and push ONLY to claude/ branch: git checkout -b claude/brief-description then git add . then git commit -m "your message" then git push -u origin claude/brief-description
+GitHub Action auto-merges claude/ branches to main. Netlify auto-deploys from main.
+CRITICAL RULES
+Read DNDQUEST.md at the start of every session before writing any code. Update DNDQUEST.md immediately whenever Claude violates a rule — this is how mistakes are prevented permanently. Always use the AI provider cascade defined in DNDQUEST.md. Always use the image proxy defined in DNDQUEST.md. Never repeat any item from the KNOWN PAST MISTAKES section in DNDQUEST.md.
+STYLE AND ANTI-PATTERNS
+Use inline styles for DM avatar and bubble — never shadcn Card wrappers. Respect all bracketed delimiters exactly as defined in DNDQUEST.md. Combat engine and death save logic must match DNDQUEST.md exactly. All narrative length and phase rules from DNDQUEST.md apply to every single response.
