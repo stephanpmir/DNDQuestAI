@@ -27,6 +27,27 @@ export function ChatMessage({ message }: Props) {
     );
   }
 
+  // Rules reference card
+  if (message.rulesReference) {
+    return (
+      <div className="space-y-0">
+        <div className="flex gap-3 justify-start">
+          <div className="w-8 h-8 rounded-full bg-sky-800 text-sky-100 flex items-center justify-center text-[10px] font-bold shrink-0">
+            5e
+          </div>
+          <div className="max-w-[80%] rounded-lg border border-sky-700/40 bg-sky-950/30 px-4 py-3 space-y-1">
+            <span className="text-xs font-bold uppercase tracking-widest text-sky-400">
+              {message.rulesReference.title}
+            </span>
+            <p className="text-sm leading-relaxed text-sky-100/90">
+              {message.rulesReference.text}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Combat phase: render combat card instead of normal narrative
   if (message.phase === "combat" && message.combatState) {
     return (

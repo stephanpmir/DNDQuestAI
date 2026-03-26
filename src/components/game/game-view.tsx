@@ -272,6 +272,20 @@ export function GameView() {
 
         const data: DMResponsePayload = await res.json();
 
+        // ── Rules reference short-circuit ─────────────────────────────
+        // No state changes, no phase transitions — just show the card
+        if (data.rulesReference) {
+          const rulesMsg: ChatMessageType = {
+            id: generateId(),
+            role: "assistant",
+            narrative: data.narrative,
+            timestamp: Date.now(),
+            rulesReference: data.rulesReference,
+          };
+          addMessage(rulesMsg);
+          return;
+        }
+
         // Apply engine-decided game state updates
         const u = data.gameStateUpdate;
         if (u) {

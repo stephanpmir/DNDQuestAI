@@ -50,6 +50,8 @@ export interface ChatMessage {
   lootState?: LootState;
   /** NPC name for dialogue phase */
   npcName?: string;
+  /** Rules reference card content */
+  rulesReference?: { title: string; text: string };
 }
 
 /** The structured JSON the API returns. */
@@ -122,5 +124,10 @@ export interface DMResponsePayload {
   guardConfrontation?: {
     crimeType: string;
     crimeLocation: string;
+  };
+  /** Rules reference card (when player asks a rules question) */
+  rulesReference?: {
+    title: string;
+    text: string;
   };
 }

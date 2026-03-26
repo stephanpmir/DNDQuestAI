@@ -13,6 +13,7 @@ import type { Fact } from "@/lib/engine/fact-ledger";
 import { computeNpcDisposition } from "@/lib/karma";
 import { runGuardInvestigations, shouldGuardsConfront, buildCrimeContext } from "@/lib/crimes";
 import type { Crime } from "@/lib/crimes";
+import { detectRulesQuestion } from "@/lib/engine/rules-reference";
 
 function getClient(): OpenAI {
   const apiKey = process.env.CEREBRAS_API_KEY;
@@ -120,6 +121,18 @@ export async function POST(request: Request) {
         { error: "Missing required fields: message, character, and gameState are all required." },
         { status: 400 }
       );
+    }
+
+    // ── Rules reference short-circuit ────────────────────────────────
+    // Check if the player is asking a rules question BEFORE running the
+    // full pipeline. Returns a lightweight response with no state changes.
+    const rulesRef = detectRulesQuestion(message);
+    if (rulesRef) {
+      return NextResponse.json({
+        narrative: `**${rulesRef.title}**: ${rulesRef.text}`,
+        gameStateUpdate: {},
+        rulesReference: { title: rulesRef.title, text: rulesRef.text },
+      });
     }
 
     // ── Set starting location on first turn ────────────────────────
